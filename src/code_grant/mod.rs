@@ -12,7 +12,12 @@ use std;
 pub struct NegotiationParams<'a> {
     pub client_id: &'a str,
     pub scope: Option<&'a str>,
-    pub redirect_url: Option<&'a str>
+    pub redirect_url: Option<&'a Url>
+}
+
+pub struct Negotiated {
+    pub redirect_url: Url,
+    pub scope: String
 }
 
 pub struct Request<'a> {
@@ -35,24 +40,30 @@ pub struct AuthorizationParameters<'a> {
 }
 
 pub trait Authorizer {
-    fn negotiate<'a>(&self, NegotiationParams<'a>) -> Result<Request<'a>, &str>;
-    fn authorize(&self, &Request) -> String;
-    fn recover_parameters(&self, &str) -> AuthorizationParameters;
+    fn negotiate(&self, NegotiationParams) -> Result<Negotiated, String>;
+    fn authorize(&mut self, &Request) -> String;
+    fn recover_parameters<'a>(&'a self, &'a str) -> Option<AuthorizationParameters<'a>>;
 }
 
 pub struct CodeGranter<'a> {
-    authorizer: &'a Authorizer,
+    authorizer: &'a mut Authorizer,
 }
 
 type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::borrow::Cow<'a, str>>;
 
+fn decode_query<'u>(query: &'u Url) -> QueryMap<'u> {
+    query.as_ref().query_pairs()
+        .collect::<QueryMap<'u>>()
+}
+
 impl<'a> CodeGranter<'a> {
-    pub fn iron_auth_handler(&self, req: &mut iron::Request) -> IronResult<Response> {
-        let urldecoded = self.decode_query(&req.url);
-        let auth = match self.auth_url_encoded(&urldecoded) {
+    pub fn iron_auth_handler(&'a mut self, req: &mut iron::Request) -> IronResult<Response> {
+        let urldecoded = decode_query(&req.url);
+        let (client_id, negotiated) = match self.auth_url_encoded(&urldecoded) {
             Err(st) => return Ok(Response::with((super::iron::status::BadRequest, st))),
             Ok(v) => v
         };
+        let auth = Request{client_id: &client_id, redirect_url: &negotiated.redirect_url, scope: &negotiated.scope};
         let grant = self.authorizer.authorize(&auth);
         let redirect_to = {
             let mut url = auth.redirect_url.clone();
@@ -66,28 +77,27 @@ impl<'a> CodeGranter<'a> {
         Ok(Response::with((super::iron::status::Ok, Redirect(redirect_to))))
     }
 
-    fn decode_query(&self, query: &'a Url) -> QueryMap<'a> {
-        query.as_ref().query_pairs()
-            .collect::<QueryMap<'a>>()
-    }
-
-    fn auth_url_encoded(&self, query: &'a QueryMap<'a>)
-    -> Result<Request<'a>, &'a str> {
+    fn auth_url_encoded<'u>(&'u self, query: &'u QueryMap<'u>)
+    -> Result<(String, Negotiated), String> {
         match query.get("response_type").map(|s| s == "code") {
-            None => return Err("Response type needs to be set"),
-            Some(false) => return Err("Invalid response type"),
+            None => return Err("Response type needs to be set".to_string()),
+            Some(false) => return Err("Invalid response type".to_string()),
             Some(true) => ()
         }
         let client_id = match query.get("client_id") {
-            None => return Err("client_id needs to be set"),
+            None => return Err("client_id needs to be set".to_string()),
             Some(s) => s
         };
-        let (scope, redir) = self.authorizer.negotiate(NegotiationParams {
+        let redirect_url = match query.get("redirect_url").map(|st| Url::parse(st)) {
+            Some(Err(_)) => return Err("Invalid url".to_string()),
+            val => val.map(|v| v.unwrap())
+        };
+        let result = self.authorizer.negotiate(NegotiationParams {
             client_id: client_id,
             scope: query.get("scope").map(|s| s.as_ref()),
-            redirect_url: query.get("redirect_url").map(|s| s.as_ref())}
-        ).map(|p| (p.scope, p.redirect_url))?;
-        Ok(Request{client_id: client_id, scope: scope, redirect_url: redir})
+            redirect_url: redirect_url.as_ref() }
+        )?;
+        Ok((client_id.to_string(), result))
     }
 }
 
