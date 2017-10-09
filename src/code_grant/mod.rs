@@ -9,6 +9,12 @@ use iron::Url;
 use iron;
 use std;
 
+pub struct NegotiationParams<'a> {
+    pub client_id: &'a str,
+    pub scope: Option<&'a str>,
+    pub redirect_url: Option<&'a str>
+}
+
 pub struct Request<'a> {
     pub client_id: &'a str,
     pub redirect_url: &'a Url,
@@ -29,7 +35,7 @@ pub struct AuthorizationParameters<'a> {
 }
 
 pub trait Authorizer {
-    fn negotiate(&self, client: &str, scope: Option<&str>, redirect_url: Option<&str>) -> Result<(&str, &Url), &str>;
+    fn negotiate<'a>(&self, NegotiationParams<'a>) -> Result<Request<'a>, &str>;
     fn authorize(&self, &Request) -> String;
     fn recover_parameters(&self, &str) -> AuthorizationParameters;
 }
@@ -76,10 +82,11 @@ impl<'a> CodeGranter<'a> {
             None => return Err("client_id needs to be set"),
             Some(s) => s
         };
-        let (scope, redir) = self.authorizer.negotiate(
-            client_id,
-            query.get("scope").map(|s| s.as_ref()),
-            query.get("redirect_url").map(|s| s.as_ref()))?;
+        let (scope, redir) = self.authorizer.negotiate(NegotiationParams {
+            client_id: client_id,
+            scope: query.get("scope").map(|s| s.as_ref()),
+            redirect_url: query.get("redirect_url").map(|s| s.as_ref())}
+        ).map(|p| (p.scope, p.redirect_url))?;
         Ok(Request{client_id: client_id, scope: scope, redirect_url: redir})
     }
 }
