@@ -1,0 +1,11 @@
+[package]
+name = "oauth2-server"
+version = "0.1.0"
+authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
+
+[dependencies]
+chrono = "0.4"
+url = "*"
+
+[dependencies.iron]
+version = "*"
