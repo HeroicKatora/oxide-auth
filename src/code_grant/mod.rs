@@ -29,17 +29,13 @@ pub struct AuthorizationParameters<'a> {
 }
 
 pub trait Authorizer {
+    fn negotiate(&self, client: &str, scope: Option<&str>, redirect_url: Option<&str>) -> Result<(&str, &Url), &str>;
     fn authorize(&self, &Request) -> String;
     fn recover_parameters(&self, &str) -> AuthorizationParameters;
 }
 
-pub trait ClientInterface {
-    fn negotiate(&self, scope: Option<&str>, redirect_url: Option<&str>) -> Result<(&str, &Url), &'static str>;
-}
-
 pub struct CodeGranter<'a> {
     authorizer: &'a Authorizer,
-    client_interface: &'a ClientInterface
 }
 
 type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::borrow::Cow<'a, str>>;
@@ -70,7 +66,7 @@ impl<'a> CodeGranter<'a> {
     }
 
     fn auth_url_encoded(&self, query: &'a QueryMap<'a>)
-    -> Result<Request<'a>, &'static str> {
+    -> Result<Request<'a>, &'a str> {
         match query.get("response_type").map(|s| s == "code") {
             None => return Err("Response type needs to be set"),
             Some(false) => return Err("Invalid response type"),
@@ -80,9 +76,12 @@ impl<'a> CodeGranter<'a> {
             None => return Err("client_id needs to be set"),
             Some(s) => s
         };
-        let (scope, redir) = self.client_interface.negotiate(
+        let (scope, redir) = self.authorizer.negotiate(
+            client_id,
             query.get("scope").map(|s| s.as_ref()),
             query.get("redirect_url").map(|s| s.as_ref()))?;
         Ok(Request{client_id: client_id, scope: scope, redirect_url: redir})
     }
 }
+
+pub mod authorizer;
