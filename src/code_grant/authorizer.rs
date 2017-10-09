@@ -13,6 +13,7 @@ struct Data {
 struct SpecificGrant {
     client_id: String,
     scope: String,
+    redirect_url: Url,
     until: DateTime<Utc>
 }
 
@@ -47,20 +48,16 @@ impl Authorizer for Storage {
             SpecificGrant{
                 client_id: req.client_id.to_string(),
                 scope: req.scope.to_string(),
+                redirect_url: req.redirect_url.clone(),
                 until: Utc::now() + Duration::minutes(10)
             });
         token
     }
 
     fn recover_parameters<'a>(&'a self, grant: &'a str) -> Option<Grant<'a>> {
-        let grant = match self.tokens.get(grant) {
-            None => return None,
-            Some(v) => v
-        };
-        let client = self.clients.get(&grant.client_id).unwrap();
-        Some(Grant {
+        self.tokens.get(grant).map(|grant| Grant {
             client_id: &grant.client_id,
-            redirect_url: &client.redirect_url,
+            redirect_url: &grant.redirect_url,
             scope: &grant.scope,
             until: &grant.until
         })
