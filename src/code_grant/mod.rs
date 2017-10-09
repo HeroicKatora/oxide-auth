@@ -32,7 +32,7 @@ impl<'a> Request<'a> {
     }
 }
 
-pub struct AuthorizationParameters<'a> {
+pub struct Grant<'a> {
     pub client_id: &'a str,
     pub redirect_url: &'a Url,
     pub scope: &'a str,
@@ -41,8 +41,8 @@ pub struct AuthorizationParameters<'a> {
 
 pub trait Authorizer {
     fn negotiate(&self, NegotiationParams) -> Result<Negotiated, String>;
-    fn authorize(&mut self, &Request) -> String;
-    fn recover_parameters<'a>(&'a self, &'a str) -> Option<AuthorizationParameters<'a>>;
+    fn authorize(&mut self, Request) -> String;
+    fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
 
 pub struct CodeGranter<'a> {
@@ -63,10 +63,12 @@ impl<'a> CodeGranter<'a> {
             Err(st) => return Ok(Response::with((super::iron::status::BadRequest, st))),
             Ok(v) => v
         };
-        let auth = Request{client_id: &client_id, redirect_url: &negotiated.redirect_url, scope: &negotiated.scope};
-        let grant = self.authorizer.authorize(&auth);
+        let grant = self.authorizer.authorize(Request{
+            client_id: &client_id,
+            redirect_url: &negotiated.redirect_url,
+            scope: &negotiated.scope});
         let redirect_to = {
-            let mut url = auth.redirect_url.clone();
+            let mut url = negotiated.redirect_url;
             url.as_mut().query_pairs_mut()
                 .append_pair("code", grant.as_str())
                 .extend_pairs(urldecoded.get("state").map(|v| ("state", v)))

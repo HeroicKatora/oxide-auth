@@ -1,17 +1,16 @@
-use chrono::DateTime;
-use chrono::Utc;
+use chrono::{DateTime, Utc, Duration};
 
 use iron::Url;
 use std::collections::HashMap;
 
-use super::{NegotiationParams, Negotiated, Authorizer, Request, AuthorizationParameters};
+use super::{NegotiationParams, Negotiated, Authorizer, Request, Grant};
 
 struct Data {
     default_scope: String,
     redirect_url: Url,
 }
 
-struct Grant {
+struct SpecificGrant {
     client_id: String,
     scope: String,
     until: DateTime<Utc>
@@ -19,7 +18,13 @@ struct Grant {
 
 pub struct Storage {
     clients: HashMap<String, Data>,
-    tokens: HashMap<String, Grant>
+    tokens: HashMap<String, SpecificGrant>
+}
+
+impl Storage {
+    fn new_grant(&self, req: &Request) -> String {
+        req.client_id.to_string()
+    }
 }
 
 impl Authorizer for Storage {
@@ -36,17 +41,24 @@ impl Authorizer for Storage {
         }
     }
 
-    fn authorize(&mut self, req: &Request) -> String {
-        req.client_id.to_string()
+    fn authorize(&mut self, req: Request) -> String {
+        let token = self.new_grant(&req);
+        self.tokens.insert(token.clone(),
+            SpecificGrant{
+                client_id: req.client_id.to_string(),
+                scope: req.scope.to_string(),
+                until: Utc::now() + Duration::minutes(10)
+            });
+        token
     }
 
-    fn recover_parameters<'a>(&'a self, grant: &'a str) -> Option<AuthorizationParameters<'a>> {
+    fn recover_parameters<'a>(&'a self, grant: &'a str) -> Option<Grant<'a>> {
         let grant = match self.tokens.get(grant) {
             None => return None,
             Some(v) => v
         };
         let client = self.clients.get(&grant.client_id).unwrap();
-        Some(AuthorizationParameters {
+        Some(Grant {
             client_id: &grant.client_id,
             redirect_url: &client.redirect_url,
             scope: &grant.scope,
