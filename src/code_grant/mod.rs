@@ -26,12 +26,6 @@ pub struct Request<'a> {
     pub scope: &'a str,
 }
 
-impl<'a> Request<'a> {
-    pub fn response_type(&self) -> &'static str {
-        return "code"
-    }
-}
-
 pub struct Grant<'a> {
     pub client_id: &'a str,
     pub redirect_url: &'a Url,
@@ -63,25 +57,13 @@ impl<'a> CodeGranter<'a> {
             Err(st) => return Ok(Response::with((super::iron::status::BadRequest, st))),
             Ok(v) => v
         };
-        let grant = self.authorizer.authorize(Request{
-            client_id: &client_id,
-            redirect_url: &negotiated.redirect_url,
-            scope: &negotiated.scope});
-        let redirect_to = {
-            let mut url = negotiated.redirect_url;
-            url.as_mut().query_pairs_mut()
-                .append_pair("code", grant.as_str())
-                .extend_pairs(urldecoded.get("state").map(|v| ("state", v)))
-                .finish();
-            url
-        };
-
+        let redirect_to = self.authorize(client_id, negotiated, urldecoded.get("state").map(AsRef::as_ref));
         Ok(Response::with((super::iron::status::Ok, Redirect(redirect_to))))
     }
 
     fn auth_url_encoded<'u>(&'u self, query: &'u QueryMap<'u>)
     -> Result<(String, Negotiated), String> {
-        match query.get("response_type").map(|s| s == "code") {
+        match query.get("response_type").map(|s| *s == "code") {
             None => return Err("Response type needs to be set".to_string()),
             Some(false) => return Err("Invalid response type".to_string()),
             Some(true) => ()
@@ -100,6 +82,19 @@ impl<'a> CodeGranter<'a> {
             redirect_url: redirect_url.as_ref() }
         )?;
         Ok((client_id.to_string(), result))
+    }
+
+    fn authorize(&mut self, client_id: String, negotiated: Negotiated, state: Option<&str>) -> Url {
+        let grant = self.authorizer.authorize(Request{
+            client_id: &client_id,
+            redirect_url: &negotiated.redirect_url,
+            scope: &negotiated.scope});
+        let mut url = negotiated.redirect_url;
+        url.as_mut().query_pairs_mut()
+            .append_pair("code", grant.as_str())
+            .extend_pairs(state.map(|v| ("state", v)))
+            .finish();
+        url
     }
 }
 
