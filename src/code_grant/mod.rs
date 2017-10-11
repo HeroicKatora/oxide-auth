@@ -21,12 +21,14 @@ pub struct Negotiated {
 }
 
 pub struct Request<'a> {
+    pub owner_id: &'a str,
     pub client_id: &'a str,
     pub redirect_url: &'a Url,
     pub scope: &'a str,
 }
 
 pub struct Grant<'a> {
+    pub owner_id: &'a str,
     pub client_id: &'a str,
     pub redirect_url: &'a Url,
     pub scope: &'a str,
@@ -37,6 +39,10 @@ pub trait Authorizer {
     fn negotiate(&self, NegotiationParams) -> Result<Negotiated, String>;
     fn authorize(&mut self, Request) -> String;
     fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+}
+
+pub trait OwnerBackend {
+    fn owner_id(&self) -> Option<String>;
 }
 
 pub struct CodeGranter<'a> {
@@ -50,6 +56,12 @@ fn decode_query<'u>(query: &'u Url) -> QueryMap<'u> {
         .collect::<QueryMap<'u>>()
 }
 
+impl<'a, 'b> OwnerBackend for iron::Request<'a, 'b> {
+    fn owner_id(&self) -> Option<String> {
+        return Some("test".to_string());
+    }
+}
+
 impl<'a> CodeGranter<'a> {
     pub fn iron_auth_handler(&'a mut self, req: &mut iron::Request) -> IronResult<Response> {
         let urldecoded = decode_query(&req.url);
@@ -57,7 +69,11 @@ impl<'a> CodeGranter<'a> {
             Err(st) => return Ok(Response::with((super::iron::status::BadRequest, st))),
             Ok(v) => v
         };
-        let redirect_to = self.authorize(client_id, negotiated, urldecoded.get("state").map(AsRef::as_ref));
+        let redirect_to = self.authorize(
+            client_id,
+            req.owner_id().unwrap(),
+            negotiated,
+            urldecoded.get("state").map(AsRef::as_ref));
         Ok(Response::with((super::iron::status::Ok, Redirect(redirect_to))))
     }
 
@@ -84,8 +100,9 @@ impl<'a> CodeGranter<'a> {
         Ok((client_id.to_string(), result))
     }
 
-    fn authorize(&mut self, client_id: String, negotiated: Negotiated, state: Option<&str>) -> Url {
+    fn authorize(&mut self, client_id: String, owner_id: String, negotiated: Negotiated, state: Option<&str>) -> Url {
         let grant = self.authorizer.authorize(Request{
+            owner_id: &owner_id,
             client_id: &client_id,
             redirect_url: &negotiated.redirect_url,
             scope: &negotiated.scope});

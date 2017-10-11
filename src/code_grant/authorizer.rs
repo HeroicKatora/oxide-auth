@@ -11,6 +11,7 @@ struct Data {
 }
 
 struct SpecificGrant {
+    owner_id: String,
     client_id: String,
     scope: String,
     redirect_url: Url,
@@ -46,6 +47,7 @@ impl Authorizer for Storage {
         let token = self.new_grant(&req);
         self.tokens.insert(token.clone(),
             SpecificGrant{
+                owner_id: req.owner_id.to_string(),
                 client_id: req.client_id.to_string(),
                 scope: req.scope.to_string(),
                 redirect_url: req.redirect_url.clone(),
@@ -56,6 +58,7 @@ impl Authorizer for Storage {
 
     fn recover_parameters<'a>(&'a self, grant: &'a str) -> Option<Grant<'a>> {
         self.tokens.get(grant).map(|grant| Grant {
+            owner_id: &grant.owner_id,
             client_id: &grant.client_id,
             redirect_url: &grant.redirect_url,
             scope: &grant.scope,
