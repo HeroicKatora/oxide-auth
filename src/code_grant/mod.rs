@@ -41,12 +41,8 @@ pub trait Authorizer {
     fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
 
-pub trait OwnerBackend {
+pub trait WebRequest {
     fn owner_id(&self) -> Option<String>;
-}
-
-pub struct CodeGranter<'a> {
-    authorizer: &'a mut Authorizer,
 }
 
 type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::borrow::Cow<'a, str>>;
@@ -56,26 +52,15 @@ fn decode_query<'u>(query: &'u Url) -> QueryMap<'u> {
         .collect::<QueryMap<'u>>()
 }
 
-impl<'a, 'b> OwnerBackend for iron::Request<'a, 'b> {
+impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
     fn owner_id(&self) -> Option<String> {
         return Some("test".to_string());
     }
 }
 
-impl<'a> CodeGranter<'a> {
-    pub fn iron_auth_handler(&'a mut self, req: &mut iron::Request) -> IronResult<Response> {
-        let urldecoded = decode_query(&req.url);
-        let (client_id, negotiated) = match self.auth_url_encoded(&urldecoded) {
-            Err(st) => return Ok(Response::with((super::iron::status::BadRequest, st))),
-            Ok(v) => v
-        };
-        let redirect_to = self.authorize(
-            client_id,
-            req.owner_id().unwrap(),
-            negotiated,
-            urldecoded.get("state").map(AsRef::as_ref));
-        Ok(Response::with((super::iron::status::Ok, Redirect(redirect_to))))
-    }
+pub trait CodeGranter {
+    fn authorizer_mut(&mut self) -> &mut Authorizer;
+    fn authorizer(&self) -> &Authorizer;
 
     fn auth_url_encoded<'u>(&'u self, query: &'u QueryMap<'u>)
     -> Result<(String, Negotiated), String> {
@@ -92,7 +77,7 @@ impl<'a> CodeGranter<'a> {
             Some(Err(_)) => return Err("Invalid url".to_string()),
             val => val.map(|v| v.unwrap())
         };
-        let result = self.authorizer.negotiate(NegotiationParams {
+        let result = self.authorizer().negotiate(NegotiationParams {
             client_id: client_id,
             scope: query.get("scope").map(|s| s.as_ref()),
             redirect_url: redirect_url.as_ref() }
@@ -101,7 +86,7 @@ impl<'a> CodeGranter<'a> {
     }
 
     fn authorize(&mut self, client_id: String, owner_id: String, negotiated: Negotiated, state: Option<&str>) -> Url {
-        let grant = self.authorizer.authorize(Request{
+        let grant = self.authorizer_mut().authorize(Request{
             owner_id: &owner_id,
             client_id: &client_id,
             redirect_url: &negotiated.redirect_url,
@@ -112,6 +97,43 @@ impl<'a> CodeGranter<'a> {
             .extend_pairs(state.map(|v| ("state", v)))
             .finish();
         url
+    }
+}
+
+pub struct IronGranter<A: Authorizer> {
+    authorizer: std::sync::Mutex<std::cell::RefCell<A>>
+}
+
+struct IronGrantRef<'a>(&'a mut Authorizer);
+
+impl<'a> CodeGranter for IronGrantRef<'a> {
+    fn authorizer_mut(&mut self) -> &mut Authorizer {
+        self.0
+    }
+
+    fn authorizer(&self) -> &Authorizer {
+        self.0
+    }
+}
+
+impl<A: Authorizer + Send + 'static> iron::Handler for IronGranter<A> {
+    fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
+        use std::ops::Deref;
+        use std::ops::DerefMut;
+        let urldecoded = decode_query(&req.url);
+        let locked = self.authorizer.lock().unwrap();
+        let mut auth_ref = locked.deref().borrow_mut();
+        let mut granter = IronGrantRef{0: auth_ref.deref_mut()};
+        let (client_id, negotiated) = match granter.auth_url_encoded(&urldecoded) {
+            Err(st) => return Ok(Response::with((super::iron::status::BadRequest, st))),
+            Ok(v) => v
+        };
+        let redirect_to = granter.authorize(
+            client_id,
+            req.owner_id().unwrap(),
+            negotiated,
+            urldecoded.get("state").map(AsRef::as_ref));
+        Ok(Response::with((super::iron::status::Ok, Redirect(redirect_to))))
     }
 }
 
