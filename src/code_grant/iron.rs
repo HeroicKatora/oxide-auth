@@ -1,5 +1,9 @@
 use super::*;
 use iron;
+use iron::modifiers::Redirect;
+use iron::IronResult;
+use iron::Response;
+use iron::Request as IRequest;
 
 pub struct IronGranter<A: Authorizer + Send + 'static> {
     authorizer: std::sync::Mutex<std::cell::RefCell<A>>
@@ -8,6 +12,12 @@ pub struct IronGranter<A: Authorizer + Send + 'static> {
 impl<A: Authorizer + Send + 'static> IronGranter<A> {
     pub fn new(data: A) -> IronGranter<A> {
         IronGranter { authorizer: std::sync::Mutex::new(std::cell::RefCell::new(data)) }
+    }
+}
+
+impl<'a, 'b> WebRequest for IRequest<'a, 'b> {
+    fn owner_id(&self) -> Option<String> {
+        return Some("test".to_string());
     }
 }
 
@@ -40,6 +50,6 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronGranter<A> {
             req.owner_id().unwrap(),
             negotiated,
             urldecoded.get("state").map(AsRef::as_ref));
-        Ok(Response::with((iron::status::Ok, Redirect(redirect_to))))
+        Ok(Response::with((iron::status::Found, Redirect(redirect_to))))
     }
 }

@@ -24,6 +24,14 @@ pub struct Storage {
 }
 
 impl Storage {
+    pub fn new() -> Storage {
+        Storage {clients: HashMap::new(), tokens: HashMap::new()}
+    }
+
+    pub fn register_client(&mut self, client_id: &str, redirect_url: Url) {
+        self.clients.insert(client_id.to_string(), Data{default_scope: "default".to_string(), redirect_url: redirect_url});
+    }
+
     fn new_grant(&self, req: &Request) -> String {
         req.client_id.to_string()
     }

@@ -1,11 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
-
-use iron::modifiers::Redirect;
-use iron::IronResult;
-use iron::Response;
 use iron::Url;
-use iron::Request as IRequest;
 
 use std;
 
@@ -50,12 +45,6 @@ type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::bo
 fn decode_query<'u>(query: &'u Url) -> QueryMap<'u> {
     query.as_ref().query_pairs()
         .collect::<QueryMap<'u>>()
-}
-
-impl<'a, 'b> WebRequest for IRequest<'a, 'b> {
-    fn owner_id(&self) -> Option<String> {
-        return Some("test".to_string());
-    }
 }
 
 pub trait CodeGranter {
