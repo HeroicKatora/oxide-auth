@@ -10,5 +10,5 @@ fn main() {
         storage
     });
 
-    iron::Iron::new(ohandler).http("localhost:8020").unwrap();
+    iron::Iron::new(ohandler.authorize()).http("localhost:8020").unwrap();
 }

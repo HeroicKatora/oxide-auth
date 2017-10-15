@@ -17,13 +17,21 @@ impl<'a> CodeGranter for IronGrantRef<'a> {
     }
 }
 
-pub struct IronGranter<A> {
-    authorizer: std::sync::Mutex<std::cell::RefCell<A>>
+pub struct IronGranter<A: Authorizer + Send + 'static> {
+    authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
 }
 
-impl<A> IronGranter<A> {
+pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
+    authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
+}
+
+impl<A: Authorizer + Send + 'static> IronGranter<A> {
     pub fn new(data: A) -> IronGranter<A> {
-        IronGranter { authorizer: std::sync::Mutex::new(std::cell::RefCell::new(data)) }
+        IronGranter { authorizer: std::sync::Arc::new(std::sync::Mutex::new(std::cell::RefCell::new(data))) }
+    }
+
+    pub fn authorize(&self) -> IronAuthorizer<A> {
+        IronAuthorizer { authorizer: self.authorizer.clone() }
     }
 }
 
@@ -33,7 +41,7 @@ impl<'a, 'b> WebRequest for IRequest<'a, 'b> {
     }
 }
 
-impl<A: Authorizer + Send + 'static> iron::Handler for IronGranter<A> {
+impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         use std::ops::Deref;
         use std::ops::DerefMut;
