@@ -38,17 +38,23 @@ impl Storage {
 }
 
 impl Authorizer for Storage {
-    fn negotiate(&self, params: NegotiationParams) -> Result<Negotiated, String> {
-        match self.clients.get(params.client_id) {
-            None => Err("Unregistered client".to_string()),
-            Some(stored)
-                if params.redirect_url.is_some() &&
-                params.redirect_url.unwrap().as_ref() != stored.redirect_url.as_ref() => Err("Redirect url does not match".to_string()),
-            Some(stored) => Ok(Negotiated {
-                redirect_url: stored.redirect_url.clone(),
-                scope: stored.default_scope.clone()
-            })
-        }
+    fn negotiate<'a>(&self, params: NegotiationParams<'a>) -> Result<Negotiated<'a>, String> {
+        let client = match self.clients.get(params.client_id.as_ref()) {
+            None => return Err("Unregistered client".to_string()),
+            Some(stored) => stored
+        };
+        match params.redirect_url {
+            Some(url) => if *url.as_ref() != client.redirect_url {
+                return Err("Redirect url does not match".to_string());
+            },
+            None => ()
+        };
+        Ok(Negotiated {
+            client_id: params.client_id.clone(),
+            redirect_url: client.redirect_url.clone(),
+            scope: client.default_scope.clone().into(),
+            state: params.state.clone()
+        })
     }
 
     fn authorize(&mut self, req: Request) -> String {

@@ -45,20 +45,22 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         use std::ops::Deref;
         use std::ops::DerefMut;
-        let urldecoded = decode_query(&req.url);
+        let urldecoded = match decode_query(&req.url) {
+            Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
+            Ok(res) => res
+        };
+
         let locked = self.authorizer.lock().unwrap();
         let mut auth_ref = locked.deref().borrow_mut();
         let mut granter = IronGrantRef{0: auth_ref.deref_mut()};
 
-        let (client_id, negotiated) = match granter.auth_url_encoded(&urldecoded) {
+        let negotiated = match granter.negotiate(urldecoded) {
            Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
            Ok(v) => v
         };
         let redirect_to = granter.authorize(
-           client_id,
-           req.owner_id().unwrap(),
-           negotiated,
-           urldecoded.get("state").map(AsRef::as_ref));
+           req.owner_id().unwrap().into(),
+           negotiated);
         Ok(Response::with((iron::status::Found, Redirect(redirect_to))))
     }
 }
