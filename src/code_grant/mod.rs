@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
-use iron::Url;
+use url::Url;
 
 use std;
 use std::borrow::Cow;
@@ -44,10 +44,10 @@ pub trait WebRequest {
     fn owner_id(&self) -> Option<String>;
 }
 
-type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::borrow::Cow<'a, str>>;
+pub type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::borrow::Cow<'a, str>>;
 
-fn decode_query<'u>(query: &'u Url) -> Result<NegotiationParams<'u>, String> {
-    let kvpairs = query.as_ref().query_pairs()
+pub fn decode_query<'u>(query: &'u Url) -> Result<NegotiationParams<'u>, String> {
+    let kvpairs = query.query_pairs()
         .collect::<QueryMap<'u>>();
 
     match kvpairs.get("response_type").map(|s| *s == "code") {
@@ -88,7 +88,7 @@ pub trait CodeGranter {
             redirect_url: &negotiated.redirect_url,
             scope: &negotiated.scope});
         let mut url = negotiated.redirect_url;
-        url.as_mut().query_pairs_mut()
+        url.query_pairs_mut()
             .append_pair("code", grant.as_str())
             .extend_pairs(negotiated.state.map(|v| ("state", v)))
             .finish();
@@ -96,7 +96,7 @@ pub trait CodeGranter {
     }
 }
 
-struct IronGrantRef<'a>(&'a mut Authorizer);
+pub struct IronGrantRef<'a>(&'a mut Authorizer);
 
 impl<'a> CodeGranter for IronGrantRef<'a> {
     fn authorizer_mut(&mut self) -> &mut Authorizer {
@@ -108,5 +108,6 @@ impl<'a> CodeGranter for IronGrantRef<'a> {
     }
 }
 
+#[cfg(feature = "iron-backend")]
 pub mod iron;
 pub mod authorizer;

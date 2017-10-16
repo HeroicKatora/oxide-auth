@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc, Duration};
 
-use iron::Url;
+use url::Url;
 use std::collections::HashMap;
 
 use super::{NegotiationParams, Negotiated, Authorizer, Request, Grant};

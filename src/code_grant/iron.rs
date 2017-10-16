@@ -1,9 +1,9 @@
 use super::*;
-use iron;
-use iron::modifiers::Redirect;
-use iron::IronResult;
-use iron::Response;
-use iron::Request as IRequest;
+extern crate iron;
+use self::iron::modifiers::Redirect;
+use self::iron::IronResult;
+use self::iron::Response;
+use self::iron::Request as IRequest;
 
 pub struct IronGranter<A: Authorizer + Send + 'static> {
     authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
@@ -33,7 +33,7 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         use std::ops::Deref;
         use std::ops::DerefMut;
-        let urldecoded = match decode_query(&req.url) {
+        let urldecoded = match decode_query(req.url.as_ref()) {
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
             Ok(res) => res
         };
@@ -50,6 +50,9 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
         let redirect_to = granter.authorize(
            req.owner_id().unwrap().into(),
            negotiated);
-        Ok(Response::with((iron::status::Found, Redirect(redirect_to))))
+
+       // TODO: this might be a panic case, handle this better
+        let real_url = iron::Url::from_generic_url(redirect_to).unwrap();
+        Ok(Response::with((iron::status::Found, Redirect(real_url))))
     }
 }

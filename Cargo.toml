@@ -6,6 +6,11 @@ authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 [dependencies]
 chrono = "0.4"
 url = "*"
+iron = { version = "*", optional = true }
 
-[dependencies.iron]
-version = "*"
+[features]
+default = ["iron-backend"]
+iron-backend = ["iron"]
+
+[dev-dependencies]
+router = "*"

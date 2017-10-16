@@ -1,4 +1,3 @@
-extern crate iron;
 extern crate chrono;
 extern crate url;
 
