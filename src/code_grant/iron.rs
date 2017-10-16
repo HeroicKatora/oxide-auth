@@ -5,18 +5,6 @@ use iron::IronResult;
 use iron::Response;
 use iron::Request as IRequest;
 
-struct IronGrantRef<'a>(&'a mut Authorizer);
-
-impl<'a> CodeGranter for IronGrantRef<'a> {
-    fn authorizer_mut(&mut self) -> &mut Authorizer {
-        self.0
-    }
-
-    fn authorizer(&self) -> &Authorizer {
-        self.0
-    }
-}
-
 pub struct IronGranter<A: Authorizer + Send + 'static> {
     authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
 }
@@ -58,6 +46,7 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
            Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
            Ok(v) => v
         };
+
         let redirect_to = granter.authorize(
            req.owner_id().unwrap().into(),
            negotiated);

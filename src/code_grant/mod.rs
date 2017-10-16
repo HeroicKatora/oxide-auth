@@ -96,5 +96,17 @@ pub trait CodeGranter {
     }
 }
 
+struct IronGrantRef<'a>(&'a mut Authorizer);
+
+impl<'a> CodeGranter for IronGrantRef<'a> {
+    fn authorizer_mut(&mut self) -> &mut Authorizer {
+        self.0
+    }
+
+    fn authorizer(&self) -> &Authorizer {
+        self.0
+    }
+}
+
 pub mod iron;
 pub mod authorizer;
