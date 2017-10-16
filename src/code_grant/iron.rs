@@ -13,6 +13,10 @@ pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
     authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
 }
 
+pub struct IronTokenRequest<A: Authorizer + Send + 'static> {
+    authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
+}
+
 impl<A: Authorizer + Send + 'static> IronGranter<A> {
     pub fn new(data: A) -> IronGranter<A> {
         IronGranter { authorizer: std::sync::Arc::new(std::sync::Mutex::new(std::cell::RefCell::new(data))) }
@@ -20,6 +24,10 @@ impl<A: Authorizer + Send + 'static> IronGranter<A> {
 
     pub fn authorize(&self) -> IronAuthorizer<A> {
         IronAuthorizer { authorizer: self.authorizer.clone() }
+    }
+
+    pub fn token(&self) -> IronTokenRequest<A> {
+        IronTokenRequest { authorizer: self.authorizer.clone() }
     }
 }
 
@@ -54,5 +62,13 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
        // TODO: this might be a panic case, handle this better
         let real_url = iron::Url::from_generic_url(redirect_to).unwrap();
         Ok(Response::with((iron::status::Found, Redirect(real_url))))
+    }
+}
+
+
+impl<A: Authorizer + Send + 'static> iron::Handler for IronTokenRequest<A> {
+    fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
+        let from_addr = format!("{}", req.remote_addr);
+        Ok(Response::with((iron::status::Ok, from_addr)))
     }
 }

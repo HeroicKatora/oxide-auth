@@ -14,3 +14,4 @@ iron-backend = ["iron"]
 
 [dev-dependencies]
 router = "*"
+reqwest = "*"
