@@ -45,6 +45,11 @@ pub trait Authorizer {
     fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
 
+pub trait Issuer {
+    fn issue(&mut self, Request) -> String;
+    fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+}
+
 pub trait WebRequest {
     fn authenticated_owner(&self) -> Option<String>;
 }
@@ -77,11 +82,11 @@ pub fn decode_query<'u>(query: &'u Url) -> Result<ClientParameter<'u>, String> {
     })
 }
 
-pub struct GrantRef<'a> {
+pub struct CodeRef<'a> {
     authorizer: &'a mut Authorizer,
 }
 
-impl<'u> GrantRef<'u> {
+impl<'u> CodeRef<'u> {
     pub fn negotiate<'a>(&self, client_id: Cow<'a, str>, scope: Option<Cow<'a, str>>, redirect_url: Option<Cow<'a, Url>>)
     -> Result<Negotiated<'a>, String> {
         self.authorizer.negotiate(NegotiationParameter{client_id, scope, redirect_url})
@@ -101,17 +106,18 @@ impl<'u> GrantRef<'u> {
         url
     }
 
-    pub fn with<'a>(t: &'a mut Authorizer) -> GrantRef<'a> {
-        GrantRef { authorizer: t }
+    pub fn with<'a>(t: &'a mut Authorizer) -> CodeRef<'a> {
+        CodeRef { authorizer: t }
     }
 }
 
-pub struct TokenRef<'a> {
+pub struct IssuerRef<'a> {
     authorizer: &'a mut Authorizer,
+    // issuer: &'a mut Issuer,
 }
 
-impl<'u> TokenRef<'u> {
-    pub fn use_code<'a>(&'a mut self, code: Cow<'a, str>, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
+impl<'u> IssuerRef<'u> {
+    pub fn use_code<'a>(&'a mut self, code: String, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
     -> Result<Cow<'a, str>, Cow<'static, str>> {
         let saved_params = match self.authorizer.recover_parameters(code.as_ref()) {
             Some(v) => v,
@@ -125,8 +131,8 @@ impl<'u> TokenRef<'u> {
         Ok("accesstoken".into())
     }
 
-    pub fn with<'a>(t: &'a mut Authorizer) -> TokenRef<'a> {
-        TokenRef { authorizer: t }
+    pub fn with<'a>(t: &'a mut Authorizer) -> IssuerRef<'a> {
+        IssuerRef { authorizer: t }
     }
 }
 

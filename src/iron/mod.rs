@@ -49,7 +49,7 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
         };
 
         let mut locked = self.authorizer.lock().unwrap();
-        let mut granter = GrantRef::with(locked.deref_mut());
+        let mut granter = CodeRef::with(locked.deref_mut());
 
         let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
@@ -97,14 +97,14 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronTokenRequest<A> {
             redirect_urlv.len());
         let (client, code, redirect_url) = match lengths {
             (1, 1, 1, 1) if grant_typev[0] == "authorization_code"
-                => (clientv[0].as_str(), codev[0].as_str(), redirect_urlv[0].as_str()),
+                => (clientv[0].as_str(), codev[0].to_string(), redirect_urlv[0].as_str()),
             _ => return Ok(Response::with((iron::status::BadRequest, "Invalid parameters")))
         };
 
-        let mut locked = self.authorizer.lock().unwrap();
-        let mut token_granter = TokenRef::with(locked.deref_mut());
+        let mut authlocked = self.authorizer.lock().unwrap();
+        let mut issuer = IssuerRef::with(authlocked.deref_mut());
 
-        let token = match token_granter.use_code(code.into(), client.into(), redirect_url.into()) {
+        let token = match issuer.use_code(code, client.into(), redirect_url.into()) {
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st.as_ref()))),
             Ok(token) => token
         };
