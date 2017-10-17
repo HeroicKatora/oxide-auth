@@ -1,6 +1,8 @@
-use super::*;
 extern crate iron;
 extern crate urlencoded;
+
+use super::code_grant::*;
+use std::sync::{Arc, Mutex};
 use std::ops::DerefMut;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
@@ -8,20 +10,20 @@ use self::iron::Request as IRequest;
 use self::urlencoded::UrlEncodedQuery;
 
 pub struct IronGranter<A: Authorizer + Send + 'static> {
-    authorizer: std::sync::Arc<std::sync::Mutex<A>>
+    authorizer: Arc<Mutex<A>>
 }
 
 pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
-    authorizer: std::sync::Arc<std::sync::Mutex<A>>
+    authorizer: Arc<Mutex<A>>
 }
 
 pub struct IronTokenRequest<A: Authorizer + Send + 'static> {
-    authorizer: std::sync::Arc<std::sync::Mutex<A>>
+    authorizer: Arc<Mutex<A>>
 }
 
 impl<A: Authorizer + Send + 'static> IronGranter<A> {
     pub fn new(data: A) -> IronGranter<A> {
-        IronGranter { authorizer: std::sync::Arc::new(std::sync::Mutex::new(data)) }
+        IronGranter { authorizer: Arc::new(Mutex::new(data)) }
     }
 
     pub fn authorize(&self) -> IronAuthorizer<A> {
@@ -95,22 +97,18 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronTokenRequest<A> {
             redirect_urlv.len());
         let (client, code, redirect_url) = match lengths {
             (1, 1, 1, 1) if grant_typev[0] == "authorization_code"
-                => (&clientv[0], &codev[0], &redirect_urlv[0]),
+                => (clientv[0].as_str(), codev[0].as_str(), redirect_urlv[0].as_str()),
             _ => return Ok(Response::with((iron::status::BadRequest, "Invalid parameters")))
         };
 
         let mut locked = self.authorizer.lock().unwrap();
-        let mut granter = GrantRef::with(locked.deref_mut());
+        let mut token_granter = TokenRef::with(locked.deref_mut());
 
-        let saved_params = match granter.authorizer.recover_parameters(code) {
-            Some(v) => v,
-            _ => return Ok(Response::with((iron::status::BadRequest, "Inactive code")))
+        let token = match token_granter.use_code(code.into(), client.into(), redirect_url.into()) {
+            Err(st) => return Ok(Response::with((iron::status::BadRequest, st.as_ref()))),
+            Ok(token) => token
         };
 
-        if saved_params.client_id != client || redirect_url != saved_params.redirect_url.as_str() {
-            return Ok(Response::with((iron::status::BadRequest, "Invalid code")))
-        }
-
-        Ok(Response::with((iron::status::Ok, )))
+        Ok(Response::with((iron::status::Ok, token.as_ref())))
     }
 }

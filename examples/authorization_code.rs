@@ -5,7 +5,7 @@ mod main {
     extern crate router;
     extern crate url;
     extern crate reqwest;
-    use self::oauth2_server::code_grant::iron::IronGranter;
+    use self::oauth2_server::iron::IronGranter;
     use self::oauth2_server::code_grant::authorizer::Storage;
 
     pub fn exec() {

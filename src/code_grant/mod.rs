@@ -2,8 +2,8 @@ use chrono::DateTime;
 use chrono::Utc;
 use url::Url;
 
-use std;
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 pub struct ClientParameter<'a> {
     pub client_id: Cow<'a, str>,
@@ -49,7 +49,7 @@ pub trait WebRequest {
     fn authenticated_owner(&self) -> Option<String>;
 }
 
-pub type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::borrow::Cow<'a, str>>;
+pub type QueryMap<'a> = HashMap<Cow<'a, str>, Cow<'a, str>>;
 
 pub fn decode_query<'u>(query: &'u Url) -> Result<ClientParameter<'u>, String> {
     let kvpairs = query.query_pairs()
@@ -106,6 +106,28 @@ impl<'u> GrantRef<'u> {
     }
 }
 
-#[cfg(feature = "iron-backend")]
-pub mod iron;
+pub struct TokenRef<'a> {
+    authorizer: &'a mut Authorizer,
+}
+
+impl<'u> TokenRef<'u> {
+    pub fn use_code<'a>(&'a mut self, code: Cow<'a, str>, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
+    -> Result<Cow<'a, str>, Cow<'static, str>> {
+        let saved_params = match self.authorizer.recover_parameters(code.as_ref()) {
+            Some(v) => v,
+            _ => return Err("Inactive code".into())
+        };
+
+        if saved_params.client_id != expected_client || expected_url != saved_params.redirect_url.as_str() {
+            return Err("Invalid code".into())
+        }
+
+        Ok("accesstoken".into())
+    }
+
+    pub fn with<'a>(t: &'a mut Authorizer) -> TokenRef<'a> {
+        TokenRef { authorizer: t }
+    }
+}
+
 pub mod authorizer;
