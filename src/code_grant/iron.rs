@@ -6,20 +6,20 @@ use self::iron::Response;
 use self::iron::Request as IRequest;
 
 pub struct IronGranter<A: Authorizer + Send + 'static> {
-    authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
+    authorizer: std::sync::Arc<std::sync::Mutex<A>>
 }
 
 pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
-    authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
+    authorizer: std::sync::Arc<std::sync::Mutex<A>>
 }
 
 pub struct IronTokenRequest<A: Authorizer + Send + 'static> {
-    authorizer: std::sync::Arc<std::sync::Mutex<std::cell::RefCell<A>>>
+    authorizer: std::sync::Arc<std::sync::Mutex<A>>
 }
 
 impl<A: Authorizer + Send + 'static> IronGranter<A> {
     pub fn new(data: A) -> IronGranter<A> {
-        IronGranter { authorizer: std::sync::Arc::new(std::sync::Mutex::new(std::cell::RefCell::new(data))) }
+        IronGranter { authorizer: std::sync::Arc::new(std::sync::Mutex::new(data)) }
     }
 
     pub fn authorize(&self) -> IronAuthorizer<A> {
@@ -32,22 +32,21 @@ impl<A: Authorizer + Send + 'static> IronGranter<A> {
 }
 
 impl<'a, 'b> WebRequest for IRequest<'a, 'b> {
-    fn owner_id(&self) -> Option<String> {
+    fn authenticated_owner(&self) -> Option<String> {
         return Some("test".to_string());
     }
 }
 
 impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        use std::ops::Deref;
         use std::ops::DerefMut;
         let urldecoded = match decode_query(req.url.as_ref()) {
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
             Ok(res) => res
         };
 
-        let locked = self.authorizer.lock().unwrap();
-        let mut auth_ref = locked.deref().borrow_mut();
+        let mut locked = self.authorizer.lock().unwrap();
+        let mut auth_ref = locked.deref_mut();
         let mut granter = IronGrantRef{0: auth_ref.deref_mut()};
 
         let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
@@ -55,13 +54,20 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
             Ok(v) => v
         };
 
+        let owner = match req.authenticated_owner() {
+            None => return Ok(Response::with((iron::status::Ok, "Please authenticate"))),
+            Some(v) => v
+        };
+
         let redirect_to = granter.authorize(
-            req.owner_id().unwrap().into(),
+            owner.into(),
             negotiated,
             urldecoded.state.clone());
 
-       // TODO: this might be a panic case, handle this better
-        let real_url = iron::Url::from_generic_url(redirect_to).unwrap();
+        let real_url = match iron::Url::from_generic_url(redirect_to) {
+            Err(_) => return Ok(Response::with((iron::status::InternalServerError, "Error parsing redirect target"))),
+            Ok(v) => v
+        };
         Ok(Response::with((iron::status::Found, Redirect(real_url))))
     }
 }

@@ -46,7 +46,7 @@ pub trait Authorizer {
 }
 
 pub trait WebRequest {
-    fn owner_id(&self) -> Option<String>;
+    fn authenticated_owner(&self) -> Option<String>;
 }
 
 pub type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::borrow::Cow<'a, str>>;
