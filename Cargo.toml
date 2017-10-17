@@ -7,10 +7,11 @@ authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 chrono = "0.4"
 url = "*"
 iron = { version = "*", optional = true }
+urlencoded = { version = "*", optional = true }
 
 [features]
 default = ["iron-backend"]
-iron-backend = ["iron"]
+iron-backend = ["iron", "urlencoded"]
 
 [dev-dependencies]
 router = "*"

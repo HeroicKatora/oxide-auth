@@ -77,17 +77,18 @@ pub fn decode_query<'u>(query: &'u Url) -> Result<ClientParameter<'u>, String> {
     })
 }
 
-pub trait CodeGranter {
-    fn authorizer_mut(&mut self) -> &mut Authorizer;
-    fn authorizer(&self) -> &Authorizer;
+pub struct GrantRef<'a> {
+    authorizer: &'a mut Authorizer,
+}
 
-    fn negotiate<'a>(&self, client_id: Cow<'a, str>, scope: Option<Cow<'a, str>>, redirect_url: Option<Cow<'a, Url>>)
+impl<'u> GrantRef<'u> {
+    pub fn negotiate<'a>(&self, client_id: Cow<'a, str>, scope: Option<Cow<'a, str>>, redirect_url: Option<Cow<'a, Url>>)
     -> Result<Negotiated<'a>, String> {
-        self.authorizer().negotiate(NegotiationParameter{client_id, scope, redirect_url})
+        self.authorizer.negotiate(NegotiationParameter{client_id, scope, redirect_url})
     }
 
-    fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, state: Option<Cow<'a, str>>) -> Url {
-        let grant = self.authorizer_mut().authorize(Request{
+    pub fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, state: Option<Cow<'a, str>>) -> Url {
+        let grant = self.authorizer.authorize(Request{
             owner_id: &owner_id,
             client_id: &negotiated.client_id,
             redirect_url: &negotiated.redirect_url,
@@ -99,17 +100,9 @@ pub trait CodeGranter {
             .finish();
         url
     }
-}
 
-pub struct IronGrantRef<'a>(&'a mut Authorizer);
-
-impl<'a> CodeGranter for IronGrantRef<'a> {
-    fn authorizer_mut(&mut self) -> &mut Authorizer {
-        self.0
-    }
-
-    fn authorizer(&self) -> &Authorizer {
-        self.0
+    pub fn with<'a>(t: &'a mut Authorizer) -> GrantRef<'a> {
+        GrantRef { authorizer: t }
     }
 }
 
