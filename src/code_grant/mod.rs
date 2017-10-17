@@ -5,18 +5,23 @@ use url::Url;
 use std;
 use std::borrow::Cow;
 
-pub struct NegotiationParams<'a> {
+pub struct ClientParameter<'a> {
     pub client_id: Cow<'a, str>,
     pub scope: Option<Cow<'a, str>>,
     pub redirect_url: Option<Cow<'a, Url>>,
     pub state: Option<Cow<'a, str>>,
 }
 
+pub struct NegotiationParameter<'a> {
+    pub client_id: Cow<'a, str>,
+    pub scope: Option<Cow<'a, str>>,
+    pub redirect_url: Option<Cow<'a, Url>>,
+}
+
 pub struct Negotiated<'a> {
     pub client_id: Cow<'a, str>,
     pub scope: Cow<'a, str>,
     pub redirect_url: Url,
-    pub state: Option<Cow<'a, str>>,
 }
 
 pub struct Request<'a> {
@@ -35,7 +40,7 @@ pub struct Grant<'a> {
 }
 
 pub trait Authorizer {
-    fn negotiate<'a>(&self, NegotiationParams<'a>) -> Result<Negotiated<'a>, String>;
+    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Negotiated<'a>, String>;
     fn authorize(&mut self, Request) -> String;
     fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
@@ -46,7 +51,7 @@ pub trait WebRequest {
 
 pub type QueryMap<'a> = std::collections::HashMap<std::borrow::Cow<'a, str>, std::borrow::Cow<'a, str>>;
 
-pub fn decode_query<'u>(query: &'u Url) -> Result<NegotiationParams<'u>, String> {
+pub fn decode_query<'u>(query: &'u Url) -> Result<ClientParameter<'u>, String> {
     let kvpairs = query.query_pairs()
         .collect::<QueryMap<'u>>();
 
@@ -64,7 +69,7 @@ pub fn decode_query<'u>(query: &'u Url) -> Result<NegotiationParams<'u>, String>
         val => val.map(|v| Cow::Owned(v.unwrap()))
     };
     let state = kvpairs.get("state").map(|v| v.clone());
-    Ok(NegotiationParams {
+    Ok(ClientParameter {
         client_id: client_id,
         scope: kvpairs.get("scope").map(|v| v.clone()),
         redirect_url: redirect_url,
@@ -76,12 +81,12 @@ pub trait CodeGranter {
     fn authorizer_mut(&mut self) -> &mut Authorizer;
     fn authorizer(&self) -> &Authorizer;
 
-    fn negotiate<'a>(&self, params: NegotiationParams<'a>)
+    fn negotiate<'a>(&self, client_id: Cow<'a, str>, scope: Option<Cow<'a, str>>, redirect_url: Option<Cow<'a, Url>>)
     -> Result<Negotiated<'a>, String> {
-        self.authorizer().negotiate(params)
+        self.authorizer().negotiate(NegotiationParameter{client_id, scope, redirect_url})
     }
 
-    fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>) -> Url {
+    fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, state: Option<Cow<'a, str>>) -> Url {
         let grant = self.authorizer_mut().authorize(Request{
             owner_id: &owner_id,
             client_id: &negotiated.client_id,
@@ -90,7 +95,7 @@ pub trait CodeGranter {
         let mut url = negotiated.redirect_url;
         url.query_pairs_mut()
             .append_pair("code", grant.as_str())
-            .extend_pairs(negotiated.state.map(|v| ("state", v)))
+            .extend_pairs(state.map(|v| ("state", v)))
             .finish();
         url
     }

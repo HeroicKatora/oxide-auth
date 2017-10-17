@@ -50,14 +50,15 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
         let mut auth_ref = locked.deref().borrow_mut();
         let mut granter = IronGrantRef{0: auth_ref.deref_mut()};
 
-        let negotiated = match granter.negotiate(urldecoded) {
-           Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
-           Ok(v) => v
+        let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
+            Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
+            Ok(v) => v
         };
 
         let redirect_to = granter.authorize(
-           req.owner_id().unwrap().into(),
-           negotiated);
+            req.owner_id().unwrap().into(),
+            negotiated,
+            urldecoded.state.clone());
 
        // TODO: this might be a panic case, handle this better
         let real_url = iron::Url::from_generic_url(redirect_to).unwrap();

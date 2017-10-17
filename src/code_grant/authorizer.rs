@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc, Duration};
 use url::Url;
 use std::collections::HashMap;
 
-use super::{NegotiationParams, Negotiated, Authorizer, Request, Grant};
+use super::{NegotiationParameter, Negotiated, Authorizer, Request, Grant};
 
 struct Data {
     default_scope: String,
@@ -38,7 +38,7 @@ impl Storage {
 }
 
 impl Authorizer for Storage {
-    fn negotiate<'a>(&self, params: NegotiationParams<'a>) -> Result<Negotiated<'a>, String> {
+    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Negotiated<'a>, String> {
         let client = match self.clients.get(params.client_id.as_ref()) {
             None => return Err("Unregistered client".to_string()),
             Some(stored) => stored
@@ -52,8 +52,7 @@ impl Authorizer for Storage {
         Ok(Negotiated {
             client_id: params.client_id.clone(),
             redirect_url: client.redirect_url.clone(),
-            scope: client.default_scope.clone().into(),
-            state: params.state.clone()
+            scope: client.default_scope.clone().into()
         })
     }
 
