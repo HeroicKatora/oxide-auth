@@ -7,6 +7,8 @@ mod main {
     extern crate reqwest;
     use self::oauth2_server::iron::IronGranter;
     use self::oauth2_server::code_grant::authorizer::Storage;
+    use self::oauth2_server::code_grant::QueryMap;
+    use std::collections::HashMap;
 
     pub fn exec() {
         let ohandler = IronGranter::new({
@@ -17,22 +19,35 @@ mod main {
 
         let mut router = router::Router::new();
         router.get("/authorize", ohandler.authorize(), "authorize");
-        router.any("/my_endpoint", client, "client");
+        router.any("/my_endpoint", dummy_client, "client");
         router.post("/token", ohandler.token(), "token");
 
         iron::Iron::new(router).http("localhost:8020").unwrap();
+    }
 
-        fn client(_req: &mut iron::Request) -> iron::IronResult<iron::Response> {
-            use std::io::Read;
-            let client = reqwest::Client::new();
-            let mut token_req = match client.post("http://localhost:8020/token").send() {
-                Err(_) => return Ok(iron::Response::with((iron::status::InternalServerError, "Error retrieving token from server"))),
-                Ok(v) => v
-            };
-            let mut token = String::new();
-            token_req.read_to_string(&mut token).unwrap();
-            Ok(iron::Response::with((iron::status::Ok, token)))
-        }
+    fn dummy_client(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
+        use std::io::Read;
+        let code = match req.url.as_ref().query_pairs().collect::<QueryMap>().get("code") {
+            None => return Ok(iron::Response::with((iron::status::BadRequest, "Missing code"))),
+            Some(v) => v.clone()
+        };
+
+        let client = reqwest::Client::new();
+        let mut params = HashMap::new();
+        params.insert("grant_type", "authorization_code");
+        params.insert("client_id", "myself");
+        params.insert("code", &code);
+        params.insert("redirect_url", "http://localhost:8020/my_endpoint");
+        let constructed_req = client
+            .post("http://localhost:8020/token")
+            .form(&params).build().unwrap();
+        let mut token_req = match client.execute(constructed_req) {
+            Err(_) => return Ok(iron::Response::with((iron::status::InternalServerError, "Error retrieving token from server"))),
+            Ok(v) => v
+        };
+        let mut token = String::new();
+        token_req.read_to_string(&mut token).unwrap();
+        Ok(iron::Response::with((iron::status::Ok, format!("Received {}", token))))
     }
 }
 

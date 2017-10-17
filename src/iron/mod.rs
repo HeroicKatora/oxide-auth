@@ -7,7 +7,7 @@ use std::ops::DerefMut;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
 use self::iron::Request as IRequest;
-use self::urlencoded::UrlEncodedQuery;
+use self::urlencoded::UrlEncodedBody;
 
 pub struct IronGranter<A: Authorizer + Send + 'static> {
     authorizer: Arc<Mutex<A>>
@@ -77,7 +77,7 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
 
 impl<A: Authorizer + Send + 'static> iron::Handler for IronTokenRequest<A> {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        let query = match req.get_ref::<UrlEncodedQuery>() {
+        let query = match req.get_ref::<UrlEncodedBody>() {
             Ok(v) => v,
             _ => return Ok(Response::with((iron::status::BadRequest, "Body not url encoded"))),
         };
