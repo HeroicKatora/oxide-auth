@@ -63,9 +63,7 @@ pub trait WebRequest {
 
 pub type QueryMap<'a> = HashMap<Cow<'a, str>, Cow<'a, str>>;
 
-pub fn decode_query<'u>(query: &'u Url) -> Result<ClientParameter<'u>, String> {
-    let kvpairs = query.query_pairs()
-        .collect::<QueryMap<'u>>();
+pub fn decode_query<'u>(kvpairs: QueryMap<'u>) -> Result<ClientParameter<'u>, String> {
 
     match kvpairs.get("response_type").map(|s| *s == "code") {
         None => return Err("Response type needs to be set".to_string()),

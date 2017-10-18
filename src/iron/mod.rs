@@ -2,12 +2,14 @@ extern crate iron;
 extern crate urlencoded;
 
 use super::code_grant::*;
+use std::error::Error;
+use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::ops::DerefMut;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
-use self::iron::Request as IRequest;
-use self::urlencoded::UrlEncodedBody;
+use self::iron::{AroundMiddleware, Handler};
+use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery, QueryMap as UQueryMap};
 
 pub struct IronGranter<A, I> where
     A: Authorizer + Send + 'static,
@@ -18,7 +20,8 @@ pub struct IronGranter<A, I> where
 }
 
 pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
-    authorizer: Arc<Mutex<A>>
+    page_handler: Box<Handler>,
+    authorizer: Arc<Mutex<A>>,
 }
 
 pub struct IronTokenRequest<A, I> where
@@ -37,8 +40,8 @@ impl<A, I> IronGranter<A, I> where
         IronGranter { authorizer: Arc::new(Mutex::new(data)), issuer: Arc::new(Mutex::new(issuer)) }
     }
 
-    pub fn authorize(&self) -> IronAuthorizer<A> {
-        IronAuthorizer { authorizer: self.authorizer.clone() }
+    pub fn authorize(&self, page_handler: Box<Handler>) -> IronAuthorizer<A> {
+        IronAuthorizer { authorizer: self.authorizer.clone(), page_handler: page_handler }
     }
 
     pub fn token(&self) -> IronTokenRequest<A, I> {
@@ -46,17 +49,64 @@ impl<A, I> IronGranter<A, I> where
     }
 }
 
-impl<'a, 'b> WebRequest for IRequest<'a, 'b> {
-    fn authenticated_owner(&self) -> Option<String> {
-        return Some("test".to_string());
+pub struct AuthenticationRequest {
+    pub client_id: String,
+    pub scope: String,
+}
+
+impl iron::typemap::Key for AuthenticationRequest { type Value = AuthenticationRequest; }
+
+pub enum Authentication {
+    Failed,
+    InProgress,
+    Authenticated(String),
+}
+
+impl iron::typemap::Key for Authentication { type Value = Authentication; }
+
+#[derive(Debug)]
+pub struct ExpectAuthenticationHandler;
+
+impl fmt::Display for ExpectAuthenticationHandler {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Expected an authentication handler to handle this response")
     }
+}
+
+impl Error for ExpectAuthenticationHandler {
+    fn description(&self) -> &str {
+        "Expected an authentication handler to handle this response"
+    }
+}
+
+impl self::iron::modifier::Modifier<Response> for ExpectAuthenticationHandler {
+    fn modify(self, response: &mut Response) {
+        response.status = Some(iron::status::InternalServerError);
+        response.body = Some(Box::new("Unhandled authentication response"));
+    }
+}
+
+fn try_convert_urlparamters(params: UQueryMap) -> Result<ClientParameter<'static>, String> {
+    let query = params.iter().filter_map(|(k, v)| {
+            if v.len() == 1 {
+                Some((k.clone().into(), v[0].clone().into()))
+            } else {
+                None
+            }
+        }).collect::<QueryMap<'static>>();
+    decode_query(query)
 }
 
 impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        let urldecoded = match decode_query(req.url.as_ref()) {
+        let urlparameters = match req.extensions.get::<UrlEncodedQuery>() {
+            Some(res) => res.clone(),
+            _ => return Ok(Response::with((iron::status::BadRequest, "Missing valid url encoded parameters"))),
+        };
+
+        let urldecoded = match try_convert_urlparamters(urlparameters) {
+            Ok(url) => url,
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
-            Ok(res) => res
         };
 
         let mut locked = self.authorizer.lock().unwrap();
@@ -67,13 +117,24 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
             Ok(v) => v
         };
 
-        let owner = match req.authenticated_owner() {
-            None => return Ok(Response::with((iron::status::Ok, "Please authenticate"))),
-            Some(v) => v
+        req.extensions.insert::<AuthenticationRequest>(
+            AuthenticationRequest{
+                client_id: negotiated.client_id.to_string(),
+                scope: negotiated.client_id.to_string()});
+
+        let inner_result = self.page_handler.handle(req);
+
+        let owner = match req.extensions.get::<Authentication>() {
+            None => return Ok(Response::with((iron::status::InternalServerError, "Authenication failed"))),
+            Some(reference) => match reference {
+                &Authentication::Failed => return Ok(Response::with((iron::status::BadRequest, "Authenication failed"))),
+                &Authentication::InProgress => return inner_result,
+                &Authentication::Authenticated(ref v) => v
+            }
         };
 
         let redirect_to = granter.authorize(
-            owner.into(),
+            owner.clone().into(),
             negotiated,
             urldecoded.state.clone());
 

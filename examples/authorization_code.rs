@@ -5,7 +5,8 @@ mod main {
     extern crate router;
     extern crate url;
     extern crate reqwest;
-    use self::oauth2_server::iron::IronGranter;
+    use self::iron::prelude::*;
+    use self::oauth2_server::iron::{IronGranter, AuthenticationRequest, Authentication, ExpectAuthenticationHandler};
     use self::oauth2_server::code_grant::authorizer::Storage;
     use self::oauth2_server::code_grant::issuer::TokenMap;
     use self::oauth2_server::code_grant::generator::RandomGenerator;
@@ -20,11 +21,33 @@ mod main {
         }, TokenMap::new(RandomGenerator::new(32)));
 
         let mut router = router::Router::new();
-        router.get("/authorize", ohandler.authorize(), "authorize");
+        router.get("/authorize", ohandler.authorize(Box::new(owner_handler)), "authorize");
         router.any("/my_endpoint", dummy_client, "client");
         router.post("/token", ohandler.token(), "token");
 
         iron::Iron::new(router).http("localhost:8020").unwrap();
+
+        fn owner_handler(req: &mut Request) -> IronResult<Response> {
+            match req.method {
+                iron::method::Method::Get => {
+                    let (client_id, scope) = match req.extensions.get::<AuthenticationRequest>() {
+                        None => return Ok(Response::with((iron::status::InternalServerError, "Expected to be invoked as oauth authentication"))),
+                        Some(req) => (req.client_id.clone(), req.scope.clone()),
+                    };
+
+                    req.extensions.insert::<Authentication>(Authentication::InProgress);
+                    let text = format!("{} is requesting permission for {}", client_id, scope);
+                    Ok(Response::with((iron::status::Ok, text)))
+                },
+                iron::method::Method::Post => {
+                    req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
+                    Err(IronError::new(ExpectAuthenticationHandler, ExpectAuthenticationHandler))
+                },
+                _ => {
+                    return Ok(Response::with((iron::status::BadRequest, "Only accessible via get and post")))
+                }
+            }
+        }
     }
 
     fn dummy_client(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
