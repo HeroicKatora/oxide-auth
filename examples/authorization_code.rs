@@ -14,7 +14,7 @@ mod main {
 
     pub fn exec() {
         let ohandler = IronGranter::new({
-            let mut storage = Storage::new();
+            let mut storage = Storage::new(RandomGenerator::new(16));
             storage.register_client("myself", url::Url::parse("http://localhost:8020/my_endpoint").unwrap());
             storage
         }, TokenMap::new(RandomGenerator::new(32)));
@@ -49,7 +49,7 @@ mod main {
         };
         let mut token = String::new();
         token_req.read_to_string(&mut token).unwrap();
-        Ok(iron::Response::with((iron::status::Ok, format!("Received {}", token))))
+        Ok(iron::Response::with((iron::status::Ok, format!("Received token: {}", token))))
     }
 }
 

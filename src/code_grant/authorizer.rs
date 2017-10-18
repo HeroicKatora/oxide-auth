@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use chrono::{Duration, Utc};
 
-use super::{NegotiationParameter, Negotiated, Authorizer, Request, Grant, Time, Url};
+use super::{Authorizer, NegotiationParameter, Negotiated, Request, Grant, Time, TokenGenerator, Url};
 
 struct Data {
     default_scope: String,
@@ -16,26 +16,35 @@ struct SpecificGrant {
     until: Time,
 }
 
-pub struct Storage {
+impl<'a> Into<Grant<'a>> for &'a SpecificGrant {
+    fn into(self) -> Grant<'a> {
+        Grant {
+            owner_id: &self.owner_id,
+            client_id: &self.client_id,
+            scope: &self.scope,
+            redirect_url: &self.redirect_url,
+            until: &self.until,
+        }
+    }
+}
+
+pub struct Storage<I: TokenGenerator> {
+    issuer: I,
     clients: HashMap<String, Data>,
     tokens: HashMap<String, SpecificGrant>
 }
 
-impl Storage {
-    pub fn new() -> Storage {
-        Storage {clients: HashMap::new(), tokens: HashMap::new()}
+impl<I: TokenGenerator> Storage<I> {
+    pub fn new(issuer: I) -> Storage<I> {
+        Storage {issuer: issuer, clients: HashMap::new(), tokens: HashMap::new()}
     }
 
     pub fn register_client(&mut self, client_id: &str, redirect_url: Url) {
         self.clients.insert(client_id.to_string(), Data{default_scope: "default".to_string(), redirect_url: redirect_url});
     }
-
-    fn new_grant(&self, req: &Request) -> String {
-        req.client_id.to_string()
-    }
 }
 
-impl Authorizer for Storage {
+impl<I: TokenGenerator> Authorizer for Storage<I> {
     fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Negotiated<'a>, String> {
         let client = match self.clients.get(params.client_id.as_ref()) {
             None => return Err("Unregistered client".to_string()),
@@ -55,25 +64,18 @@ impl Authorizer for Storage {
     }
 
     fn authorize(&mut self, req: Request) -> String {
-        let token = self.new_grant(&req);
-        self.tokens.insert(token.clone(),
-            SpecificGrant{
+        let grant = SpecificGrant{
                 owner_id: req.owner_id.to_string(),
                 client_id: req.client_id.to_string(),
                 scope: req.scope.to_string(),
                 redirect_url: req.redirect_url.clone(),
-                until: Utc::now() + Duration::minutes(10)
-            });
+                until: Utc::now() + Duration::minutes(10)};
+        let token = self.issuer.generate((&grant).into());
+        self.tokens.insert(token.clone(), grant);
         token
     }
 
     fn recover_parameters<'a>(&'a self, grant: &'a str) -> Option<Grant<'a>> {
-        self.tokens.get(grant).map(|grant| Grant {
-            owner_id: &grant.owner_id,
-            client_id: &grant.client_id,
-            redirect_url: &grant.redirect_url,
-            scope: &grant.scope,
-            until: &grant.until
-        })
+        self.tokens.get(grant).map(|v| v.into())
     }
 }
