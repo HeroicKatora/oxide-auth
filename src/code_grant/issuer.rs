@@ -31,6 +31,16 @@ pub struct TokenMap<G: TokenGenerator> {
     refresh: HashMap<String, Rc<SpecificGrant>>,
 }
 
+impl<G: TokenGenerator> TokenMap<G> {
+    pub fn new(generator: G) -> Self {
+        Self {
+            generator: generator,
+            access: HashMap::new(),
+            refresh: HashMap::new(),
+        }
+    }
+}
+
 impl<G: TokenGenerator> Issuer for TokenMap<G> {
     fn issue(&mut self, req: Request) -> (String, String) {
         let grant = SpecificGrant {

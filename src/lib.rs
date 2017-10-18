@@ -1,5 +1,6 @@
 extern crate chrono;
 extern crate url;
+extern crate rand;
 
 pub mod code_grant;
 #[cfg(feature = "iron-backend")]

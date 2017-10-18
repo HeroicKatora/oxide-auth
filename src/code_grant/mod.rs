@@ -150,4 +150,5 @@ impl<'u> IssuerRef<'u> {
 }
 
 pub mod authorizer;
+pub mod generator;
 pub mod issuer;
