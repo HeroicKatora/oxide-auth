@@ -1,9 +1,7 @@
-use chrono::{DateTime, Utc, Duration};
-
-use url::Url;
 use std::collections::HashMap;
+use chrono::{Duration, Utc};
 
-use super::{NegotiationParameter, Negotiated, Authorizer, Request, Grant};
+use super::{NegotiationParameter, Negotiated, Authorizer, Request, Grant, Time, Url};
 
 struct Data {
     default_scope: String,
@@ -15,7 +13,7 @@ struct SpecificGrant {
     client_id: String,
     scope: String,
     redirect_url: Url,
-    until: DateTime<Utc>
+    until: Time,
 }
 
 pub struct Storage {

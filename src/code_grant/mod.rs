@@ -5,6 +5,8 @@ use url::Url;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+type Time = DateTime<Utc>;
+
 pub struct ClientParameter<'a> {
     pub client_id: Cow<'a, str>,
     pub scope: Option<Cow<'a, str>>,
@@ -36,7 +38,7 @@ pub struct Grant<'a> {
     pub client_id: &'a str,
     pub redirect_url: &'a Url,
     pub scope: &'a str,
-    pub until: &'a DateTime<Utc>
+    pub until: &'a Time,
 }
 
 pub trait Authorizer {
@@ -46,8 +48,13 @@ pub trait Authorizer {
 }
 
 pub trait Issuer {
-    fn issue(&mut self, Request) -> String;
-    fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+    fn issue(&mut self, Request) -> (String, String);
+    fn recover_token<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+    fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+}
+
+pub trait TokenGenerator {
+    fn generate(&self, Grant) -> String;
 }
 
 pub trait WebRequest {
@@ -128,7 +135,13 @@ impl<'u> IssuerRef<'u> {
             return Err("Invalid code".into())
         }
 
-        Ok("accesstoken".into())
+        let (token, refresh) = self.issuer.issue(Request{
+            client_id: saved_params.client_id,
+            owner_id: saved_params.owner_id,
+            redirect_url: saved_params.redirect_url,
+            scope: saved_params.scope,
+        });
+        Ok(token.into())
     }
 
     pub fn with<'a>(t: &'a mut Authorizer, i: &'a mut Issuer) -> IssuerRef<'a> {
@@ -137,3 +150,4 @@ impl<'u> IssuerRef<'u> {
 }
 
 pub mod authorizer;
+pub mod issuer;
