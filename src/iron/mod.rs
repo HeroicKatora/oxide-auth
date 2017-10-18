@@ -99,8 +99,8 @@ fn try_convert_urlparamters(params: UQueryMap) -> Result<ClientParameter<'static
 
 impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        let urlparameters = match req.extensions.get::<UrlEncodedQuery>() {
-            Some(res) => res.clone(),
+        let urlparameters = match req.get::<UrlEncodedQuery>() {
+            Ok(res) => res,
             _ => return Ok(Response::with((iron::status::BadRequest, "Missing valid url encoded parameters"))),
         };
 
@@ -120,7 +120,7 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
         req.extensions.insert::<AuthenticationRequest>(
             AuthenticationRequest{
                 client_id: negotiated.client_id.to_string(),
-                scope: negotiated.client_id.to_string()});
+                scope: negotiated.scope.to_string()});
 
         let inner_result = self.page_handler.handle(req);
 
