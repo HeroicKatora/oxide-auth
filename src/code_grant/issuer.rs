@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::ops::Deref;
 use std::clone::Clone;
 use chrono::{Utc, Duration};
 use super::{Issuer, Grant, Request, Time, TokenGenerator, Url};
 
+#[derive(Clone)]
 struct SpecificGrant {
     owner_id: String,
     client_id: String,
@@ -27,8 +26,8 @@ impl<'a> Into<Grant<'a>> for &'a SpecificGrant {
 
 pub struct TokenMap<G: TokenGenerator> {
     generator: G,
-    access: HashMap<String, Rc<SpecificGrant>>,
-    refresh: HashMap<String, Rc<SpecificGrant>>,
+    access: HashMap<String, SpecificGrant>,
+    refresh: HashMap<String, SpecificGrant>,
 }
 
 impl<G: TokenGenerator> TokenMap<G> {
@@ -52,17 +51,16 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
         };
         let token: String = self.generator.generate((&grant).into());
         let refresh: String = self.generator.generate((&grant).into());
-        let rcgrant: Rc<SpecificGrant> = grant.into();
-        self.access.insert(token.clone(), rcgrant.clone());
-        self.refresh.insert(refresh.clone(), rcgrant);
+        self.access.insert(token.clone(), grant.clone());
+        self.refresh.insert(refresh.clone(), grant);
         (token, refresh)
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
-        self.access.get(token).map(|v| v.deref().into())
+        self.access.get(token).map(|v| v.into())
     }
 
     fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
-        self.refresh.get(token).map(|v| v.deref().into())
+        self.refresh.get(token).map(|v| v.into())
     }
 }

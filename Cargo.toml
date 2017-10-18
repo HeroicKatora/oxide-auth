@@ -5,6 +5,8 @@ authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 
 [dependencies]
 chrono = "0.4"
+rand = "0.3"
+base64 = "~0.6.0"
 url = "*"
 iron = { version = "*", optional = true }
 urlencoded = { version = "*", optional = true }

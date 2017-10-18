@@ -7,6 +7,8 @@ mod main {
     extern crate reqwest;
     use self::oauth2_server::iron::IronGranter;
     use self::oauth2_server::code_grant::authorizer::Storage;
+    use self::oauth2_server::code_grant::issuer::TokenMap;
+    use self::oauth2_server::code_grant::generator::RandomGenerator;
     use self::oauth2_server::code_grant::QueryMap;
     use std::collections::HashMap;
 
@@ -15,7 +17,7 @@ mod main {
             let mut storage = Storage::new();
             storage.register_client("myself", url::Url::parse("http://localhost:8020/my_endpoint").unwrap());
             storage
-        });
+        }, TokenMap::new(RandomGenerator::new(32)));
 
         let mut router = router::Router::new();
         router.get("/authorize", ohandler.authorize(), "authorize");

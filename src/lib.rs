@@ -1,3 +1,4 @@
+extern crate base64;
 extern crate chrono;
 extern crate url;
 extern crate rand;
