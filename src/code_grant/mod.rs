@@ -113,7 +113,7 @@ impl<'u> CodeRef<'u> {
 
 pub struct IssuerRef<'a> {
     authorizer: &'a mut Authorizer,
-    // issuer: &'a mut Issuer,
+    issuer: &'a mut Issuer,
 }
 
 impl<'u> IssuerRef<'u> {
@@ -131,8 +131,8 @@ impl<'u> IssuerRef<'u> {
         Ok("accesstoken".into())
     }
 
-    pub fn with<'a>(t: &'a mut Authorizer) -> IssuerRef<'a> {
-        IssuerRef { authorizer: t }
+    pub fn with<'a>(t: &'a mut Authorizer, i: &'a mut Issuer) -> IssuerRef<'a> {
+        IssuerRef { authorizer: t, issuer: i }
     }
 }
 

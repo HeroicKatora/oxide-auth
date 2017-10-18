@@ -9,29 +9,40 @@ use self::iron::modifiers::Redirect;
 use self::iron::Request as IRequest;
 use self::urlencoded::UrlEncodedBody;
 
-pub struct IronGranter<A: Authorizer + Send + 'static> {
-    authorizer: Arc<Mutex<A>>
+pub struct IronGranter<A, I> where
+    A: Authorizer + Send + 'static,
+    I: Issuer + Send + 'static
+{
+    authorizer: Arc<Mutex<A>>,
+    issuer: Arc<Mutex<I>>,
 }
 
 pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
     authorizer: Arc<Mutex<A>>
 }
 
-pub struct IronTokenRequest<A: Authorizer + Send + 'static> {
-    authorizer: Arc<Mutex<A>>
+pub struct IronTokenRequest<A, I> where
+    A: Authorizer + Send + 'static,
+    I: Issuer + Send + 'static
+{
+    authorizer: Arc<Mutex<A>>,
+    issuer: Arc<Mutex<I>>,
 }
 
-impl<A: Authorizer + Send + 'static> IronGranter<A> {
-    pub fn new(data: A) -> IronGranter<A> {
-        IronGranter { authorizer: Arc::new(Mutex::new(data)) }
+impl<A, I> IronGranter<A, I> where
+    A: Authorizer + Send + 'static,
+    I: Issuer + Send + 'static
+{
+    pub fn new(data: A, issuer: I) -> IronGranter<A, I> {
+        IronGranter { authorizer: Arc::new(Mutex::new(data)), issuer: Arc::new(Mutex::new(issuer)) }
     }
 
     pub fn authorize(&self) -> IronAuthorizer<A> {
         IronAuthorizer { authorizer: self.authorizer.clone() }
     }
 
-    pub fn token(&self) -> IronTokenRequest<A> {
-        IronTokenRequest { authorizer: self.authorizer.clone() }
+    pub fn token(&self) -> IronTokenRequest<A, I> {
+        IronTokenRequest { authorizer: self.authorizer.clone(), issuer: self.issuer.clone() }
     }
 }
 
@@ -75,7 +86,10 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
 }
 
 
-impl<A: Authorizer + Send + 'static> iron::Handler for IronTokenRequest<A> {
+impl<A, I> iron::Handler for IronTokenRequest<A, I> where
+    A: Authorizer + Send + 'static,
+    I: Issuer + Send + 'static
+{
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         let query = match req.get_ref::<UrlEncodedBody>() {
             Ok(v) => v,
@@ -102,7 +116,8 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronTokenRequest<A> {
         };
 
         let mut authlocked = self.authorizer.lock().unwrap();
-        let mut issuer = IssuerRef::with(authlocked.deref_mut());
+        let mut issuelocked = self.issuer.lock().unwrap();
+        let mut issuer = IssuerRef::with(authlocked.deref_mut(), issuelocked.deref_mut());
 
         let token = match issuer.use_code(code, client.into(), redirect_url.into()) {
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st.as_ref()))),
