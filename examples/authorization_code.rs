@@ -21,28 +21,35 @@ mod main {
         }, TokenMap::new(RandomGenerator::new(32)));
 
         let mut router = router::Router::new();
-        router.get("/authorize", ohandler.authorize(Box::new(owner_handler)), "authorize");
+        router.any("/authorize", ohandler.authorize(Box::new(owner_handler)), "authorize");
         router.any("/my_endpoint", dummy_client, "client");
         router.post("/token", ohandler.token(), "token");
 
         iron::Iron::new(router).http("localhost:8020").unwrap();
 
+        fn handle_get(req: &mut Request) -> IronResult<Response> {
+            let (client_id, scope) = match req.extensions.get::<AuthenticationRequest>() {
+                None => return Ok(Response::with((iron::status::InternalServerError, "Expected to be invoked as oauth authentication"))),
+                Some(req) => (req.client_id.clone(), req.scope.clone()),
+            };
+
+            req.extensions.insert::<Authentication>(Authentication::InProgress);
+            let text = format!("<html>{} is requesting permission for {}
+                <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
+                    <input type=\"submit\" value=\"Accept\">
+                </form></html>", client_id, scope, client_id);
+            Ok(Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text)))
+        }
+
+        fn handle_post(req: &mut Request) -> IronResult<Response> {
+            req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
+            Err(IronError::new(ExpectAuthenticationHandler, ExpectAuthenticationHandler))
+        }
+
         fn owner_handler(req: &mut Request) -> IronResult<Response> {
             match req.method {
-                iron::method::Method::Get => {
-                    let (client_id, scope) = match req.extensions.get::<AuthenticationRequest>() {
-                        None => return Ok(Response::with((iron::status::InternalServerError, "Expected to be invoked as oauth authentication"))),
-                        Some(req) => (req.client_id.clone(), req.scope.clone()),
-                    };
-
-                    req.extensions.insert::<Authentication>(Authentication::InProgress);
-                    let text = format!("{} is requesting permission for {}", client_id, scope);
-                    Ok(Response::with((iron::status::Ok, text)))
-                },
-                iron::method::Method::Post => {
-                    req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
-                    Err(IronError::new(ExpectAuthenticationHandler, ExpectAuthenticationHandler))
-                },
+                iron::method::Method::Get => handle_get(req),
+                iron::method::Method::Post => handle_post(req),
                 _ => {
                     return Ok(Response::with((iron::status::BadRequest, "Only accessible via get and post")))
                 }
