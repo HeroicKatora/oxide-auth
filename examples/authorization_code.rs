@@ -18,20 +18,13 @@ mod main {
         ohandler.authorizer().unwrap().register_client("myself", url::Url::parse("http://localhost:8021/endpoint").unwrap());
 
         let mut router = router::Router::new();
-        router.any("/authorize", ohandler.authorize(Box::new(owner_handler)), "authorize");
+        router.get("/authorize", ohandler.authorize(Box::new(handle_get)), "authorize");
+        router.post("/authorize", ohandler.authorize(Box::new(handle_post)), "authorize");
         router.post("/token", ohandler.token(), "token");
 
         let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
         let client = thread::spawn(|| iron::Iron::new(dummy_client).http("localhost:8021").unwrap());
-
-        let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself";
-        use std::io::{Error, ErrorKind};
-        use std::process::Command;
-        let can_open = if cfg!(target_os = "linux") { Ok("x-www-browser") } else { Err(Error::new(ErrorKind::Other, "Open not supported")) };
-        can_open.and_then(|cmd| Command::new(cmd).arg(target_addres).status())
-            .and_then(|status| { if status.success() { Ok(()) } else { Err(Error::new(ErrorKind::Other, "Non zero status")) } })
-            .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
-
+        open_in_browser();
         join.join().expect("Failed to run");
         client.join().expect("Failed to run client");
 
@@ -42,10 +35,12 @@ mod main {
             };
 
             req.extensions.insert::<Authentication>(Authentication::InProgress);
-            let text = format!("<html>{} is requesting permission for {}
+            let text = format!(
+                "<html>{} is requesting permission for {}
                 <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
                     <input type=\"submit\" value=\"Accept\">
-                </form></html>", client_id, scope, client_id);
+                </form>
+                </html>", client_id, scope, client_id);
             Ok(Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text)))
         }
 
@@ -53,16 +48,16 @@ mod main {
             req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
             Err(IronError::new(ExpectAuthenticationHandler, ExpectAuthenticationHandler))
         }
+    }
 
-        fn owner_handler(req: &mut Request) -> IronResult<Response> {
-            match req.method {
-                iron::method::Method::Get => handle_get(req),
-                iron::method::Method::Post => handle_post(req),
-                _ => {
-                    return Ok(Response::with((iron::status::BadRequest, "Only accessible via get and post")))
-                }
-            }
-        }
+    fn open_in_browser() {
+        let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself";
+        use std::io::{Error, ErrorKind};
+        use std::process::Command;
+        let can_open = if cfg!(target_os = "linux") { Ok("x-www-browser") } else { Err(Error::new(ErrorKind::Other, "Open not supported")) };
+        can_open.and_then(|cmd| Command::new(cmd).arg(target_addres).status())
+            .and_then(|status| { if status.success() { Ok(()) } else { Err(Error::new(ErrorKind::Other, "Non zero status")) } })
+            .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
     }
 
     fn dummy_client(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
