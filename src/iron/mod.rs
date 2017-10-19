@@ -4,7 +4,7 @@ extern crate urlencoded;
 use super::code_grant::*;
 use std::error::Error;
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 use std::ops::DerefMut;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
@@ -46,6 +46,10 @@ impl<A, I> IronGranter<A, I> where
 
     pub fn token(&self) -> IronTokenRequest<A, I> {
         IronTokenRequest { authorizer: self.authorizer.clone(), issuer: self.issuer.clone() }
+    }
+
+    pub fn authorizer(&self) -> LockResult<MutexGuard<A>> {
+        self.authorizer.lock()
     }
 }
 

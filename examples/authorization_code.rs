@@ -12,20 +12,30 @@ mod main {
     use self::oauth2_server::code_grant::generator::RandomGenerator;
     use self::oauth2_server::code_grant::QueryMap;
     use std::collections::HashMap;
+    use std::thread;
 
     pub fn exec() {
-        let ohandler = IronGranter::new({
-            let mut storage = Storage::new(RandomGenerator::new(16));
-            storage.register_client("myself", url::Url::parse("http://localhost:8020/my_endpoint").unwrap());
-            storage
-        }, TokenMap::new(RandomGenerator::new(32)));
+        let ohandler = IronGranter::new(
+            Storage::new(RandomGenerator::new(16)),
+            TokenMap::new(RandomGenerator::new(32)));
+        ohandler.authorizer().unwrap().register_client("myself", url::Url::parse("http://localhost:8020/my_endpoint").unwrap());
 
         let mut router = router::Router::new();
         router.any("/authorize", ohandler.authorize(Box::new(owner_handler)), "authorize");
         router.any("/my_endpoint", dummy_client, "client");
         router.post("/token", ohandler.token(), "token");
 
-        iron::Iron::new(router).http("localhost:8020").unwrap();
+        let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
+
+        let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself";
+        use std::io::{Error, ErrorKind};
+        use std::process::Command;
+        let can_open = if cfg!(target_os = "linux") { Ok("x-www-browser") } else { Err(Error::new(ErrorKind::Other, "Open not supported")) };
+        can_open.and_then(|cmd| Command::new(cmd).arg(target_addres).status())
+            .and_then(|status| { if status.success() { Ok(()) } else { Err(Error::new(ErrorKind::Other, "Non zero status")) } })
+            .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
+
+        join.join().expect("Failed to run");
 
         fn handle_get(req: &mut Request) -> IronResult<Response> {
             let (client_id, scope) = match req.extensions.get::<AuthenticationRequest>() {
