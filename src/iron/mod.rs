@@ -32,6 +32,44 @@ pub struct IronTokenRequest<A, I> where
     issuer: Arc<Mutex<I>>,
 }
 
+pub struct AuthenticationRequest {
+    pub client_id: String,
+    pub scope: String,
+}
+
+impl iron::typemap::Key for AuthenticationRequest { type Value = AuthenticationRequest; }
+
+pub enum Authentication {
+    Failed,
+    InProgress,
+    Authenticated(String),
+}
+
+impl iron::typemap::Key for Authentication { type Value = Authentication; }
+
+pub trait OwnerAuthorizer: Send + Sync + 'static {
+    fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), String>;
+}
+
+impl Into<Box<Handler>> for Box<OwnerAuthorizer> {
+    fn into(self: Self) -> Box<Handler> {
+        Box::new(move |req: &mut iron::Request| {
+            let (client, scope) = match req.extensions.get::<AuthenticationRequest>() {
+                None => return Ok(Response::with((iron::status::InternalServerError, "Expected to be invoked as oauth authentication"))),
+                Some(req) => (req.client_id.clone(), req.scope.clone()),
+            };
+
+            let (auth, resp) = match self.get_owner_authorization(req, AuthenticationRequest{client_id: client, scope: scope}) {
+                Err(text) => return Ok(Response::with((iron::status::InternalServerError, text))),
+                Ok(auth) => auth,
+            };
+
+            req.extensions.insert::<Authentication>(auth);
+            Ok(resp)
+        })
+    }
+}
+
 impl<A, I> IronGranter<A, I> where
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
@@ -52,21 +90,6 @@ impl<A, I> IronGranter<A, I> where
         self.authorizer.lock()
     }
 }
-
-pub struct AuthenticationRequest {
-    pub client_id: String,
-    pub scope: String,
-}
-
-impl iron::typemap::Key for AuthenticationRequest { type Value = AuthenticationRequest; }
-
-pub enum Authentication {
-    Failed,
-    InProgress,
-    Authenticated(String),
-}
-
-impl iron::typemap::Key for Authentication { type Value = Authentication; }
 
 #[derive(Debug)]
 pub struct ExpectAuthenticationHandler;
