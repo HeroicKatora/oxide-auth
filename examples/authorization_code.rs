@@ -15,14 +15,14 @@ mod main {
         let ohandler = IronGranter::new(
             Storage::new(RandomGenerator::new(16)),
             TokenMap::new(RandomGenerator::new(32)));
-        ohandler.authorizer().unwrap().register_client("myself", url::Url::parse("http://localhost:8020/my_endpoint").unwrap());
+        ohandler.authorizer().unwrap().register_client("myself", url::Url::parse("http://localhost:8021/endpoint").unwrap());
 
         let mut router = router::Router::new();
         router.any("/authorize", ohandler.authorize(Box::new(owner_handler)), "authorize");
-        router.any("/my_endpoint", dummy_client, "client");
         router.post("/token", ohandler.token(), "token");
 
         let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
+        let client = thread::spawn(|| iron::Iron::new(dummy_client).http("localhost:8021").unwrap());
 
         let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself";
         use std::io::{Error, ErrorKind};
@@ -33,6 +33,7 @@ mod main {
             .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
 
         join.join().expect("Failed to run");
+        client.join().expect("Failed to run client");
 
         fn handle_get(req: &mut Request) -> IronResult<Response> {
             let (client_id, scope) = match req.extensions.get::<AuthenticationRequest>() {
@@ -76,7 +77,7 @@ mod main {
         params.insert("grant_type", "authorization_code");
         params.insert("client_id", "myself");
         params.insert("code", &code);
-        params.insert("redirect_url", "http://localhost:8020/my_endpoint");
+        params.insert("redirect_url", "http://localhost:8021/endpoint");
         let constructed_req = client
             .post("http://localhost:8020/token")
             .form(&params).build().unwrap();
