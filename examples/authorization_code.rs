@@ -7,10 +7,7 @@ mod main {
     extern crate reqwest;
     use self::iron::prelude::*;
     use self::oauth2_server::iron::{IronGranter, AuthenticationRequest, Authentication, ExpectAuthenticationHandler};
-    use self::oauth2_server::code_grant::authorizer::Storage;
-    use self::oauth2_server::code_grant::issuer::TokenMap;
-    use self::oauth2_server::code_grant::generator::RandomGenerator;
-    use self::oauth2_server::code_grant::QueryMap;
+    use self::oauth2_server::code_grant::prelude::*;
     use std::collections::HashMap;
     use std::thread;
 

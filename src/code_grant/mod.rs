@@ -150,3 +150,11 @@ impl<'u> IssuerRef<'u> {
 pub mod authorizer;
 pub mod generator;
 pub mod issuer;
+
+pub use self::authorizer::Storage;
+pub use self::issuer::TokenMap;
+pub use self::generator::RandomGenerator;
+
+pub mod prelude {
+    pub use super::{Storage, TokenMap, RandomGenerator, QueryMap};
+}
