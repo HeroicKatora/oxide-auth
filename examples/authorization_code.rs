@@ -6,7 +6,7 @@ mod main {
     extern crate url;
     extern crate reqwest;
     use self::iron::prelude::*;
-    use self::oauth2_server::iron::{IronGranter, AuthenticationRequest, Authentication, ExpectAuthenticationHandler};
+    use self::oauth2_server::iron::{IronGranter, AuthenticationRequest, Authentication, ExpectAuthenticationHandler, OwnerAuthorizer};
     use self::oauth2_server::code_grant::prelude::*;
     use std::collections::HashMap;
     use std::thread;
@@ -18,8 +18,8 @@ mod main {
         ohandler.authorizer().unwrap().register_client("myself", url::Url::parse("http://localhost:8021/endpoint").unwrap());
 
         let mut router = router::Router::new();
-        router.get("/authorize", ohandler.authorize(Box::new(handle_get)), "authorize");
-        router.post("/authorize", ohandler.authorize(Box::new(handle_post)), "authorize");
+        router.get("/authorize", ohandler.authorize(Box::new(handle_get) as Box<OwnerAuthorizer>), "authorize");
+        router.post("/authorize", ohandler.authorize(handle_post), "authorize");
         router.post("/token", ohandler.token(), "token");
 
         let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
@@ -28,20 +28,17 @@ mod main {
         join.join().expect("Failed to run");
         client.join().expect("Failed to run client");
 
-        fn handle_get(req: &mut Request) -> IronResult<Response> {
-            let (client_id, scope) = match req.extensions.get::<AuthenticationRequest>() {
-                None => return Ok(Response::with((iron::status::InternalServerError, "Expected to be invoked as oauth authentication"))),
-                Some(req) => (req.client_id.clone(), req.scope.clone()),
-            };
-
-            req.extensions.insert::<Authentication>(Authentication::InProgress);
+        fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication,Response), String> {
+            let (client_id, scope) = (auth.client_id, auth.scope);
+            let ret = Authentication::InProgress;
             let text = format!(
                 "<html>{} is requesting permission for {}
                 <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
                     <input type=\"submit\" value=\"Accept\">
                 </form>
                 </html>", client_id, scope, client_id);
-            Ok(Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text)))
+            let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
+            Ok((ret, response))
         }
 
         fn handle_post(req: &mut Request) -> IronResult<Response> {

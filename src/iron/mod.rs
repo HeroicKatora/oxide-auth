@@ -51,22 +51,34 @@ pub trait OwnerAuthorizer: Send + Sync + 'static {
     fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), String>;
 }
 
-impl Into<Box<Handler>> for Box<OwnerAuthorizer> {
-    fn into(self: Self) -> Box<Handler> {
-        Box::new(move |req: &mut iron::Request| {
-            let (client, scope) = match req.extensions.get::<AuthenticationRequest>() {
-                None => return Ok(Response::with((iron::status::InternalServerError, "Expected to be invoked as oauth authentication"))),
-                Some(req) => (req.client_id.clone(), req.scope.clone()),
-            };
+impl iron::Handler for OwnerAuthorizer {
+    fn handle(&self, req: &mut iron::Request) -> IronResult<Response> {
+        let (client, scope) = match req.extensions.get::<AuthenticationRequest>() {
+            None => return Ok(Response::with((iron::status::InternalServerError, "Expected to be invoked as oauth authentication"))),
+            Some(req) => (req.client_id.clone(), req.scope.clone()),
+        };
 
-            let (auth, resp) = match self.get_owner_authorization(req, AuthenticationRequest{client_id: client, scope: scope}) {
-                Err(text) => return Ok(Response::with((iron::status::InternalServerError, text))),
-                Ok(auth) => auth,
-            };
+        let (auth, resp) = match self.get_owner_authorization(req, AuthenticationRequest{client_id: client, scope: scope}) {
+            Err(text) => return Ok(Response::with((iron::status::InternalServerError, text))),
+            Ok(auth) => auth,
+        };
 
-            req.extensions.insert::<Authentication>(auth);
-            Ok(resp)
-        })
+        req.extensions.insert::<Authentication>(auth);
+        Ok(resp)
+    }
+}
+
+impl iron::Handler for Box<OwnerAuthorizer> {
+    fn handle(&self, req: &mut iron::Request) -> IronResult<Response> {
+        self.as_ref().handle(req)
+    }
+}
+
+impl<F> OwnerAuthorizer for F
+where F: Fn(&mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), String> + Send + Sync + 'static {
+    fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
+    -> Result<(Authentication, Response), String> {
+        self(req, auth)
     }
 }
 
@@ -78,8 +90,8 @@ impl<A, I> IronGranter<A, I> where
         IronGranter { authorizer: Arc::new(Mutex::new(data)), issuer: Arc::new(Mutex::new(issuer)) }
     }
 
-    pub fn authorize(&self, page_handler: Box<Handler>) -> IronAuthorizer<A> {
-        IronAuthorizer { authorizer: self.authorizer.clone(), page_handler: page_handler }
+    pub fn authorize<H: Handler>(&self, page_handler: H) -> IronAuthorizer<A> {
+        IronAuthorizer { authorizer: self.authorizer.clone(), page_handler: Box::new(page_handler) }
     }
 
     pub fn token(&self) -> IronTokenRequest<A, I> {
