@@ -218,3 +218,8 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
         Ok(Response::with((iron::status::Ok, token.as_ref())))
     }
 }
+
+pub mod prelude {
+    pub use code_grant::prelude::*;
+    pub use super::{IronGranter, AuthenticationRequest, Authentication};
+}

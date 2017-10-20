@@ -7,8 +7,7 @@ mod main {
     extern crate reqwest;
     extern crate urlencoded;
     use self::iron::prelude::*;
-    use self::oauth2_server::iron::{IronGranter, AuthenticationRequest, Authentication, ExpectAuthenticationHandler};
-    use self::oauth2_server::code_grant::prelude::*;
+    use self::oauth2_server::iron::prelude::*;
     use self::urlencoded::UrlEncodedQuery;
     use std::collections::HashMap;
     use std::thread;
