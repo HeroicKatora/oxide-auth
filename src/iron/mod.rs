@@ -157,7 +157,7 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
         let owner = match self.page_handler.get_owner_authorization(req, auth) {
             Err(resp) => return Err(resp),
             Ok((reference, response)) => match reference {
-                Authentication::Failed => return Ok(Response::with((iron::status::BadRequest, "Authenication failed"))),
+                Authentication::Failed => return Ok(Response::with((iron::status::BadRequest, "Authentication failed"))),
                 Authentication::InProgress => return Ok(response),
                 Authentication::Authenticated(v) => v
             }

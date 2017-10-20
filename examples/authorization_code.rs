@@ -5,9 +5,11 @@ mod main {
     extern crate router;
     extern crate url;
     extern crate reqwest;
+    extern crate urlencoded;
     use self::iron::prelude::*;
     use self::oauth2_server::iron::{IronGranter, AuthenticationRequest, Authentication, ExpectAuthenticationHandler};
     use self::oauth2_server::code_grant::prelude::*;
+    use self::urlencoded::UrlEncodedQuery;
     use std::collections::HashMap;
     use std::thread;
 
@@ -36,14 +38,21 @@ mod main {
                 <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
                     <input type=\"submit\" value=\"Accept\">
                 </form>
-                </html>", client_id, scope, client_id);
+                <form action=\"authorize?response_type=code&client_id={}&deny=1\" method=\"post\">
+                    <input type=\"submit\" value=\"Deny\">
+                </form>
+                </html>", client_id, scope, client_id, client_id);
             let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
             Ok((ret, response))
         }
 
         fn handle_post(req: &mut Request) -> IronResult<Response> {
-            req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
-            Err(IronError::new(ExpectAuthenticationHandler, ExpectAuthenticationHandler))
+            if req.get::<UrlEncodedQuery>().unwrap_or(HashMap::new()).contains_key("deny") {
+                req.extensions.insert::<Authentication>(Authentication::Failed);
+            } else {
+                req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
+            }
+            Ok(Response::with(iron::status::Ok))
         }
     }
 
