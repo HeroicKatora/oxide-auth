@@ -123,26 +123,23 @@ impl self::iron::modifier::Modifier<Response> for ExpectAuthenticationHandler {
 }
 
 fn try_convert_urlparamters(params: UQueryMap) -> Result<ClientParameter<'static>, String> {
-    let query = params.iter().filter_map(|(k, v)| {
-            if v.len() == 1 {
-                Some((k.clone().into(), v[0].clone().into()))
-            } else {
-                None
-            }
-        }).collect::<QueryMap<'static>>();
+    let query = params.iter()
+        .filter(|&(_, v)| v.len() == 1)
+        .map(|(k, v)| (k.clone().into(), v[0].clone().into()))
+        .collect::<QueryMap<'static>>();
     decode_query(query)
 }
 
 impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         let urlparameters = match req.get::<UrlEncodedQuery>() {
+            Err(_) => return Ok(Response::with((iron::status::BadRequest, "Missing valid url encoded parameters"))),
             Ok(res) => res,
-            _ => return Ok(Response::with((iron::status::BadRequest, "Missing valid url encoded parameters"))),
         };
 
         let urldecoded = match try_convert_urlparamters(urlparameters) {
-            Ok(url) => url,
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
+            Ok(url) => url,
         };
 
         let mut locked = self.authorizer.lock().unwrap();
@@ -169,8 +166,8 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
             urldecoded.state.clone());
 
         let real_url = match iron::Url::from_generic_url(redirect_to) {
+            Err(_) => return Ok(Response::with((iron::status::InternalServerError, "Error parsing redirect target"))),
             Ok(v) => v,
-            _ => return Ok(Response::with((iron::status::InternalServerError, "Error parsing redirect target"))),
         };
         Ok(Response::with((iron::status::Found, Redirect(real_url))))
     }
@@ -183,8 +180,8 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
 {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         let query = match req.get_ref::<UrlEncodedBody>() {
+            Err(_) => return Ok(Response::with((iron::status::BadRequest, "Body not url encoded"))),
             Ok(v) => v,
-            _ => return Ok(Response::with((iron::status::BadRequest, "Body not url encoded"))),
         };
         let (grant_typev, clientv, codev, redirect_urlv) = match (
             query.get("grant_type"),

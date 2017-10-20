@@ -125,8 +125,8 @@ impl<'u> IssuerRef<'u> {
     pub fn use_code<'a>(&'a mut self, code: String, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
     -> Result<Cow<'a, str>, Cow<'static, str>> {
         let saved_params = match self.authorizer.recover_parameters(code.as_ref()) {
+            None => return Err("Inactive code".into()),
             Some(v) => v,
-            _ => return Err("Inactive code".into())
         };
 
         if saved_params.client_id != expected_client || expected_url != saved_params.redirect_url.as_str() {

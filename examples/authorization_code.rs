@@ -29,9 +29,11 @@ mod main {
         join.join().expect("Failed to run");
         client.join().expect("Failed to run client");
 
+        /// A simple implementation of the first part of an authentication handler. This will
+        /// display a page to the user asking for his permission to proceed. The submitted form
+        /// will then trigger the other authorization handler which actually completes the flow.
         fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication,Response), iron::IronError> {
             let (client_id, scope) = (auth.client_id, auth.scope);
-            let ret = Authentication::InProgress;
             let text = format!(
                 "<html>{} is requesting permission for {}
                 <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
@@ -42,10 +44,13 @@ mod main {
                 </form>
                 </html>", client_id, scope, client_id, client_id);
             let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
-            Ok((ret, response))
+            Ok((Authentication::InProgress, response))
         }
 
+        /// This shows the second style of authentication handler, a iron::Handler compatible form.
+        /// Allows composition with other libraries or frameworks.
         fn handle_post(req: &mut Request) -> IronResult<Response> {
+            // No real user authentication is done here, in production you could use session keys
             if req.get::<UrlEncodedQuery>().unwrap_or(HashMap::new()).contains_key("deny") {
                 req.extensions.insert::<Authentication>(Authentication::Failed);
             } else {
@@ -59,12 +64,18 @@ mod main {
         let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself";
         use std::io::{Error, ErrorKind};
         use std::process::Command;
-        let can_open = if cfg!(target_os = "linux") { Ok("x-www-browser") } else { Err(Error::new(ErrorKind::Other, "Open not supported")) };
+        let can_open = match cfg!(target_os = "linux") {
+            Ok("x-www-browser")
+        } else {
+            Err(Error::new(ErrorKind::Other, "Open not supported"))
+        };
         can_open.and_then(|cmd| Command::new(cmd).arg(target_addres).status())
-            .and_then(|status| { if status.success() { Ok(()) } else { Err(Error::new(ErrorKind::Other, "Non zero status")) } })
+            .and_then(|status| if status.success() { Ok(()) } else { Err(Error::new(ErrorKind::Other, "Non zero status")) })
             .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
     }
 
+    /// Rough client function mirroring core functionality of an oauth client. This is not actually
+    /// needed in your implementation but merely exists to provide an interactive example.
     fn dummy_client(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
         use std::io::Read;
         let code = match req.url.as_ref().query_pairs().collect::<QueryMap>().get("code") {
