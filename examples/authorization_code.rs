@@ -6,7 +6,7 @@ mod main {
     extern crate url;
     extern crate reqwest;
     use self::iron::prelude::*;
-    use self::oauth2_server::iron::{IronGranter, AuthenticationRequest, Authentication, ExpectAuthenticationHandler, OwnerAuthorizer};
+    use self::oauth2_server::iron::{IronGranter, AuthenticationRequest, Authentication, ExpectAuthenticationHandler};
     use self::oauth2_server::code_grant::prelude::*;
     use std::collections::HashMap;
     use std::thread;
@@ -18,8 +18,8 @@ mod main {
         ohandler.authorizer().unwrap().register_client("myself", url::Url::parse("http://localhost:8021/endpoint").unwrap());
 
         let mut router = router::Router::new();
-        router.get("/authorize", ohandler.authorize(Box::new(handle_get) as Box<OwnerAuthorizer>), "authorize");
-        router.post("/authorize", ohandler.authorize(handle_post), "authorize");
+        router.get("/authorize", ohandler.authorize(handle_get), "authorize");
+        router.post("/authorize", ohandler.authorize(Box::new(handle_post) as Box<iron::Handler>), "authorize");
         router.post("/token", ohandler.token(), "token");
 
         let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
@@ -28,7 +28,7 @@ mod main {
         join.join().expect("Failed to run");
         client.join().expect("Failed to run client");
 
-        fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication,Response), String> {
+        fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication,Response), iron::IronError> {
             let (client_id, scope) = (auth.client_id, auth.scope);
             let ret = Authentication::InProgress;
             let text = format!(

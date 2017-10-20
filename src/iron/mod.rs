@@ -20,7 +20,7 @@ pub struct IronGranter<A, I> where
 }
 
 pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
-    page_handler: Box<Handler>,
+    page_handler: Box<OwnerAuthorizer>,
     authorizer: Arc<Mutex<A>>,
 }
 
@@ -39,6 +39,7 @@ pub struct AuthenticationRequest {
 
 impl iron::typemap::Key for AuthenticationRequest { type Value = AuthenticationRequest; }
 
+#[derive(Clone)]
 pub enum Authentication {
     Failed,
     InProgress,
@@ -48,37 +49,33 @@ pub enum Authentication {
 impl iron::typemap::Key for Authentication { type Value = Authentication; }
 
 pub trait OwnerAuthorizer: Send + Sync + 'static {
-    fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), String>;
+    fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), IronError>;
 }
 
-impl iron::Handler for OwnerAuthorizer {
-    fn handle(&self, req: &mut iron::Request) -> IronResult<Response> {
-        let (client, scope) = match req.extensions.get::<AuthenticationRequest>() {
-            None => return Ok(Response::with((iron::status::InternalServerError, "Expected to be invoked as oauth authentication"))),
-            Some(req) => (req.client_id.clone(), req.scope.clone()),
+impl OwnerAuthorizer for iron::Handler {
+    fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
+    -> Result<(Authentication, Response), IronError> {
+        req.extensions.insert::<AuthenticationRequest>(auth);
+        let response = self.handle(req)?;
+        match req.extensions.get::<Authentication>() {
+            None => return Ok((Authentication::Failed, Response::with((iron::status::InternalServerError, "No authentication response")))),
+            Some(v) => return Ok((v.clone(), response)),
         };
-
-        let (auth, resp) = match self.get_owner_authorization(req, AuthenticationRequest{client_id: client, scope: scope}) {
-            Err(text) => return Ok(Response::with((iron::status::InternalServerError, text))),
-            Ok(auth) => auth,
-        };
-
-        req.extensions.insert::<Authentication>(auth);
-        Ok(resp)
-    }
-}
-
-impl iron::Handler for Box<OwnerAuthorizer> {
-    fn handle(&self, req: &mut iron::Request) -> IronResult<Response> {
-        self.as_ref().handle(req)
     }
 }
 
 impl<F> OwnerAuthorizer for F
-where F: Fn(&mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), String> + Send + Sync + 'static {
+where F: Fn(&mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), IronError> + Send + Sync + 'static {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
-    -> Result<(Authentication, Response), String> {
+    -> Result<(Authentication, Response), IronError> {
         self(req, auth)
+    }
+}
+
+impl OwnerAuthorizer for Box<iron::Handler> {
+    fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
+    -> Result<(Authentication, Response), IronError> {
+        self.as_ref().get_owner_authorization(req, auth)
     }
 }
 
@@ -90,7 +87,7 @@ impl<A, I> IronGranter<A, I> where
         IronGranter { authorizer: Arc::new(Mutex::new(data)), issuer: Arc::new(Mutex::new(issuer)) }
     }
 
-    pub fn authorize<H: Handler>(&self, page_handler: H) -> IronAuthorizer<A> {
+    pub fn authorize<H: OwnerAuthorizer>(&self, page_handler: H) -> IronAuthorizer<A> {
         IronAuthorizer { authorizer: self.authorizer.clone(), page_handler: Box::new(page_handler) }
     }
 
@@ -156,19 +153,13 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
             Ok(v) => v
         };
 
-        req.extensions.insert::<AuthenticationRequest>(
-            AuthenticationRequest{
-                client_id: negotiated.client_id.to_string(),
-                scope: negotiated.scope.to_string()});
-
-        let inner_result = self.page_handler.handle(req);
-
-        let owner = match req.extensions.get::<Authentication>() {
-            None => return Ok(Response::with((iron::status::InternalServerError, "Authenication failed"))),
-            Some(reference) => match reference {
-                &Authentication::Failed => return Ok(Response::with((iron::status::BadRequest, "Authenication failed"))),
-                &Authentication::InProgress => return inner_result,
-                &Authentication::Authenticated(ref v) => v
+        let auth = AuthenticationRequest{ client_id: negotiated.client_id.to_string(), scope: negotiated.scope.to_string() };
+        let owner = match self.page_handler.get_owner_authorization(req, auth) {
+            Err(resp) => return Err(resp),
+            Ok((reference, response)) => match reference {
+                Authentication::Failed => return Ok(Response::with((iron::status::BadRequest, "Authenication failed"))),
+                Authentication::InProgress => return Ok(response),
+                Authentication::Authenticated(v) => v
             }
         };
 
