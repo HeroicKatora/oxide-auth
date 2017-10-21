@@ -153,11 +153,11 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
         let auth = AuthenticationRequest{ client_id: negotiated.client_id.to_string(), scope: negotiated.scope.to_string() };
         let owner = match self.page_handler.get_owner_authorization(req, auth) {
             Err(resp) => return Err(resp),
-            Ok((reference, response)) => match reference {
-                Authentication::Failed => return Ok(Response::with((iron::status::BadRequest, "Authentication failed"))),
-                Authentication::InProgress => return Ok(response),
-                Authentication::Authenticated(v) => v
-            }
+            Ok((Authentication::Failed, _))
+                => return Ok(Response::with((iron::status::BadRequest, "Authentication failed"))),
+            Ok((Authentication::InProgress, response))
+                => return Ok(response),
+            Ok((Authentication::Authenticated(v), _)) => v,
         };
 
         let redirect_to = granter.authorize(
@@ -183,33 +183,34 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
             Err(_) => return Ok(Response::with((iron::status::BadRequest, "Body not url encoded"))),
             Ok(v) => v,
         };
-        let (grant_typev, clientv, codev, redirect_urlv) = match (
-            query.get("grant_type"),
-            query.get("client_id"),
-            query.get("code"),
-            query.get("redirect_url")) {
-            (Some(grant), Some(client), Some(code), Some(redirect))
-                => (grant, client, code, redirect),
-            _ => return Ok(Response::with((iron::status::BadRequest, "Missing parameter")))
-        };
-        let lengths = (
-            grant_typev.len(),
-            clientv.len(),
-            codev.len(),
-            redirect_urlv.len());
-        let (client, code, redirect_url) = match lengths {
-            (1, 1, 1, 1) if grant_typev[0] == "authorization_code"
-                => (clientv[0].as_str(), codev[0].to_string(), redirect_urlv[0].as_str()),
-            _ => return Ok(Response::with((iron::status::BadRequest, "Invalid parameters")))
+
+        fn single_result<'l>(list: &'l Vec<String>) -> Result<&'l str, &str>{
+            if list.len() == 1 { Ok(&list[0]) } else { Err("Invalid parameter") }
+        }
+        let get_param = |name: &str| query.get(name).ok_or("Missing parameter").and_then(single_result);
+
+        let grant_typev = get_param("grant_type").and_then(
+            |grant| if grant == "authorization_code" { Ok(grant) } else { Err("Invalid grant type") });
+        let client_idv = get_param("client_id");
+        let codev = get_param("code");
+        let redirect_urlv = get_param("redirect_urlv");
+
+        let (client, code, redirect_url) = match (grant_typev, client_idv, codev, redirect_urlv) {
+            (Err(cause), _, _, _) => return Ok(Response::with((iron::status::BadRequest, cause))),
+            (_, Err(cause), _, _) => return Ok(Response::with((iron::status::BadRequest, cause))),
+            (_, _, Err(cause), _) => return Ok(Response::with((iron::status::BadRequest, cause))),
+            (_, _, _, Err(cause)) => return Ok(Response::with((iron::status::BadRequest, cause))),
+            (Ok(_), Ok(client), Ok(code), Ok(redirect))
+                => (client, code, redirect)
         };
 
         let mut authlocked = self.authorizer.lock().unwrap();
         let mut issuelocked = self.issuer.lock().unwrap();
         let mut issuer = IssuerRef::with(authlocked.deref_mut(), issuelocked.deref_mut());
 
-        let token = match issuer.use_code(code, client.into(), redirect_url.into()) {
+        let token = match issuer.use_code(code.to_string(), client.into(), redirect_url.into()) {
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st.as_ref()))),
-            Ok(token) => token
+            Ok(token) => token,
         };
 
         Ok(Response::with((iron::status::Ok, token.as_ref())))
