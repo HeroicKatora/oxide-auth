@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 use std::ops::DerefMut;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
-use self::iron::{AroundMiddleware, Handler};
 use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery, QueryMap as UQueryMap};
 
 /// Groups together all partial systems used in the code_grant process.
@@ -153,7 +152,7 @@ impl self::iron::modifier::Modifier<Response> for ExpectAuthenticationHandler {
     }
 }
 
-fn try_convert_urlparamters(params: UQueryMap) -> Result<ClientParameter<'static>, String> {
+fn extract_parameters(params: UQueryMap) -> Result<ClientParameter<'static>, String> {
     let query = params.iter()
         .filter(|&(_, v)| v.len() == 1)
         .map(|(k, v)| (k.clone().into(), v[0].clone().into()))
@@ -168,7 +167,7 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
             Ok(res) => res,
         };
 
-        let urldecoded = match try_convert_urlparamters(urlparameters) {
+        let urldecoded = match extract_parameters(urlparameters) {
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
             Ok(url) => url,
         };
@@ -182,13 +181,12 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
         };
 
         let auth = AuthenticationRequest{ client_id: negotiated.client_id.to_string(), scope: negotiated.scope.to_string() };
-        let owner = match self.page_handler.get_owner_authorization(req, auth) {
-            Err(resp) => return Err(resp),
-            Ok((Authentication::Failed, _))
+        let owner = match self.page_handler.get_owner_authorization(req, auth)? {
+            (Authentication::Failed, _)
                 => return Ok(Response::with((iron::status::BadRequest, "Authentication failed"))),
-            Ok((Authentication::InProgress, response))
+            (Authentication::InProgress, response)
                 => return Ok(response),
-            Ok((Authentication::Authenticated(v), _)) => v,
+            (Authentication::Authenticated(v), _) => v,
         };
 
         let redirect_to = granter.authorize(
