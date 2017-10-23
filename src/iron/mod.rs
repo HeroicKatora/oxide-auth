@@ -208,27 +208,28 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
     I: Issuer + Send + 'static
 {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
+        use std::borrow::Cow;
         let query = match req.get_ref::<UrlEncodedBody>() {
             Err(_) => return Ok(Response::with((iron::status::BadRequest, "Body not url encoded"))),
             Ok(v) => v,
         };
 
-        fn single_result<'l>(list: &'l Vec<String>) -> Result<&'l str, &str>{
-            if list.len() == 1 { Ok(&list[0]) } else { Err("Invalid parameter") }
+        fn single_result<'l>(list: &'l Vec<String>) -> Result<&'l str, Cow<'static, str>>{
+            if list.len() == 1 { Ok(&list[0]) } else { Err("Invalid parameter".into()) }
         }
-        let get_param = |name: &str| query.get(name).ok_or("Missing parameter").and_then(single_result);
+        let get_param = |name: &str| query.get(name).ok_or(Cow::Owned("Missing parameter".to_owned() + name)).and_then(single_result);
 
         let grant_typev = get_param("grant_type").and_then(
-            |grant| if grant == "authorization_code" { Ok(grant) } else { Err("Invalid grant type") });
+            |grant| if grant == "authorization_code" { Ok(grant) } else { Err(Cow::Owned("Invalid grant type".to_owned() + grant)) });
         let client_idv = get_param("client_id");
         let codev = get_param("code");
-        let redirect_urlv = get_param("redirect_urlv");
+        let redirect_urlv = get_param("redirect_url");
 
         let (client, code, redirect_url) = match (grant_typev, client_idv, codev, redirect_urlv) {
-            (Err(cause), _, _, _) => return Ok(Response::with((iron::status::BadRequest, cause))),
-            (_, Err(cause), _, _) => return Ok(Response::with((iron::status::BadRequest, cause))),
-            (_, _, Err(cause), _) => return Ok(Response::with((iron::status::BadRequest, cause))),
-            (_, _, _, Err(cause)) => return Ok(Response::with((iron::status::BadRequest, cause))),
+            (Err(cause), _, _, _) => return Ok(Response::with((iron::status::BadRequest, cause.as_ref()))),
+            (_, Err(cause), _, _) => return Ok(Response::with((iron::status::BadRequest, cause.as_ref()))),
+            (_, _, Err(cause), _) => return Ok(Response::with((iron::status::BadRequest, cause.as_ref()))),
+            (_, _, _, Err(cause)) => return Ok(Response::with((iron::status::BadRequest, cause.as_ref()))),
             (Ok(_), Ok(client), Ok(code), Ok(redirect))
                 => (client, code, redirect)
         };
