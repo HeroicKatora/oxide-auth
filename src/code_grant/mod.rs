@@ -41,6 +41,13 @@ pub struct Grant<'a> {
     pub until: &'a Time,
 }
 
+#[derive(Clone, Debug)]
+pub struct IssuedToken {
+    pub token: String,
+    pub refresh: String,
+    pub until: Time,
+}
+
 pub trait Authorizer {
     fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Negotiated<'a>, String>;
     fn authorize(&mut self, Request) -> String;
@@ -48,7 +55,7 @@ pub trait Authorizer {
 }
 
 pub trait Issuer {
-    fn issue(&mut self, Request) -> (String, String);
+    fn issue(&mut self, Request) -> IssuedToken;
     fn recover_token<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
     fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
@@ -123,7 +130,7 @@ pub struct IssuerRef<'a> {
 
 impl<'u> IssuerRef<'u> {
     pub fn use_code<'a>(&'a mut self, code: String, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
-    -> Result<Cow<'a, str>, Cow<'static, str>> {
+    -> Result<IssuedToken, Cow<'static, str>> {
         let saved_params = match self.authorizer.recover_parameters(code.as_ref()) {
             None => return Err("Inactive code".into()),
             Some(v) => v,
@@ -133,13 +140,13 @@ impl<'u> IssuerRef<'u> {
             return Err("Invalid code".into())
         }
 
-        let (token, refresh) = self.issuer.issue(Request{
+        let token = self.issuer.issue(Request{
             client_id: saved_params.client_id,
             owner_id: saved_params.owner_id,
             redirect_url: saved_params.redirect_url,
             scope: saved_params.scope,
         });
-        Ok(token.into())
+        Ok(token)
     }
 
     pub fn with<'a>(t: &'a mut Authorizer, i: &'a mut Issuer) -> IssuerRef<'a> {

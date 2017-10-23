@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::clone::Clone;
 use chrono::{Utc, Duration};
-use super::{Issuer, Grant, Request, Time, TokenGenerator, Url};
+use super::{Issuer, Grant, Request, Time, TokenGenerator, Url, IssuedToken};
 
 #[derive(Clone)]
 struct SpecificGrant {
@@ -41,7 +41,7 @@ impl<G: TokenGenerator> TokenMap<G> {
 }
 
 impl<G: TokenGenerator> Issuer for TokenMap<G> {
-    fn issue(&mut self, req: Request) -> (String, String) {
+    fn issue(&mut self, req: Request) -> IssuedToken {
         let grant = SpecificGrant {
             owner_id: req.owner_id.to_string(),
             client_id: req.client_id.to_string(),
@@ -51,9 +51,10 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
         };
         let token: String = self.generator.generate((&grant).into());
         let refresh: String = self.generator.generate((&grant).into());
+        let until = grant.until.clone();
         self.access.insert(token.clone(), grant.clone());
         self.refresh.insert(refresh.clone(), grant);
-        (token, refresh)
+        IssuedToken { token, refresh, until }
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
