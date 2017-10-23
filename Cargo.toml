@@ -8,6 +8,7 @@ chrono = "0.4"
 rand = "0.3"
 base64 = "~0.6.0"
 url = "*"
+ring = "*"
 iron = { version = "*", optional = true }
 urlencoded = { version = "*", optional = true }
 

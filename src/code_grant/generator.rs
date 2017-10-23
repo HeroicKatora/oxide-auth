@@ -18,3 +18,7 @@ impl TokenGenerator for RandomGenerator {
         encode(&result)
     }
 }
+
+pub struct Assertion {
+    secret: [u8]
+}
