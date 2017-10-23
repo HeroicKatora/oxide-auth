@@ -141,6 +141,13 @@ impl<R, A, I> IronGranter<R, A, I> where
     pub fn registrar(&self) -> LockResult<MutexGuard<R>> {
         self.registrar.lock()
     }
+
+    pub fn authorizer(&self) -> LockResult<MutexGuard<A>> {
+        self.authorizer.lock()
+    }
+    pub fn issuer(&self) -> LockResult<MutexGuard<I>> {
+        self.issuer.lock()
+    }
 }
 
 #[derive(Debug)]

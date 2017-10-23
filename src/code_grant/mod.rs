@@ -48,15 +48,27 @@ pub struct IssuedToken {
     pub until: Time,
 }
 
+/// Registrars provie a way to interact with clients.
+///
+/// Most importantly, they determine defaulted parameters for a request as well as the validity
+/// of provided parameters. In general, implementations of this trait will probably offer an
+/// interface for registering new clients. This interface is not covered by this library.
 pub trait Registrar {
     fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Negotiated<'a>, String>;
 }
 
+/// Authorizers create and manage authorization codes.
+///
+/// The authorization code can be traded for a bearer token at the token endpoint.
 pub trait Authorizer {
     fn authorize(&mut self, Request) -> String;
     fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
 
+/// Issuers create bearer tokens..
+///
+/// It's the issuers decision whether a refresh token is offered or not. In any case, it is also
+/// responsible for determining the validity and parameters of any possible token string.
 pub trait Issuer {
     fn issue(&mut self, Request) -> IssuedToken;
     fn recover_token<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
@@ -142,6 +154,10 @@ impl<'u> IssuerRef<'u> {
 
         if saved_params.client_id != expected_client || expected_url != saved_params.redirect_url.as_str() {
             return Err("Invalid code".into())
+        }
+
+        if saved_params.until < &Utc::now() {
+            return Err("Code no longer valid".into())
         }
 
         let token = self.issuer.issue(Request{
