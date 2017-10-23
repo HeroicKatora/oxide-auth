@@ -14,9 +14,10 @@ mod main {
 
     pub fn exec() {
         let ohandler = IronGranter::new(
+            ClientMap::new(),
             Storage::new(RandomGenerator::new(16)),
             TokenMap::new(RandomGenerator::new(32)));
-        ohandler.authorizer().unwrap().register_client("myself", url::Url::parse("http://localhost:8021/endpoint").unwrap());
+        ohandler.registrar().unwrap().register_client("myself", url::Url::parse("http://localhost:8021/endpoint").unwrap());
 
         let mut router = router::Router::new();
         router.get("/authorize", ohandler.authorize(handle_get), "authorize");

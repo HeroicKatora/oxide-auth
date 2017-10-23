@@ -15,10 +15,12 @@ use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery, QueryMap as UQueryMap};
 /// Since iron makes heavy use of asynchronous processing, we ensure sync and mutability on the
 /// individual parts. In a later version this might change to only wrap for types where this is
 /// needed.
-pub struct IronGranter<A, I> where
+pub struct IronGranter<R, A, I> where
+    R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
 {
+    registrar: Arc<Mutex<R>>,
     authorizer: Arc<Mutex<A>>,
     issuer: Arc<Mutex<I>>,
 }
@@ -27,8 +29,12 @@ pub struct IronGranter<A, I> where
 ///
 /// Only holds handles to authorization relevant objects. An additional external handler is used
 /// to communicate with the owner authorization process.
-pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
+pub struct IronAuthorizer<R, A> where
+    R: Registrar + Send + 'static,
+    A: Authorizer + Send + 'static,
+{
     page_handler: Box<OwnerAuthorizer>,
+    registrar: Arc<Mutex<R>>,
     authorizer: Arc<Mutex<A>>,
 }
 
@@ -109,24 +115,31 @@ impl OwnerAuthorizer for Box<iron::Handler> {
     }
 }
 
-impl<A, I> IronGranter<A, I> where
+impl<R, A, I> IronGranter<R, A, I> where
+    R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
 {
-    pub fn new(data: A, issuer: I) -> IronGranter<A, I> {
-        IronGranter { authorizer: Arc::new(Mutex::new(data)), issuer: Arc::new(Mutex::new(issuer)) }
+    pub fn new(registrar: R, data: A, issuer: I) -> IronGranter<R, A, I> {
+        IronGranter {
+            registrar: Arc::new(Mutex::new(registrar)),
+            authorizer: Arc::new(Mutex::new(data)),
+            issuer: Arc::new(Mutex::new(issuer)) }
     }
 
-    pub fn authorize<H: OwnerAuthorizer>(&self, page_handler: H) -> IronAuthorizer<A> {
-        IronAuthorizer { authorizer: self.authorizer.clone(), page_handler: Box::new(page_handler) }
+    pub fn authorize<H: OwnerAuthorizer>(&self, page_handler: H) -> IronAuthorizer<R, A> {
+        IronAuthorizer {
+            authorizer: self.authorizer.clone(),
+            page_handler: Box::new(page_handler),
+            registrar: self.registrar.clone() }
     }
 
     pub fn token(&self) -> IronTokenRequest<A, I> {
         IronTokenRequest { authorizer: self.authorizer.clone(), issuer: self.issuer.clone() }
     }
 
-    pub fn authorizer(&self) -> LockResult<MutexGuard<A>> {
-        self.authorizer.lock()
+    pub fn registrar(&self) -> LockResult<MutexGuard<R>> {
+        self.registrar.lock()
     }
 }
 
@@ -160,7 +173,10 @@ fn extract_parameters(params: UQueryMap) -> Result<ClientParameter<'static>, Str
     decode_query(query)
 }
 
-impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
+impl<R, A> iron::Handler for IronAuthorizer<R, A> where
+    R: Registrar + Send + 'static,
+    A: Authorizer + Send + 'static
+{
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         let urlparameters = match req.get::<UrlEncodedQuery>() {
             Err(_) => return Ok(Response::with((iron::status::BadRequest, "Missing valid url encoded parameters"))),
@@ -172,8 +188,9 @@ impl<A: Authorizer + Send + 'static> iron::Handler for IronAuthorizer<A> {
             Ok(url) => url,
         };
 
+        let mut lockedreg = self.registrar.lock().unwrap();
         let mut locked = self.authorizer.lock().unwrap();
-        let mut granter = CodeRef::with(locked.deref_mut());
+        let mut granter = CodeRef::with(lockedreg.deref_mut(), locked.deref_mut());
 
         let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
             Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),

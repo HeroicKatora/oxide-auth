@@ -48,8 +48,11 @@ pub struct IssuedToken {
     pub until: Time,
 }
 
-pub trait Authorizer {
+pub trait Registrar {
     fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Negotiated<'a>, String>;
+}
+
+pub trait Authorizer {
     fn authorize(&mut self, Request) -> String;
     fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
@@ -95,13 +98,14 @@ pub fn decode_query<'u>(kvpairs: QueryMap<'u>) -> Result<ClientParameter<'u>, St
 }
 
 pub struct CodeRef<'a> {
+    registrar: &'a Registrar,
     authorizer: &'a mut Authorizer,
 }
 
 impl<'u> CodeRef<'u> {
     pub fn negotiate<'a>(&self, client_id: Cow<'a, str>, scope: Option<Cow<'a, str>>, redirect_url: Option<Cow<'a, Url>>)
     -> Result<Negotiated<'a>, String> {
-        self.authorizer.negotiate(NegotiationParameter{client_id, scope, redirect_url})
+        self.registrar.negotiate(NegotiationParameter{client_id, scope, redirect_url})
     }
 
     pub fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, state: Option<Cow<'a, str>>) -> Url {
@@ -118,8 +122,8 @@ impl<'u> CodeRef<'u> {
         url
     }
 
-    pub fn with<'a>(t: &'a mut Authorizer) -> CodeRef<'a> {
-        CodeRef { authorizer: t }
+    pub fn with<'a>(registrar: &'a Registrar, t: &'a mut Authorizer) -> CodeRef<'a> {
+        CodeRef { registrar, authorizer: t }
     }
 }
 
@@ -157,6 +161,7 @@ impl<'u> IssuerRef<'u> {
 pub mod authorizer;
 pub mod generator;
 pub mod issuer;
+pub mod negotiator;
 
 pub use self::authorizer::Storage;
 pub use self::issuer::TokenMap;
@@ -164,4 +169,5 @@ pub use self::generator::RandomGenerator;
 
 pub mod prelude {
     pub use super::{Storage, TokenMap, RandomGenerator, QueryMap};
+    pub use super::negotiator::ClientMap;
 }
