@@ -64,7 +64,7 @@ mod main {
         let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself";
         use std::io::{Error, ErrorKind};
         use std::process::Command;
-        let can_open = match cfg!(target_os = "linux") {
+        let can_open = if cfg!(target_os = "linux") {
             Ok("x-www-browser")
         } else {
             Err(Error::new(ErrorKind::Other, "Open not supported"))
