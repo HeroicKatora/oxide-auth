@@ -11,6 +11,11 @@ use self::iron::modifiers::Redirect;
 use self::iron::{AroundMiddleware, Handler};
 use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery, QueryMap as UQueryMap};
 
+/// Groups together all partial systems used in the code_grant process.
+///
+/// Since iron makes heavy use of asynchronous processing, we ensure sync and mutability on the
+/// individual parts. In a later version this might change to only wrap for types where this is
+/// needed.
 pub struct IronGranter<A, I> where
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
@@ -19,11 +24,19 @@ pub struct IronGranter<A, I> where
     issuer: Arc<Mutex<I>>,
 }
 
+/// Handles authorization requests from user-agents directed by clients.
+///
+/// Only holds handles to authorization relevant objects. An additional external handler is used
+/// to communicate with the owner authorization process.
 pub struct IronAuthorizer<A: Authorizer + Send + 'static> {
     page_handler: Box<OwnerAuthorizer>,
     authorizer: Arc<Mutex<A>>,
 }
 
+/// Handles token requests from clients.
+///
+/// WIP: Client authorization is currently not supported, making this extremely insecure. Basic
+/// auth with a registered secret should be used instead.
 pub struct IronTokenRequest<A, I> where
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
@@ -32,6 +45,7 @@ pub struct IronTokenRequest<A, I> where
     issuer: Arc<Mutex<I>>,
 }
 
+/// Sent to the OwnerAuthorizer to request owner permission.
 pub struct AuthenticationRequest {
     pub client_id: String,
     pub scope: String,
@@ -39,6 +53,7 @@ pub struct AuthenticationRequest {
 
 impl iron::typemap::Key for AuthenticationRequest { type Value = AuthenticationRequest; }
 
+/// Answer from OwnerAuthorizer to indicate the owners choice.
 #[derive(Clone)]
 pub enum Authentication {
     Failed,
@@ -48,10 +63,26 @@ pub enum Authentication {
 
 impl iron::typemap::Key for Authentication { type Value = Authentication; }
 
+/// Process authorization requests from an owner.
+///
+/// The authorizer can answer requests by indicating authorization progress and returning a result
+/// page to display. The page might not get displayed if the answer is already positive but will
+/// always be presented to the user-agent when the returning InProgress.
+/// Be aware that query parameters will need to be present in the final request as well, as
+/// extraction of query parameters can no currently be influenced.
 pub trait OwnerAuthorizer: Send + Sync + 'static {
     fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), IronError>;
 }
 
+/// Use an iron request as an owner authorizer.
+///
+/// The extension system on requests and responses is used to insert and extract the query and
+/// response which makes it possible to leverage irons' builtin wrapper system to build safer
+/// and more intuitive implementations (e.g. by reusing existing authorization handlers to
+/// enforce user login).
+/// ```rust
+/// // TODO: example needed for this seemingly more complex and common use case
+/// ```
 impl OwnerAuthorizer for iron::Handler {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
     -> Result<(Authentication, Response), IronError> {
@@ -217,6 +248,7 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
     }
 }
 
+/// Reexport most useful structs as well as the code_grant core library.
 pub mod prelude {
     pub use code_grant::prelude::*;
     pub use super::{IronGranter, AuthenticationRequest, Authentication};
