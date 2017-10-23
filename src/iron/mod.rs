@@ -242,7 +242,7 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
             Ok(token) => token,
         };
 
-        Ok(Response::with((iron::status::Ok, token.token)))
+        Ok(Response::with((iron::status::Ok, token.token + " with refresh " + &token.refresh + " valid until " + &token.until.to_rfc2822())))
     }
 }
 
