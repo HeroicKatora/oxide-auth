@@ -75,12 +75,11 @@ pub trait Issuer {
     fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
 
+/// Generic token for a specific grant.
+///
+/// The interface may be reused for authentication codes, bearer tokens and refresh tokens.
 pub trait TokenGenerator {
     fn generate(&self, Grant) -> String;
-}
-
-pub trait WebRequest {
-    fn authenticated_owner(&self) -> Option<String>;
 }
 
 pub type QueryMap<'a> = HashMap<Cow<'a, str>, Cow<'a, str>>;
