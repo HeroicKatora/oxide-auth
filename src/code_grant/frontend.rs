@@ -5,7 +5,8 @@
 //! Instead, traits are offered to make this compatible with other frontends. In theory, this makes
 //! the frontend pluggable which could improve testing.
 use std::collections::HashMap;
-use super::{decode_query, ClientParameter, CodeRef, QueryMap};
+use std::marker::PhantomData;
+use super::{decode_query, ClientParameter, CodeRef, IssuerRef, QueryMap};
 use url::Url;
 
 /// Sent to the OwnerAuthorizer to request owner permission.
@@ -25,10 +26,12 @@ pub enum Authentication {
 pub trait WebRequest {
     type Response: WebResponse;
     fn query(&self) -> Option<HashMap<String, Vec<String>>>;
+    fn urlbody(&self) -> Option<&HashMap<String, Vec<String>>>;
 }
 
 pub trait WebResponse where Self: Sized {
     fn redirect(url: Url) -> Result<Self, OAuthError>;
+    fn text(text: &str) -> Result<Self, OAuthError>;
 }
 
 pub trait OwnerAuthorizer {
@@ -37,7 +40,7 @@ pub trait OwnerAuthorizer {
 }
 
 pub struct AuthorizationFlow;
-pub struct AuthorizationRef<'l, Req> where
+pub struct PreparedAuthorization<'l, Req> where
     Req: WebRequest + 'l,
 {
     request: &'l mut Req,
@@ -53,7 +56,7 @@ fn extract_parameters(params: HashMap<String, Vec<String>>) -> Result<ClientPara
 }
 
 impl AuthorizationFlow {
-    pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<AuthorizationRef<W>, OAuthError> {
+    pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, OAuthError> {
         let urlparameters = match incoming.query() {
             None => return Err(OAuthError::MissingQuery),
             Some(res) => res,
@@ -64,14 +67,14 @@ impl AuthorizationFlow {
             Ok(url) => url,
         };
 
-        Ok(AuthorizationRef{request: incoming, urldecoded})
+        Ok(PreparedAuthorization{request: incoming, urldecoded})
     }
 
-    pub fn handle<'l, Req, Auth>(mut granter: CodeRef, prepared: AuthorizationRef<Req>, page_handler: &'l Auth) -> Result<<Req as WebRequest>::Response, OAuthError> where
+    pub fn handle<'l, Req, Auth>(mut granter: CodeRef, prepared: PreparedAuthorization<Req>, page_handler: &'l Auth) -> Result<<Req as WebRequest>::Response, OAuthError> where
         Req: WebRequest,
         Auth: OwnerAuthorizer<Request=Req> + 'l
     {
-        let AuthorizationRef { request: req, urldecoded } = prepared;
+        let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
             Err(st) => return Err(OAuthError::BadRequest(st)),
             Ok(v) => v
@@ -92,6 +95,61 @@ impl AuthorizationFlow {
             urldecoded.state.clone());
 
         Req::Response::redirect(redirect_to)
+    }
+}
+
+pub struct GrantFlow;
+pub struct PreparedGrant<'l, Req> where
+    Req: WebRequest + 'l,
+{
+    client: &'l str,
+    code: &'l str,
+    redirect_url: &'l str,
+    req: PhantomData<Req>,
+}
+
+impl GrantFlow {
+    pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedGrant<W>, OAuthError> {
+        use std::borrow::Cow;
+        let (client, code, redirect_url) = {
+            let query = match req.urlbody() {
+                None => return Err(OAuthError::BadRequest("Invalid url encoded body".to_string())),
+                Some(v) => v,
+            };
+
+            fn single_result<'l>(list: &'l Vec<String>) -> Result<&'l str, Cow<'static, str>>{
+                if list.len() == 1 { Ok(&list[0]) } else { Err("Invalid parameter".into()) }
+            }
+            let get_param = |name: &str| query.get(name).ok_or(Cow::Owned("Missing parameter".to_owned() + name)).and_then(single_result);
+
+            let grant_typev = get_param("grant_type").and_then(
+                |grant| if grant == "authorization_code" { Ok(grant) } else { Err(Cow::Owned("Invalid grant type".to_owned() + grant)) });
+            let client_idv = get_param("client_id");
+            let codev = get_param("code");
+            let redirect_urlv = get_param("redirect_url");
+
+            match (grant_typev, client_idv, codev, redirect_urlv) {
+                (Err(cause), _, _, _) => return Err(OAuthError::BadRequest(cause.into_owned())),
+                (_, Err(cause), _, _) => return Err(OAuthError::BadRequest(cause.into_owned())),
+                (_, _, Err(cause), _) => return Err(OAuthError::BadRequest(cause.into_owned())),
+                (_, _, _, Err(cause)) => return Err(OAuthError::BadRequest(cause.into_owned())),
+                (Ok(_), Ok(client), Ok(code), Ok(redirect))
+                    => (client, code, redirect)
+            }
+        };
+        Ok(PreparedGrant { client, code, redirect_url, req: PhantomData })
+    }
+
+    pub fn handle<Req>(mut issuer: IssuerRef, prepared: PreparedGrant<Req>) -> Result<<Req as WebRequest>::Response, OAuthError> where
+        Req: WebRequest
+    {
+        let PreparedGrant { code, client, redirect_url, .. } = prepared;
+        let token = match issuer.use_code(code.to_string(), client.into(), redirect_url.into()) {
+            Err(st) => return Err(OAuthError::BadRequest(st.into_owned())),
+            Ok(token) => token,
+        };
+
+        Req::Response::text(&(token.token + " with refresh " + &token.refresh + " valid until " + &token.until.to_rfc2822()))
     }
 }
 
