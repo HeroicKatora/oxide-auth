@@ -174,6 +174,7 @@ impl<'u> IssuerRef<'u> {
 }
 
 pub mod authorizer;
+pub mod frontend;
 pub mod generator;
 pub mod issuer;
 pub mod negotiator;
