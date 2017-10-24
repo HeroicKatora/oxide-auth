@@ -25,8 +25,8 @@ pub enum Authentication {
 
 pub trait WebRequest {
     type Response: WebResponse;
-    fn query(&self) -> Option<HashMap<String, Vec<String>>>;
-    fn urlbody(&self) -> Option<&HashMap<String, Vec<String>>>;
+    fn query(&mut self) -> Option<HashMap<String, Vec<String>>>;
+    fn urlbody(&mut self) -> Option<&HashMap<String, Vec<String>>>;
 }
 
 pub trait WebResponse where Self: Sized {

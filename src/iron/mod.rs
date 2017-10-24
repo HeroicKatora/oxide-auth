@@ -2,6 +2,8 @@ extern crate iron;
 extern crate urlencoded;
 
 use super::code_grant::*;
+use super::code_grant::frontend::{OAuthError, WebRequest, WebResponse};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
@@ -9,6 +11,7 @@ use std::ops::DerefMut;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
 use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery, QueryMap as UQueryMap};
+use url::Url as urlUrl;
 
 /// Groups together all partial systems used in the code_grant process.
 ///
@@ -112,6 +115,31 @@ impl OwnerAuthorizer for Box<iron::Handler> {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
     -> Result<(Authentication, Response), IronError> {
         self.as_ref().get_owner_authorization(req, auth)
+    }
+}
+
+impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
+    type Response = iron::Response;
+    fn query(&mut self) -> Option<HashMap<String, Vec<String>>> {
+        self.get::<UrlEncodedQuery>().ok()
+    }
+
+    fn urlbody(&mut self) -> Option<&HashMap<String, Vec<String>>> {
+        self.get_ref::<UrlEncodedBody>().ok()
+    }
+}
+
+impl WebResponse for iron::Response {
+    fn redirect(url: urlUrl) -> Result<Response, OAuthError> {
+        let real_url = match iron::Url::from_generic_url(url) {
+            Err(_) => return Err(OAuthError::Other("Error parsing redirect target".to_string())),
+            Ok(v) => v,
+        };
+        Ok(Response::with((iron::status::Found, Redirect(real_url))))
+    }
+
+    fn text(text: &str) -> Result<Response, OAuthError> {
+        Ok(Response::with((iron::status::Ok, text)))
     }
 }
 
