@@ -2,7 +2,7 @@ extern crate iron;
 extern crate urlencoded;
 
 use super::code_grant::*;
-use super::code_grant::frontend::{OAuthError, WebRequest, WebResponse};
+use super::code_grant::frontend::{AuthorizationFlow, GrantFlow, OAuthError, OwnerAuthorizer, WebRequest, WebResponse};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 use std::ops::DerefMut;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
-use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery, QueryMap as UQueryMap};
+use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use url::Url as urlUrl;
 
 /// Groups together all partial systems used in the code_grant process.
@@ -36,7 +36,7 @@ pub struct IronAuthorizer<R, A> where
     R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static,
 {
-    page_handler: Box<OwnerAuthorizer>,
+    page_handler: Box<OwnerAuthorizer<Request=iron::Request>>,
     registrar: Arc<Mutex<R>>,
     authorizer: Arc<Mutex<A>>,
 }
@@ -70,17 +70,6 @@ pub enum Authentication {
 }
 
 impl iron::typemap::Key for Authentication { type Value = Authentication; }
-
-/// Process authorization requests from an owner.
-///
-/// The authorizer can answer requests by indicating authorization progress and returning a result
-/// page to display. The page might not get displayed if the answer is already positive but will
-/// always be presented to the user-agent when the returning InProgress.
-/// Be aware that query parameters will need to be present in the final request as well, as
-/// extraction of query parameters can no currently be influenced.
-pub trait OwnerAuthorizer: Send + Sync + 'static {
-    fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), IronError>;
-}
 
 /// Use an iron request as an owner authorizer.
 ///
@@ -200,12 +189,10 @@ impl self::iron::modifier::Modifier<Response> for ExpectAuthenticationHandler {
     }
 }
 
-fn extract_parameters(params: UQueryMap) -> Result<ClientParameter<'static>, String> {
-    let query = params.iter()
-        .filter(|&(_, v)| v.len() == 1)
-        .map(|(k, v)| (k.clone().into(), v[0].clone().into()))
-        .collect::<QueryMap<'static>>();
-    decode_query(query)
+fn from_oauth_error(error: OAuthError) -> IronResult<Response> {
+    match error {
+        _ => Ok(Response::with(iron::status::InternalServerError))
+    }
 }
 
 impl<R, A> iron::Handler for IronAuthorizer<R, A> where
@@ -213,44 +200,16 @@ impl<R, A> iron::Handler for IronAuthorizer<R, A> where
     A: Authorizer + Send + 'static
 {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        let urlparameters = match req.get::<UrlEncodedQuery>() {
-            Err(_) => return Ok(Response::with((iron::status::BadRequest, "Missing valid url encoded parameters"))),
-            Ok(res) => res,
-        };
-
-        let urldecoded = match extract_parameters(urlparameters) {
-            Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
-            Ok(url) => url,
-        };
-
-        let mut lockedreg = self.registrar.lock().unwrap();
-        let mut locked = self.authorizer.lock().unwrap();
-        let mut granter = CodeRef::with(lockedreg.deref_mut(), locked.deref_mut());
-
-        let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
-            Err(st) => return Ok(Response::with((iron::status::BadRequest, st))),
-            Ok(v) => v
-        };
-
-        let auth = AuthenticationRequest{ client_id: negotiated.client_id.to_string(), scope: negotiated.scope.to_string() };
-        let owner = match self.page_handler.get_owner_authorization(req, auth)? {
-            (Authentication::Failed, _)
-                => return Ok(Response::with((iron::status::BadRequest, "Authentication failed"))),
-            (Authentication::InProgress, response)
-                => return Ok(response),
-            (Authentication::Authenticated(v), _) => v,
-        };
-
-        let redirect_to = granter.authorize(
-            owner.clone().into(),
-            negotiated,
-            urldecoded.state.clone());
-
-        let real_url = match iron::Url::from_generic_url(redirect_to) {
-            Err(_) => return Ok(Response::with((iron::status::InternalServerError, "Error parsing redirect target"))),
+        let prepared = match AuthorizationFlow::prepare(req).map_err(from_oauth_error) {
+            Err(res) => return res,
             Ok(v) => v,
         };
-        Ok(Response::with((iron::status::Found, Redirect(real_url))))
+
+        let locked_registrar = self.registrar.lock().unwrap();
+        let locked_authorizer = self.authorizer.lock().unwrap();
+        let code = CodeRef { registrar: locked_registrar.deref_mut(), authorizer: locked_authorizer.deref_mut() };
+
+        AuthorizationFlow::handle(code, prepared, &self.page_handler).or_else(from_oauth_error)
     }
 }
 
@@ -260,42 +219,16 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
     I: Issuer + Send + 'static
 {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        use std::borrow::Cow;
-        let query = match req.get_ref::<UrlEncodedBody>() {
-            Err(_) => return Ok(Response::with((iron::status::BadRequest, "Body not url encoded"))),
+        let prepared = match GrantFlow::prepare(req).map_err(from_oauth_error) {
+            Err(res) => return res,
             Ok(v) => v,
         };
 
-        fn single_result<'l>(list: &'l Vec<String>) -> Result<&'l str, Cow<'static, str>>{
-            if list.len() == 1 { Ok(&list[0]) } else { Err("Invalid parameter".into()) }
-        }
-        let get_param = |name: &str| query.get(name).ok_or(Cow::Owned("Missing parameter".to_owned() + name)).and_then(single_result);
+        let locked_authorizer = self.authorizer.lock().unwrap();
+        let locked_issuer = self.issuer.lock().unwrap();
+        let issuer = IssuerRef { authorizer: locked_authorizer.deref_mut(), issuer: locked_issuer.deref_mut() };
 
-        let grant_typev = get_param("grant_type").and_then(
-            |grant| if grant == "authorization_code" { Ok(grant) } else { Err(Cow::Owned("Invalid grant type".to_owned() + grant)) });
-        let client_idv = get_param("client_id");
-        let codev = get_param("code");
-        let redirect_urlv = get_param("redirect_url");
-
-        let (client, code, redirect_url) = match (grant_typev, client_idv, codev, redirect_urlv) {
-            (Err(cause), _, _, _) => return Ok(Response::with((iron::status::BadRequest, cause.as_ref()))),
-            (_, Err(cause), _, _) => return Ok(Response::with((iron::status::BadRequest, cause.as_ref()))),
-            (_, _, Err(cause), _) => return Ok(Response::with((iron::status::BadRequest, cause.as_ref()))),
-            (_, _, _, Err(cause)) => return Ok(Response::with((iron::status::BadRequest, cause.as_ref()))),
-            (Ok(_), Ok(client), Ok(code), Ok(redirect))
-                => (client, code, redirect)
-        };
-
-        let mut authlocked = self.authorizer.lock().unwrap();
-        let mut issuelocked = self.issuer.lock().unwrap();
-        let mut issuer = IssuerRef::with(authlocked.deref_mut(), issuelocked.deref_mut());
-
-        let token = match issuer.use_code(code.to_string(), client.into(), redirect_url.into()) {
-            Err(st) => return Ok(Response::with((iron::status::BadRequest, st.as_ref()))),
-            Ok(token) => token,
-        };
-
-        Ok(Response::with((iron::status::Ok, token.token + " with refresh " + &token.refresh + " valid until " + &token.until.to_rfc2822())))
+        GrantFlow::handle(issuer, prepared).or_else(from_oauth_error)
     }
 }
 
