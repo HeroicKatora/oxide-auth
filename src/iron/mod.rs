@@ -3,11 +3,13 @@ extern crate urlencoded;
 
 use super::code_grant::*;
 use super::code_grant::frontend::{AuthorizationFlow, GrantFlow, OAuthError, OwnerAuthorizer, WebRequest, WebResponse};
+pub use super::code_grant::frontend::{AuthenticationRequest, Authentication};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 use std::ops::DerefMut;
+use std::marker::PhantomData;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
 use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery};
@@ -32,11 +34,12 @@ pub struct IronGranter<R, A, I> where
 ///
 /// Only holds handles to authorization relevant objects. An additional external handler is used
 /// to communicate with the owner authorization process.
-pub struct IronAuthorizer<R, A> where
+pub struct IronAuthorizer<PH, R, A> where
+    PH: GenericOwnerAuthorizer + Send + Sync,
     R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static,
 {
-    page_handler: Box<OwnerAuthorizer<Request=iron::Request>>,
+    page_handler: Box<PH>,
     registrar: Arc<Mutex<R>>,
     authorizer: Arc<Mutex<A>>,
 }
@@ -53,23 +56,13 @@ pub struct IronTokenRequest<A, I> where
     issuer: Arc<Mutex<I>>,
 }
 
-/// Sent to the OwnerAuthorizer to request owner permission.
-pub struct AuthenticationRequest {
-    pub client_id: String,
-    pub scope: String,
-}
-
 impl iron::typemap::Key for AuthenticationRequest { type Value = AuthenticationRequest; }
 
-/// Answer from OwnerAuthorizer to indicate the owners choice.
-#[derive(Clone)]
-pub enum Authentication {
-    Failed,
-    InProgress,
-    Authenticated(String),
-}
-
 impl iron::typemap::Key for Authentication { type Value = Authentication; }
+
+pub trait GenericOwnerAuthorizer {
+    fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, iron::Response), OAuthError>;
+}
 
 /// Use an iron request as an owner authorizer.
 ///
@@ -80,11 +73,11 @@ impl iron::typemap::Key for Authentication { type Value = Authentication; }
 /// ```rust
 /// // TODO: example needed for this seemingly more complex and common use case
 /// ```
-impl OwnerAuthorizer for iron::Handler {
+impl GenericOwnerAuthorizer for iron::Handler {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
-    -> Result<(Authentication, Response), IronError> {
+    -> Result<(Authentication, Response), OAuthError> {
         req.extensions.insert::<AuthenticationRequest>(auth);
-        let response = self.handle(req)?;
+        let response = self.handle(req).map_err(|_| OAuthError::Other("Internal error".to_string()))?;
         match req.extensions.get::<Authentication>() {
             None => return Ok((Authentication::Failed, Response::with((iron::status::InternalServerError, "No authentication response")))),
             Some(v) => return Ok((v.clone(), response)),
@@ -92,18 +85,28 @@ impl OwnerAuthorizer for iron::Handler {
     }
 }
 
-impl<F> OwnerAuthorizer for F
-where F: Fn(&mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), IronError> + Send + Sync + 'static {
+impl<F> GenericOwnerAuthorizer for F
+where F: Fn(&mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> + Send + Sync + 'static {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
-    -> Result<(Authentication, Response), IronError> {
+    -> Result<(Authentication, Response), OAuthError> {
         self(req, auth)
     }
 }
 
-impl OwnerAuthorizer for Box<iron::Handler> {
+impl GenericOwnerAuthorizer for Box<iron::Handler> {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
-    -> Result<(Authentication, Response), IronError> {
+    -> Result<(Authentication, Response), OAuthError> {
         self.as_ref().get_owner_authorization(req, auth)
+    }
+}
+
+struct SpecificOwnerAuthorizer<'l, 'a, 'b: 'a>(&'l GenericOwnerAuthorizer, PhantomData<iron::Request<'a, 'b>>);
+
+impl<'l, 'a, 'b: 'a> OwnerAuthorizer for SpecificOwnerAuthorizer<'l, 'a, 'b> {
+    type Request = iron::Request<'a, 'b>;
+    fn get_owner_authorization(&self, req: &mut Self::Request, auth: AuthenticationRequest)
+    -> Result<(Authentication, Response), OAuthError> {
+        self.0.get_owner_authorization(req, auth)
     }
 }
 
@@ -144,7 +147,7 @@ impl<R, A, I> IronGranter<R, A, I> where
             issuer: Arc::new(Mutex::new(issuer)) }
     }
 
-    pub fn authorize<H: OwnerAuthorizer>(&self, page_handler: H) -> IronAuthorizer<R, A> {
+    pub fn authorize<H: GenericOwnerAuthorizer + Send + Sync>(&self, page_handler: H) -> IronAuthorizer<H, R, A> {
         IronAuthorizer {
             authorizer: self.authorizer.clone(),
             page_handler: Box::new(page_handler),
@@ -195,7 +198,8 @@ fn from_oauth_error(error: OAuthError) -> IronResult<Response> {
     }
 }
 
-impl<R, A> iron::Handler for IronAuthorizer<R, A> where
+impl<PH, R, A> iron::Handler for IronAuthorizer<PH, R, A> where
+    PH: GenericOwnerAuthorizer + Send + Sync + 'static,
     R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static
 {
@@ -205,11 +209,12 @@ impl<R, A> iron::Handler for IronAuthorizer<R, A> where
             Ok(v) => v,
         };
 
-        let locked_registrar = self.registrar.lock().unwrap();
-        let locked_authorizer = self.authorizer.lock().unwrap();
-        let code = CodeRef { registrar: locked_registrar.deref_mut(), authorizer: locked_authorizer.deref_mut() };
+        let mut locked_registrar = self.registrar.lock().unwrap();
+        let mut locked_authorizer = self.authorizer.lock().unwrap();
+        let code = CodeRef::with(locked_registrar.deref_mut(), locked_authorizer.deref_mut());
 
-        AuthorizationFlow::handle(code, prepared, &self.page_handler).or_else(from_oauth_error)
+        let handler = SpecificOwnerAuthorizer(self.page_handler.as_ref(), PhantomData);
+        AuthorizationFlow::handle(code, prepared, &handler).or_else(from_oauth_error)
     }
 }
 
@@ -224,9 +229,9 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
             Ok(v) => v,
         };
 
-        let locked_authorizer = self.authorizer.lock().unwrap();
-        let locked_issuer = self.issuer.lock().unwrap();
-        let issuer = IssuerRef { authorizer: locked_authorizer.deref_mut(), issuer: locked_issuer.deref_mut() };
+        let mut locked_authorizer = self.authorizer.lock().unwrap();
+        let mut locked_issuer = self.issuer.lock().unwrap();
+        let issuer = IssuerRef::with(locked_authorizer.deref_mut(), locked_issuer.deref_mut());
 
         GrantFlow::handle(issuer, prepared).or_else(from_oauth_error)
     }
