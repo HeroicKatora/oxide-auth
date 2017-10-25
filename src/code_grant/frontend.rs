@@ -77,7 +77,7 @@ impl AuthorizationFlow {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
             Err(st) => return Err(OAuthError::BadRequest(st)),
-            Ok(v) => v
+            Ok(v) => v,
         };
 
         let auth = AuthenticationRequest{ client_id: negotiated.client_id.to_string(), scope: negotiated.scope.to_string() };

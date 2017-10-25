@@ -177,13 +177,12 @@ pub mod authorizer;
 pub mod frontend;
 pub mod generator;
 pub mod issuer;
-pub mod negotiator;
-
-pub use self::authorizer::Storage;
-pub use self::issuer::TokenMap;
-pub use self::generator::RandomGenerator;
+pub mod registrar;
 
 pub mod prelude {
-    pub use super::{Storage, TokenMap, RandomGenerator, QueryMap};
-    pub use super::negotiator::ClientMap;
+    pub use super::authorizer::Storage;
+    pub use super::issuer::TokenMap;
+    pub use super::generator::RandomGenerator;
+    pub use super::QueryMap;
+    pub use super::registrar::ClientMap;
 }
