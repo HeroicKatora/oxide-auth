@@ -33,7 +33,7 @@ mod main {
         /// A simple implementation of the first part of an authentication handler. This will
         /// display a page to the user asking for his permission to proceed. The submitted form
         /// will then trigger the other authorization handler which actually completes the flow.
-        fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication,Response), iron::IronError> {
+        fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> {
             let (client_id, scope) = (auth.client_id, auth.scope);
             let text = format!(
                 "<html>{} is requesting permission for {}

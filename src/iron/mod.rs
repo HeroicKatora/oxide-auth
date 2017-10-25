@@ -2,8 +2,8 @@ extern crate iron;
 extern crate urlencoded;
 
 use super::code_grant::*;
-use super::code_grant::frontend::{AuthorizationFlow, GrantFlow, OAuthError, OwnerAuthorizer, WebRequest, WebResponse};
-pub use super::code_grant::frontend::{AuthenticationRequest, Authentication};
+use super::code_grant::frontend::{AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
+pub use super::code_grant::frontend::{AuthenticationRequest, Authentication, OAuthError};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -240,5 +240,5 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
 /// Reexport most useful structs as well as the code_grant core library.
 pub mod prelude {
     pub use code_grant::prelude::*;
-    pub use super::{IronGranter, AuthenticationRequest, Authentication};
+    pub use super::{IronGranter, AuthenticationRequest, Authentication, OAuthError};
 }
