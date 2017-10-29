@@ -11,6 +11,7 @@ url = "*"
 ring = "*"
 iron = { version = "*", optional = true }
 urlencoded = { version = "*", optional = true }
+serde_json = "1.0"
 
 [features]
 default = ["iron-backend"]

@@ -133,6 +133,14 @@ impl WebResponse for iron::Response {
     fn text(text: &str) -> Result<Response, OAuthError> {
         Ok(Response::with((iron::status::Ok, text)))
     }
+
+    fn json(data: &str) -> Result<Response, OAuthError> {
+        Ok(Response::with((
+            iron::status::Ok,
+            iron::modifiers::Header(iron::headers::ContentType::json()),
+            data,
+        )))
+    }
 }
 
 impl<R, A, I> IronGranter<R, A, I> where

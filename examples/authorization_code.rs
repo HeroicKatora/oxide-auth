@@ -99,7 +99,12 @@ mod main {
         };
         let mut token = String::new();
         token_req.read_to_string(&mut token).unwrap();
-        Ok(iron::Response::with((iron::status::Ok, format!("Received token: {}", token))))
+
+        Ok(Response::with((
+            iron::status::Ok,
+            iron::modifiers::Header(iron::headers::ContentType::json()),
+            token,
+        )))
     }
 }
 

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use super::{decode_query, ClientParameter, CodeRef, IssuerRef, QueryMap};
 use url::Url;
+use serde_json;
 
 /// Sent to the OwnerAuthorizer to request owner permission.
 pub struct AuthenticationRequest {
@@ -32,6 +33,7 @@ pub trait WebRequest {
 pub trait WebResponse where Self: Sized {
     fn redirect(url: Url) -> Result<Self, OAuthError>;
     fn text(text: &str) -> Result<Self, OAuthError>;
+    fn json(data: &str) -> Result<Self, OAuthError>;
 }
 
 pub trait OwnerAuthorizer {
@@ -56,6 +58,7 @@ fn extract_parameters(params: HashMap<String, Vec<String>>) -> Result<ClientPara
 }
 
 impl AuthorizationFlow {
+    /// Idempotent data processing, checks formats.
     pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, OAuthError> {
         let urlparameters = match incoming.query() {
             None => return Err(OAuthError::MissingQuery),
@@ -149,7 +152,13 @@ impl GrantFlow {
             Ok(token) => token,
         };
 
-        Req::Response::text(&(token.token + " with refresh " + &token.refresh + " valid until " + &token.until.to_rfc2822()))
+        let serialized = serde_json::to_string(&[
+                ("token", token.token.as_str()),
+                ("refresh", token.refresh.as_str()),
+            ].iter().cloned().collect::<HashMap<_, _>>())
+            .unwrap(); // We control the input, this is valid json
+
+        Req::Response::json(&serialized)
     }
 }
 
