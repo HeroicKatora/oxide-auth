@@ -34,10 +34,10 @@ pub struct Request<'a> {
 }
 
 pub struct Grant<'a> {
-    pub owner_id: &'a str,
-    pub client_id: &'a str,
+    pub owner_id: Cow<'a, str>,
+    pub client_id: Cow<'a, str>,
     pub redirect_url: Cow<'a, Url>,
-    pub scope: &'a str,
+    pub scope: Cow<'a, str>,
     pub until: Cow<'a, Time>,
 }
 
@@ -155,15 +155,15 @@ impl<'u> IssuerRef<'u> {
             return Err("Invalid code".into())
         }
 
-        if saved_params.until < &Utc::now() {
+        if saved_params.until.as_ref() < &Utc::now() {
             return Err("Code no longer valid".into())
         }
 
         let token = self.issuer.issue(Request{
-            client_id: saved_params.client_id,
-            owner_id: saved_params.owner_id,
-            redirect_url: saved_params.redirect_url,
-            scope: saved_params.scope,
+            client_id: &saved_params.client_id,
+            owner_id: &saved_params.owner_id,
+            redirect_url: &saved_params.redirect_url,
+            scope: &saved_params.scope,
         });
         Ok(token)
     }

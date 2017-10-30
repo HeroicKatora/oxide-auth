@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::clone::Clone;
+use std::borrow::Cow;
 use chrono::{Utc, Duration};
 use super::{Issuer, Grant, Request, Time, TokenGenerator, Url, IssuedToken};
 
@@ -15,11 +16,11 @@ struct SpecificGrant {
 impl<'a> Into<Grant<'a>> for &'a SpecificGrant {
     fn into(self) -> Grant<'a> {
         Grant {
-            owner_id: &self.owner_id,
-            client_id: &self.client_id,
-            scope: &self.scope,
-            redirect_url: &self.redirect_url,
-            until: &self.until,
+            owner_id: Cow::Borrowed(&self.owner_id),
+            client_id: Cow::Borrowed(&self.client_id),
+            scope: Cow::Borrowed(&self.scope),
+            redirect_url: Cow::Borrowed(&self.redirect_url),
+            until: Cow::Borrowed(&self.until),
         }
     }
 }
