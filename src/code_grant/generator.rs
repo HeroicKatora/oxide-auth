@@ -1,6 +1,11 @@
 use super::{Grant, TokenGenerator};
+use chrono::{Utc, TimeZone};
+use std::borrow::Cow;
 use rand::{thread_rng, Rng};
-use base64::{encode};
+use ring;
+use rmp_serde;
+use url::Url;
+use base64::{encode, decode};
 
 pub struct RandomGenerator {
     len: usize
@@ -20,5 +25,48 @@ impl TokenGenerator for RandomGenerator {
 }
 
 pub struct Assertion {
-    secret: [u8]
+    secret: ring::hmac::SigningKey,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct InternalAssertionGrant<'a>(&'a str, &'a str, &'a str, &'a str, (i64, u32));
+#[derive(Serialize, Deserialize)]
+pub struct AssertGrant<'a>(&'a [u8], &'a [u8]);
+
+impl Assertion {
+    pub fn new(key: ring::hmac::SigningKey) -> Assertion {
+        Assertion { secret: key}
+    }
+
+    pub fn extract(&self, token: &str) -> Result<Grant, ()> {
+        let readbytes = decode(token).map_err(|_| ())?;
+        let AssertGrant(message, digest) = rmp_serde::from_slice(&readbytes).map_err(|_| ())?;
+        ring::hmac::verify_with_own_key(&self.secret, message, digest).map_err(|_| ())?;
+
+        let InternalAssertionGrant(owner_id, client_id, redirectbytes, scope, (ts, tsnanos)) =
+            rmp_serde::from_slice(message).map_err(|_| ())?;
+
+        let redirect_url = Cow::Owned(Url::parse(redirectbytes).map_err(|_| ())?);
+        let until = Cow::Owned(Utc::timestamp(&Utc, ts, tsnanos));
+        Ok(Grant{
+            owner_id,
+            client_id,
+            redirect_url,
+            scope,
+            until,
+        })
+    }
+}
+
+impl TokenGenerator for Assertion {
+    fn generate(&self, grant: Grant) -> String {
+        let tosign = rmp_serde::to_vec(&InternalAssertionGrant(
+            grant.owner_id,
+            grant.client_id,
+            grant.redirect_url.as_str(),
+            grant.scope,
+            (grant.until.timestamp(), grant.until.timestamp_subsec_nanos()))).unwrap();
+        let signature = ring::hmac::sign(&self.secret, &tosign);
+        encode(&rmp_serde::to_vec(&AssertGrant(&tosign, signature.as_ref())).unwrap())
+    }
 }

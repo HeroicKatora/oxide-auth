@@ -36,9 +36,9 @@ pub struct Request<'a> {
 pub struct Grant<'a> {
     pub owner_id: &'a str,
     pub client_id: &'a str,
-    pub redirect_url: &'a Url,
+    pub redirect_url: Cow<'a, Url>,
     pub scope: &'a str,
-    pub until: &'a Time,
+    pub until: Cow<'a, Time>,
 }
 
 #[derive(Clone, Debug)]
