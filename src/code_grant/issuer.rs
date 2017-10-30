@@ -4,6 +4,8 @@ use std::borrow::Cow;
 use chrono::{Utc, Duration};
 use super::{Issuer, Grant, Request, Time, TokenGenerator, Url, IssuedToken};
 use super::generator::Assertion;
+use ring::digest::SHA256;
+use ring::hmac::SigningKey;
 
 #[derive(Clone)]
 struct SpecificGrant {
@@ -74,6 +76,17 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
 
 pub struct TokenSigner {
     signer: Assertion,
+}
+
+impl TokenSigner {
+    pub fn new(key: SigningKey) -> TokenSigner {
+        TokenSigner { signer: Assertion::new(key) }
+    }
+
+    pub fn new_from_passphrase(passwd: &str) -> TokenSigner {
+        let key = SigningKey::new(&SHA256, passwd.as_bytes());
+        TokenSigner { signer: Assertion::new(key) }
+    }
 }
 
 impl Issuer for TokenSigner {

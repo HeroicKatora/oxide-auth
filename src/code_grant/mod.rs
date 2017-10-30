@@ -181,7 +181,7 @@ pub mod registrar;
 
 pub mod prelude {
     pub use super::authorizer::Storage;
-    pub use super::issuer::TokenMap;
+    pub use super::issuer::{TokenMap, TokenSigner};
     pub use super::generator::RandomGenerator;
     pub use super::QueryMap;
     pub use super::registrar::ClientMap;
