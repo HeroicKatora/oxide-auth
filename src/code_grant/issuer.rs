@@ -3,6 +3,7 @@ use std::clone::Clone;
 use std::borrow::Cow;
 use chrono::{Utc, Duration};
 use super::{Issuer, Grant, Request, Time, TokenGenerator, Url, IssuedToken};
+use super::generator::Assertion;
 
 #[derive(Clone)]
 struct SpecificGrant {
@@ -50,8 +51,12 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
             redirect_url: req.redirect_url.clone(),
             until: Utc::now() + Duration::hours(1),
         };
-        let token: String = self.generator.generate((&grant).into());
-        let refresh: String = self.generator.generate((&grant).into());
+        let (token, refresh) = {
+            let generator_grant = (&grant).into();
+            let token = self.generator.generate(&generator_grant);
+            let refresh = self.generator.generate(&generator_grant);
+            (token, refresh)
+        };
         let until = grant.until.clone();
         self.access.insert(token.clone(), grant.clone());
         self.refresh.insert(refresh.clone(), grant);
@@ -64,5 +69,32 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
 
     fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
         self.refresh.get(token).map(|v| v.into())
+    }
+}
+
+pub struct TokenSigner {
+    signer: Assertion,
+}
+
+impl Issuer for TokenSigner {
+    fn issue(&mut self, req: Request) -> IssuedToken {
+        let grant = Grant {
+            owner_id: req.owner_id.into(),
+            client_id: req.client_id.into(),
+            scope: req.scope.into(),
+            redirect_url: Cow::Borrowed(req.redirect_url),
+            until: Cow::Owned(Utc::now() + Duration::hours(1)),
+        };
+        let token = self.signer.generate(&grant);
+        let refresh = self.signer.generate(&grant);
+        IssuedToken {token, refresh, until: grant.until.into_owned() }
+    }
+
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
+        self.signer.extract(token).ok()
+    }
+
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
+        self.signer.extract(token).ok()
     }
 }

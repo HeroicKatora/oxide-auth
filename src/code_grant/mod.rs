@@ -79,7 +79,7 @@ pub trait Issuer {
 ///
 /// The interface may be reused for authentication codes, bearer tokens and refresh tokens.
 pub trait TokenGenerator {
-    fn generate(&self, Grant) -> String;
+    fn generate(&self, &Grant) -> String;
 }
 
 pub type QueryMap<'a> = HashMap<Cow<'a, str>, Cow<'a, str>>;

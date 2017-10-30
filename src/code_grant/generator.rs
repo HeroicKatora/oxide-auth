@@ -18,7 +18,7 @@ impl RandomGenerator {
 }
 
 impl TokenGenerator for RandomGenerator {
-    fn generate(&self, _grant: Grant) -> String {
+    fn generate(&self, _grant: &Grant) -> String {
         let result = thread_rng().gen_iter::<u8>().take(self.len).collect::<Vec<u8>>();
         encode(&result)
     }
@@ -59,7 +59,7 @@ impl Assertion {
 }
 
 impl TokenGenerator for Assertion {
-    fn generate(&self, grant: Grant) -> String {
+    fn generate(&self, grant: &Grant) -> String {
         let tosign = rmp_serde::to_vec(&InternalAssertionGrant(
             &grant.owner_id,
             &grant.client_id,
