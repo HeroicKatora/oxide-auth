@@ -1,7 +1,15 @@
 [package]
-name = "oxideauth"
-version = "0.1.0"
+name = "OxideAuth"
+version = "0.1.0-0-noncompliant"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
+
+description = "A OAuth2 server library, for use in combination with iron or other frontends, featuring a set of configurable and pluggable backends."
+readme = "Readme.md"
+
+keywords = ["oauth", "server", "oauth2"]
+categories = ["web-programming::http-server", "authentication"]
+license = "MIT"
+
 
 [dependencies]
 chrono = "^0.4"
