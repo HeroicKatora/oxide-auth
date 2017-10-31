@@ -5,8 +5,6 @@ use super::code_grant::*;
 use super::code_grant::frontend::{AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
 pub use super::code_grant::frontend::{AuthenticationRequest, Authentication, OAuthError};
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 use std::ops::DerefMut;
 use std::marker::PhantomData;
@@ -64,6 +62,12 @@ pub trait GenericOwnerAuthorizer {
     fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, iron::Response), OAuthError>;
 }
 
+/// Wraps an iron::Handler for use as an OwnerAuthorizer.
+///
+/// This allows interoperability with other iron libraries. On top of that, one can use the standard
+/// middleware facilities to quickly stick together other handlers.
+pub struct IronOwnerAuthorizer<A: iron::Handler>(pub A);
+
 /// Use an iron request as an owner authorizer.
 ///
 /// The extension system on requests and responses is used to insert and extract the query and
@@ -71,7 +75,7 @@ pub trait GenericOwnerAuthorizer {
 /// and more intuitive implementations (e.g. by reusing existing authorization handlers to
 /// enforce user login).
 /// ```rust
-/// // TODO: example needed for this seemingly more complex and common use case
+/// // TODO: example needed for this seemingly more complex but common use case
 /// ```
 impl GenericOwnerAuthorizer for iron::Handler {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
@@ -86,17 +90,17 @@ impl GenericOwnerAuthorizer for iron::Handler {
 }
 
 impl<F> GenericOwnerAuthorizer for F
-where F: Fn(&mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> + Send + Sync + 'static {
+    where F :Fn(&mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> + Send + Sync + 'static {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
     -> Result<(Authentication, Response), OAuthError> {
         self(req, auth)
     }
 }
 
-impl GenericOwnerAuthorizer for Box<iron::Handler> {
+impl<A: iron::Handler> GenericOwnerAuthorizer for IronOwnerAuthorizer<A> {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
     -> Result<(Authentication, Response), OAuthError> {
-        self.as_ref().get_owner_authorization(req, auth)
+        (&self.0 as &iron::Handler).get_owner_authorization(req, auth)
     }
 }
 
@@ -178,28 +182,6 @@ impl<R, A, I> IronGranter<R, A, I> where
     }
 }
 
-#[derive(Debug)]
-pub struct ExpectAuthenticationHandler;
-
-impl fmt::Display for ExpectAuthenticationHandler {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Expected an authentication handler to handle this response")
-    }
-}
-
-impl Error for ExpectAuthenticationHandler {
-    fn description(&self) -> &str {
-        "Expected an authentication handler to handle this response"
-    }
-}
-
-impl self::iron::modifier::Modifier<Response> for ExpectAuthenticationHandler {
-    fn modify(self, response: &mut Response) {
-        response.status = Some(iron::status::InternalServerError);
-        response.body = Some(Box::new("Unhandled authentication response"));
-    }
-}
-
 fn from_oauth_error(error: OAuthError) -> IronResult<Response> {
     match error {
         _ => Ok(Response::with(iron::status::InternalServerError))
@@ -248,5 +230,5 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
 /// Reexport most useful structs as well as the code_grant core library.
 pub mod prelude {
     pub use code_grant::prelude::*;
-    pub use super::{IronGranter, AuthenticationRequest, Authentication, OAuthError};
+    pub use super::{IronGranter, IronOwnerAuthorizer, AuthenticationRequest, Authentication, OAuthError};
 }

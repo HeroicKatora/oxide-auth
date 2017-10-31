@@ -12,21 +12,34 @@ mod main {
     use std::collections::HashMap;
     use std::thread;
 
-    pub fn exec() {
+    /// Example of a main function of a iron server supporting oauth.
+    pub fn example() {
         let passphrase = "This is a super secret phrase";
+
+        // Create the main token instance, a code_granter with an iron frontend.
         let ohandler = IronGranter::new(
+            // Stores clients in a simple in-memory hash map.
             ClientMap::new(),
+            // Authorization tokens are 16 byte random keys to a memory hash map.
             Storage::new(RandomGenerator::new(16)),
+            // Bearer tokens are signed (but not encrypted) using a passphrase.
             TokenSigner::new_from_passphrase(passphrase));
+
+        // Register a dummy client instance
         ohandler.registrar().unwrap().register_client("myself", url::Url::parse("http://localhost:8021/endpoint").unwrap());
 
+        // Create a router and bind the relevant pages
         let mut router = router::Router::new();
         router.get("/authorize", ohandler.authorize(handle_get), "authorize");
-        router.post("/authorize", ohandler.authorize(Box::new(handle_post) as Box<iron::Handler>), "authorize");
+        router.post("/authorize", ohandler.authorize(IronOwnerAuthorizer(handle_post)), "authorize");
         router.post("/token", ohandler.token(), "token");
 
+        // Start the server
         let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
+        // Start a dummy client instance which simply relays the token/response
         let client = thread::spawn(|| iron::Iron::new(dummy_client).http("localhost:8021").unwrap());
+
+        // Try to direct the browser to an url initiating the flow
         open_in_browser();
         join.join().expect("Failed to run");
         client.join().expect("Failed to run client");
@@ -50,9 +63,9 @@ mod main {
         }
 
         /// This shows the second style of authentication handler, a iron::Handler compatible form.
-        /// Allows composition with other libraries or frameworks.
+        /// Allows composition with other libraries or frameworks built around iron.
         fn handle_post(req: &mut Request) -> IronResult<Response> {
-            // No real user authentication is done here, in production you could use session keys
+            // No real user authentication is done here, in production you SHOULD use session keys or equivalent
             if req.get::<UrlEncodedQuery>().unwrap_or(HashMap::new()).contains_key("deny") {
                 req.extensions.insert::<Authentication>(Authentication::Failed);
             } else {
@@ -110,8 +123,8 @@ mod main {
 }
 
 #[cfg(not(feature = "iron-backend"))]
-mod main { pub fn exec() { } }
+mod main { pub fn example() { } }
 
 fn main() {
-    main::exec();
+    main::example();
 }
