@@ -1,13 +1,13 @@
 #[cfg(feature = "iron-backend")]
 mod main {
-    extern crate OxideAuth;
+    extern crate oxide_auth;
     extern crate iron;
     extern crate router;
     extern crate url;
     extern crate reqwest;
     extern crate urlencoded;
     use self::iron::prelude::*;
-    use self::OxideAuth::iron::prelude::*;
+    use self::oxide_auth::iron::prelude::*;
     use self::urlencoded::UrlEncodedQuery;
     use std::collections::HashMap;
     use std::thread;
