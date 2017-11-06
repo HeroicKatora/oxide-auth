@@ -10,7 +10,8 @@
 //! the frontend pluggable which could improve testing.
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use super::{decode_query, ClientParameter, CodeError, CodeRef, IssuerRef, QueryMap};
+use super::{ClientParameter, QueryMap};
+use super::backend::{decode_query, CodeRef, CodeError, IssuerRef};
 use url::Url;
 use serde_json;
 

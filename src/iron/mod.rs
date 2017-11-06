@@ -1,7 +1,8 @@
 extern crate iron;
 extern crate urlencoded;
 
-use super::code_grant::*;
+use super::code_grant::prelude::*;
+use super::code_grant::{Authorizer, Issuer, Registrar};
 use super::code_grant::frontend::{AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
 pub use super::code_grant::frontend::{AuthenticationRequest, Authentication, OAuthError};
 use std::collections::HashMap;
