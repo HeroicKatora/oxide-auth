@@ -1,12 +1,16 @@
 //! General algorithms for frontends.
 //!
-//! To ensure the adherence to the oauth2 rfc and the improve general implementations, the control
+//! The frontend is concerned with executing the abstract behaviours given by the backend in terms
+//! of the actions of the frontend types. This means translating Redirect errors to the correct
+//! Redirect http response for example or optionally sending internal errors to loggers.
+//!
+//! To ensure the adherence to the oauth2 rfc and the improve general implementations, some control
 //! flow of incoming packets is specified here instead of the frontend implementations.
 //! Instead, traits are offered to make this compatible with other frontends. In theory, this makes
 //! the frontend pluggable which could improve testing.
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use super::{decode_query, ClientParameter, CodeRef, IssuerRef, QueryMap};
+use super::{decode_query, ClientParameter, CodeError, CodeRef, IssuerRef, QueryMap};
 use url::Url;
 use serde_json;
 
@@ -79,7 +83,8 @@ impl AuthorizationFlow {
     {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
-            Err(st) => return Err(OAuthError::BadRequest(st)),
+            Err(CodeError::Ignore) => return Err(OAuthError::BadRequest("Internal server error".to_string())),
+            Err(CodeError::Redirect(url)) => return Req::Response::redirect(url),
             Ok(v) => v,
         };
 
@@ -92,10 +97,15 @@ impl AuthorizationFlow {
             (Authentication::Authenticated(v), _) => v,
         };
 
-        let redirect_to = granter.authorize(
+        let authorization = granter.authorize(
             owner.clone().into(),
             negotiated,
             urldecoded.state.clone());
+        let redirect_to = match authorization {
+           Err(CodeError::Ignore) => return Err(OAuthError::BadRequest("Internal server error".to_string())),
+           Err(CodeError::Redirect(url)) => return Req::Response::redirect(url),
+           Ok(v) => v,
+       };
 
         Req::Response::redirect(redirect_to)
     }

@@ -1,4 +1,4 @@
-use super::{Registrar, NegotiationParameter, Negotiated};
+use super::{Registrar, NegotiationParameter, Negotiated, RegistrarError};
 use std::collections::HashMap;
 use url::Url;
 
@@ -22,14 +22,14 @@ impl ClientMap {
 }
 
 impl Registrar for ClientMap {
-    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Negotiated<'a>, String> {
+    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Negotiated<'a>, RegistrarError> {
         let client = match self.clients.get(params.client_id.as_ref()) {
-            None => return Err("Unregistered client".to_string()),
+            None => return Err(RegistrarError::Unregistered),
             Some(stored) => stored
         };
         match params.redirect_url {
             Some(url) => if *url.as_ref() != client.redirect_url {
-                return Err("Redirect url does not match".to_string());
+                return Err(RegistrarError::MismatchedRedirect);
             },
             None => ()
         };

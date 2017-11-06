@@ -48,13 +48,19 @@ pub struct IssuedToken {
     pub until: Time,
 }
 
+pub enum RegistrarError {
+    Unregistered,
+    MismatchedRedirect,
+    Error(error::AuthorizationError),
+}
+
 /// Registrars provie a way to interact with clients.
 ///
 /// Most importantly, they determine defaulted parameters for a request as well as the validity
 /// of provided parameters. In general, implementations of this trait will probably offer an
 /// interface for registering new clients. This interface is not covered by this library.
 pub trait Registrar {
-    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Negotiated<'a>, String>;
+    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Negotiated<'a>, RegistrarError>;
 }
 
 /// Authorizers create and manage authorization codes.
@@ -113,13 +119,25 @@ pub struct CodeRef<'a> {
     authorizer: &'a mut Authorizer,
 }
 
+pub enum CodeError {
+    Ignore /* Ignore the request entirely */,
+    Redirect(Url) /* Redirect to the given url */,
+}
+
 impl<'u> CodeRef<'u> {
     pub fn negotiate<'a>(&self, client_id: Cow<'a, str>, scope: Option<Cow<'a, str>>, redirect_url: Option<Cow<'a, Url>>)
-    -> Result<Negotiated<'a>, String> {
-        self.registrar.negotiate(NegotiationParameter{client_id, scope, redirect_url})
+    -> Result<Negotiated<'a>, CodeError> {
+        let result = match self.registrar.negotiate(NegotiationParameter{client_id, scope, redirect_url}) {
+            Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
+            Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
+            Err(RegistrarError::Error(err)) => return Err(CodeError::Redirect(unimplemented!())),
+            Ok(negotiated) => negotiated,
+        };
+        Ok(result)
     }
 
-    pub fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, state: Option<Cow<'a, str>>) -> Url {
+    pub fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, state: Option<Cow<'a, str>>)
+     -> Result<Url, CodeError> {
         let grant = self.authorizer.authorize(Request{
             owner_id: &owner_id,
             client_id: &negotiated.client_id,
@@ -130,7 +148,7 @@ impl<'u> CodeRef<'u> {
             .append_pair("code", grant.as_str())
             .extend_pairs(state.map(|v| ("state", v)))
             .finish();
-        url
+        Ok(url)
     }
 
     pub fn with<'a>(registrar: &'a Registrar, t: &'a mut Authorizer) -> CodeRef<'a> {
