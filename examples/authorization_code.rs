@@ -93,7 +93,7 @@ mod main {
     /// needed in your implementation but merely exists to provide an interactive example.
     fn dummy_client(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
         use std::io::Read;
-        let code = match req.url.as_ref().query_pairs().collect::<QueryMap>().get("code") {
+        let code = match req.url.as_ref().query_pairs().collect::<HashMap<_, _>>().get("code") {
             None => return Ok(iron::Response::with((iron::status::BadRequest, "Missing code"))),
             Some(v) => v.clone()
         };
