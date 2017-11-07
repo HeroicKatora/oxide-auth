@@ -8,12 +8,20 @@
 //! flow of incoming packets is specified here instead of the frontend implementations.
 //! Instead, traits are offered to make this compatible with other frontends. In theory, this makes
 //! the frontend pluggable which could improve testing.
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use super::{ClientParameter, QueryMap};
-use super::backend::{decode_query, CodeRef, CodeError, IssuerRef};
+use super::backend::{CodeRef, CodeRequest, CodeError, IssuerRef};
 use url::Url;
 use serde_json;
+
+/// Holds the decode query fragments from the url
+struct ClientParameter<'a> {
+    pub client_id: Option<Cow<'a, str>>,
+    pub scope: Option<Cow<'a, str>>,
+    pub redirect_url: Option<Cow<'a, str>>,
+    pub state: Option<Cow<'a, str>>,
+}
 
 /// Sent to the OwnerAuthorizer to request owner permission.
 pub struct AuthenticationRequest {
@@ -51,15 +59,28 @@ pub struct PreparedAuthorization<'l, Req> where
     Req: WebRequest + 'l,
 {
     request: &'l mut Req,
-    urldecoded: ClientParameter<'static>,
+    urldecoded: ClientParameter<'l>,
 }
 
 fn extract_parameters(params: HashMap<String, Vec<String>>) -> Result<ClientParameter<'static>, String> {
-    let query = params.iter()
+    let map = params.iter()
         .filter(|&(_, v)| v.len() == 1)
-        .map(|(k, v)| (k.clone().into(), v[0].clone().into()))
-        .collect::<QueryMap<'static>>();
-    decode_query(query)
+        .map(|(k, v)| (k.as_str(), v[0].as_str()))
+        .collect::<HashMap<&str, &str>>();
+
+    Ok(ClientParameter{
+        client_id: map.get("client_id").map(|client| client.to_string().into()),
+        scope: map.get("scope").map(|scope| scope.to_string().into()),
+        redirect_url: map.get("redirect_url").map(|url| url.to_string().into()),
+        state: map.get("state").map(|state| state.to_string().into()),
+    })
+}
+
+impl<'s, 'a: 's> CodeRequest<'a> for ClientParameter<'s> {
+    fn client_id(&'a self) -> Option<Cow<'a, str>> { self.client_id.as_ref().map(|c| c.as_ref().into()) }
+    fn scope(&'a self) -> Option<Cow<'a, str>> { self.scope.as_ref().map(|c| c.as_ref().into()) }
+    fn redirect_url(&'a self) -> Option<Cow<'a, str>> { self.redirect_url.as_ref().map(|c| c.as_ref().into()) }
+    fn state(&'a self) -> Option<Cow<'a, str>> { self.state.as_ref().map(|c| c.as_ref().into()) }
 }
 
 impl AuthorizationFlow {
@@ -83,7 +104,7 @@ impl AuthorizationFlow {
         Auth: OwnerAuthorizer<Request=Req> + 'l
     {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
-        let negotiated = match granter.negotiate(urldecoded.client_id, urldecoded.scope, urldecoded.redirect_url) {
+        let negotiated = match granter.negotiate(&urldecoded) {
             Err(CodeError::Ignore) => return Err(OAuthError::BadRequest("Internal server error".to_string())),
             Err(CodeError::Redirect(url)) => return Req::Response::redirect(url),
             Ok(v) => v,

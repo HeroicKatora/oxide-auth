@@ -3,16 +3,8 @@ use chrono::Utc;
 use url::Url;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 type Time = DateTime<Utc>;
-
-pub struct ClientParameter<'a> {
-    pub client_id: Cow<'a, str>,
-    pub scope: Option<Cow<'a, str>>,
-    pub redirect_url: Option<Cow<'a, Url>>,
-    pub state: Option<Cow<'a, str>>,
-}
 
 pub struct NegotiationParameter<'a> {
     pub client_id: Cow<'a, str>,
@@ -88,8 +80,6 @@ pub trait TokenGenerator {
     fn generate(&self, &Grant) -> String;
 }
 
-pub type QueryMap<'a> = HashMap<Cow<'a, str>, Cow<'a, str>>;
-
 pub mod authorizer;
 pub mod backend;
 pub mod error;
@@ -103,6 +93,5 @@ pub mod prelude {
     pub use super::backend::{CodeRef, IssuerRef};
     pub use super::issuer::{TokenMap, TokenSigner};
     pub use super::generator::RandomGenerator;
-    pub use super::QueryMap;
     pub use super::registrar::ClientMap;
 }

@@ -9,35 +9,18 @@
 //! Another consideration is the possiblilty of reusing some components with other oauth schemes.
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
-use super::{Authorizer, ClientParameter, QueryMap, Registrar, RegistrarError};
+use super::{Authorizer, Registrar, RegistrarError};
 use super::{Negotiated, NegotiationParameter};
 use super::{Issuer, IssuedToken, Request};
 use std::borrow::Cow;
 use url::Url;
 use chrono::Utc;
 
-pub fn decode_query<'u>(kvpairs: QueryMap<'u>) -> Result<ClientParameter<'u>, String> {
-
-    match kvpairs.get("response_type").map(|s| *s == "code") {
-        None => return Err("Response type needs to be set".to_string()),
-        Some(false) => return Err("Invalid response type".to_string()),
-        Some(true) => ()
-    }
-    let client_id = match kvpairs.get("client_id") {
-        None => return Err("client_id needs to be set".to_string()),
-        Some(s) => s.clone()
-    };
-    let redirect_url = match kvpairs.get("redirect_url").map(|st| Url::parse(st)) {
-        Some(Err(_)) => return Err("Invalid url".to_string()),
-        val => val.map(|v| Cow::Owned(v.unwrap()))
-    };
-    let state = kvpairs.get("state").map(|v| v.clone());
-    Ok(ClientParameter {
-        client_id: client_id,
-        scope: kvpairs.get("scope").map(|v| v.clone()),
-        redirect_url: redirect_url,
-        state: state
-    })
+pub trait CodeRequest<'a> {
+    fn client_id(&'a self) -> Option<Cow<'a, str>>;
+    fn scope(&'a self) -> Option<Cow<'a, str>>;
+    fn redirect_url(&'a self) -> Option<Cow<'a, str>>;
+    fn state(&'a self) -> Option<Cow<'a, str>>;
 }
 
 /// CodeRef is a thin wrapper around necessary types to execute an authorization code grant.
@@ -61,13 +44,14 @@ impl<'u> CodeRef<'u> {
     /// If the client is not registered, the request will otherwise be ignored, if the request has
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
-    pub fn negotiate<'a>(&self, client_id: Cow<'a, str>, scope: Option<Cow<'a, str>>, redirect_url: Option<Cow<'a, Url>>)
+    pub fn negotiate<'a>(&self, request: &'a CodeRequest<'a>)
     -> Result<Negotiated<'a>, CodeError> {
         // Check preconditions
-        let redirect_url = match redirect_url {
-            None => return Err(CodeError::Ignore),
-            Some(url) => url,
-        };
+        let client_id = request.client_id().ok_or(CodeError::Ignore)?;
+        let redirect_url = request.redirect_url().ok_or(CodeError::Ignore)?;
+        let redirect_url = Url::parse(redirect_url.as_ref()).map_err(|_| CodeError::Ignore)?;
+        let redirect_url: Cow<'a, Url> = Cow::Owned(redirect_url);
+        let scope = request.scope();
 
         // Call the underlying registrar
         let parameter = NegotiationParameter {
