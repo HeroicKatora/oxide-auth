@@ -51,7 +51,10 @@ impl<'u> CodeRef<'u> {
         let redirect_url = request.redirect_url().ok_or(CodeError::Ignore)?;
         let redirect_url = Url::parse(redirect_url.as_ref()).map_err(|_| CodeError::Ignore)?;
         let redirect_url: Cow<'a, Url> = Cow::Owned(redirect_url);
+
+        // Extract additional parameters
         let scope = request.scope();
+        let state = request.state();
 
         // Call the underlying registrar
         let parameter = NegotiationParameter {
@@ -64,7 +67,9 @@ impl<'u> CodeRef<'u> {
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
             Err(RegistrarError::Error(err)) => {
                 let mut url = redirect_url.into_owned();
-                url.query_pairs_mut().extend_pairs(err.into_iter());
+                url.query_pairs_mut()
+                    .extend_pairs(state.as_ref().map(|st| ("state", st.as_ref())))
+                    .extend_pairs(err.into_iter());
                 return Err(CodeError::Redirect(url))
             }
             Ok(negotiated) => negotiated,
