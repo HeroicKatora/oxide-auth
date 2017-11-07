@@ -98,16 +98,16 @@ impl Issuer for TokenSigner {
             redirect_url: Cow::Borrowed(req.redirect_url),
             until: Cow::Owned(Utc::now() + Duration::hours(1)),
         };
-        let token = self.signer.generate(&grant);
-        let refresh = self.signer.generate(&grant);
+        let token = self.signer.tag("token").generate(&grant);
+        let refresh = self.signer.tag("refresh").generate(&grant);
         IssuedToken {token, refresh, until: grant.until.into_owned() }
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
-        self.signer.extract(token).ok()
+        self.signer.tag("token").extract(token).ok()
     }
 
     fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
-        self.signer.extract(token).ok()
+        self.signer.tag("refresh").extract(token).ok()
     }
 }

@@ -29,44 +29,67 @@ pub struct Assertion {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct InternalAssertionGrant<'a>(&'a str, &'a str, &'a str, &'a str, (i64, u32));
+pub struct InternalAssertionGrant<'a>(&'a str, &'a str, &'a str, &'a str, (i64, u32), &'a str);
 #[derive(Serialize, Deserialize)]
 pub struct AssertGrant<'a>(&'a [u8], &'a [u8]);
+
+pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
 impl Assertion {
     pub fn new(key: ring::hmac::SigningKey) -> Assertion {
         Assertion { secret: key}
     }
 
-    pub fn extract<'a>(&self, token: &'a str) -> Result<Grant<'a>, ()> {
+    pub fn tag<'a>(&'a self, tag: &'a str) -> TaggedAssertion<'a> {
+        TaggedAssertion(self, tag)
+    }
+
+    fn extract<'a>(&self, token: &'a str) -> Result<(Grant<'a>, String), ()> {
         let readbytes = decode(token).map_err(|_| ())?;
         let AssertGrant(message, digest) = rmp_serde::from_slice(&readbytes).map_err(|_| ())?;
 
         ring::hmac::verify_with_own_key(&self.secret, message, digest).map_err(|_| ())?;
-        let InternalAssertionGrant(owner_id, client_id, redirectbytes, scope, (ts, tsnanos)) =
+        let InternalAssertionGrant(owner_id, client_id, redirectbytes, scope, (ts, tsnanos), tag) =
             rmp_serde::from_slice(message).map_err(|_| ())?;
 
         let redirect_url = Url::parse(redirectbytes).map_err(|_| ())?;
         let until = Utc::timestamp(&Utc, ts, tsnanos);
-        Ok(Grant{
+        Ok((Grant{
             owner_id: Cow::Owned(owner_id.to_string()),
             client_id: Cow::Owned(client_id.to_string()),
             redirect_url: Cow::Owned(redirect_url),
             scope: Cow::Owned(scope.to_string()),
             until: Cow::Owned(until),
-        })
+        }, tag.to_string()))
     }
-}
 
-impl TokenGenerator for Assertion {
-    fn generate(&self, grant: &Grant) -> String {
+    fn generate_tagged(&self, grant: &Grant, tag: &str) -> String {
         let tosign = rmp_serde::to_vec(&InternalAssertionGrant(
             &grant.owner_id,
             &grant.client_id,
             grant.redirect_url.as_str(),
             &grant.scope,
-            (grant.until.timestamp(), grant.until.timestamp_subsec_nanos()))).unwrap();
+            (grant.until.timestamp(), grant.until.timestamp_subsec_nanos()),
+            tag)).unwrap();
         let signature = ring::hmac::sign(&self.secret, &tosign);
         encode(&rmp_serde::to_vec(&AssertGrant(&tosign, signature.as_ref())).unwrap())
+    }
+}
+
+impl<'a> TaggedAssertion<'a> {
+    pub fn extract<'b>(&self, token: &'b str) -> Result<Grant<'b>, ()> {
+        self.0.extract(token).and_then(|(token, tag)| {
+            if tag == self.1 {
+                Ok(token)
+            } else {
+                Err(())
+            }
+        })
+    }
+}
+
+impl<'a> TokenGenerator for TaggedAssertion<'a> {
+    fn generate(&self, grant: &Grant) -> String {
+        self.0.generate_tagged(grant, self.1)
     }
 }
