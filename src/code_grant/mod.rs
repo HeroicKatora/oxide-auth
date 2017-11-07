@@ -16,8 +16,8 @@ pub struct ClientParameter<'a> {
 
 pub struct NegotiationParameter<'a> {
     pub client_id: Cow<'a, str>,
+    pub redirect_url: Cow<'a, Url>,
     pub scope: Option<Cow<'a, str>>,
-    pub redirect_url: Option<Cow<'a, Url>>,
 }
 
 pub struct Negotiated<'a> {
@@ -60,7 +60,7 @@ pub enum RegistrarError {
 /// of provided parameters. In general, implementations of this trait will probably offer an
 /// interface for registering new clients. This interface is not covered by this library.
 pub trait Registrar {
-    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Negotiated<'a>, RegistrarError>;
+    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Cow<'a, str>, RegistrarError>;
 }
 
 /// Authorizers create and manage authorization codes.

@@ -1,6 +1,7 @@
 use std::fmt;
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
+use std::vec::IntoIter;
 use url::Url;
 
 #[derive(Debug)]
@@ -14,9 +15,9 @@ pub enum AuthorizationErrorType {
     TemporarilyUnavailable,
 }
 
-impl fmt::Display for AuthorizationErrorType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
+impl AuthorizationErrorType {
+    fn description(&self) -> &'static str {
+        match self {
             &AuthorizationErrorType::InvalidRequest => "invalid_request",
             &AuthorizationErrorType::UnauthorizedClient => "unauthorized_client",
             &AuthorizationErrorType::AccessDenied => "access_denied",
@@ -24,7 +25,19 @@ impl fmt::Display for AuthorizationErrorType {
             &AuthorizationErrorType::InvalidScope => "invalid_scope",
             &AuthorizationErrorType::ServerError => "server_error",
             &AuthorizationErrorType::TemporarilyUnavailable => "temporarily_unavailable",
-        })
+        }
+    }
+}
+
+impl AsRef<str> for AuthorizationErrorType {
+    fn as_ref(&self) -> &str {
+        self.description()
+    }
+}
+
+impl fmt::Display for AuthorizationErrorType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_ref())
     }
 }
 
@@ -91,6 +104,13 @@ impl<A, B> AuthorizationErrorExt for (A, B) where A: AuthorizationErrorExt, B: A
 
 /* Error encodings, e.g. url and json */
 
-pub trait ErrorEncoder {
-    fn encode(&mut self, AuthorizationError);
+impl IntoIterator for AuthorizationError {
+    type Item = (&'static str, Cow<'static, str>);
+    type IntoIter = IntoIter<(&'static str, Cow<'static, str>)>;
+    fn into_iter(self) -> Self::IntoIter {
+        let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
+        self.description.map(|d| vec.push(("description", d)));
+        self.uri.map(|uri| vec.push(("uri", uri)));
+        vec.into_iter()
+    }
 }

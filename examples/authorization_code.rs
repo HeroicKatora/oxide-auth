@@ -51,10 +51,10 @@ mod main {
             let (client_id, scope) = (auth.client_id, auth.scope);
             let text = format!(
                 "<html>{} is requesting permission for {}
-                <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
+                <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint\" method=\"post\">
                     <input type=\"submit\" value=\"Accept\">
                 </form>
-                <form action=\"authorize?response_type=code&client_id={}&deny=1\" method=\"post\">
+                <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint&deny=1\" method=\"post\">
                     <input type=\"submit\" value=\"Deny\">
                 </form>
                 </html>", client_id, scope, client_id, client_id);
@@ -76,7 +76,7 @@ mod main {
     }
 
     fn open_in_browser() {
-        let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself";
+        let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself&redirect_url=http://localhost:8021/endpoint";
         use std::io::{Error, ErrorKind};
         use std::process::Command;
         let can_open = if cfg!(target_os = "linux") {

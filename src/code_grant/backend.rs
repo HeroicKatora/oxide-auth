@@ -63,13 +63,34 @@ impl<'u> CodeRef<'u> {
     /// response.
     pub fn negotiate<'a>(&self, client_id: Cow<'a, str>, scope: Option<Cow<'a, str>>, redirect_url: Option<Cow<'a, Url>>)
     -> Result<Negotiated<'a>, CodeError> {
-        let result = match self.registrar.negotiate(NegotiationParameter{client_id, scope, redirect_url}) {
+        // Check preconditions
+        let redirect_url = match redirect_url {
+            None => return Err(CodeError::Ignore),
+            Some(url) => url,
+        };
+
+        // Call the underlying registrar
+        let parameter = NegotiationParameter {
+            client_id: client_id.clone(),
+            scope: scope,
+            redirect_url: redirect_url.clone(),
+        };
+        let scope = match self.registrar.negotiate(parameter) {
             Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
-            Err(RegistrarError::Error(err)) => return Err(CodeError::Redirect(unimplemented!())),
+            Err(RegistrarError::Error(err)) => {
+                let mut url = redirect_url.into_owned();
+                url.query_pairs_mut().extend_pairs(err.into_iter());
+                return Err(CodeError::Redirect(url))
+            }
             Ok(negotiated) => negotiated,
         };
-        Ok(result)
+
+        Ok(Negotiated {
+            client_id,
+            redirect_url: redirect_url.into_owned(),
+            scope
+        })
     }
 
     /// Use negotiated parameters to authorize a client for an owner.

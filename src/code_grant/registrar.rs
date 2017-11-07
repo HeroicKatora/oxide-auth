@@ -1,4 +1,5 @@
-use super::{Registrar, NegotiationParameter, Negotiated, RegistrarError};
+use super::{Registrar, NegotiationParameter, RegistrarError};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
 
@@ -22,21 +23,16 @@ impl ClientMap {
 }
 
 impl Registrar for ClientMap {
-    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Negotiated<'a>, RegistrarError> {
+    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Cow<'a, str>, RegistrarError> {
         let client = match self.clients.get(params.client_id.as_ref()) {
             None => return Err(RegistrarError::Unregistered),
             Some(stored) => stored
         };
-        match params.redirect_url {
-            Some(url) => if *url.as_ref() != client.redirect_url {
-                return Err(RegistrarError::MismatchedRedirect);
-            },
-            None => ()
-        };
-        Ok(Negotiated {
-            client_id: params.client_id.clone(),
-            redirect_url: client.redirect_url.clone(),
-            scope: client.default_scope.clone().into()
-        })
+        // Perform exact matching as motivated in the rfc
+        if *params.redirect_url.as_ref() != client.redirect_url {
+            return Err(RegistrarError::MismatchedRedirect);
+        }
+        // Don't allow any scope deviation from the default
+        Ok(client.default_scope.clone().into())
     }
 }
