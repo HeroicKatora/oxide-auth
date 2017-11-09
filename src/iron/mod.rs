@@ -1,3 +1,61 @@
+//! Offers bindings for the code_grant module with iron servers.
+//!
+//! ## Hello world
+//!
+//! ```no_run
+//! extern crate iron;
+//! extern crate oxide_auth;
+//! extern crate router;
+//! use oxide_auth::iron::prelude::*;
+//! use iron::prelude::*;
+//! use std::thread;
+//!
+//! /// Example of a main function of a iron server supporting oauth.
+//! fn main() {
+//!     let passphrase = "This is a super secret phrase";
+//!
+//!     // Create the main token instance, a code_granter with an iron frontend.
+//!     let ohandler = IronGranter::new(
+//!         // Stores clients in a simple in-memory hash map.
+//!         ClientMap::new(),
+//!         // Authorization tokens are 16 byte random keys to a memory hash map.
+//!         Storage::new(RandomGenerator::new(16)),
+//!         // Bearer tokens are signed (but not encrypted) using a passphrase.
+//!         TokenSigner::new_from_passphrase(passphrase));
+//!
+//!     // Register a dummy client instance
+//!     ohandler.registrar().unwrap().register_client(
+//!         "example",
+//!         Url::parse("http://example.com/endpoint").unwrap());
+//!
+//!     // Create a router and bind the relevant pages
+//!     let mut router = router::Router::new();
+//!     router.get("/authorize", ohandler.authorize(handle_get), "authorize");
+//!     router.post("/authorize", ohandler.authorize(IronOwnerAuthorizer(handle_post)),
+//!         "authorize");
+//!     router.post("/token", ohandler.token(), "token");
+//!
+//!     // Start the server
+//!     let server = thread::spawn(||
+//!         iron::Iron::new(router).http("localhost:8020").unwrap());
+//!
+//!     server.join().expect("Failed to run");
+//! }
+//!
+//! /// A simple implementation of the first part of an authentication handler. This should
+//! /// display a page to the user asking for his permission to proceed.
+//! fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> {
+//!     unimplemented!()
+//! }
+//!
+//! /// This shows the second style of authentication handler, a iron::Handler compatible form.
+//! /// Allows composition with other libraries or frameworks built around iron.
+//! fn handle_post(req: &mut Request) -> IronResult<Response> {
+//!     unimplemented!()
+//! }
+//!
+//! ```
+
 extern crate iron;
 extern crate urlencoded;
 
@@ -12,7 +70,7 @@ use std::marker::PhantomData;
 use self::iron::prelude::*;
 use self::iron::modifiers::Redirect;
 use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery};
-use url::Url as urlUrl;
+use url::Url;
 
 /// Groups together all partial systems used in the code_grant process.
 ///
@@ -127,7 +185,7 @@ impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
 }
 
 impl WebResponse for iron::Response {
-    fn redirect(url: urlUrl) -> Result<Response, OAuthError> {
+    fn redirect(url: Url) -> Result<Response, OAuthError> {
         let real_url = match iron::Url::from_generic_url(url) {
             Err(_) => return Err(OAuthError::Other("Error parsing redirect target".to_string())),
             Ok(v) => v,
@@ -230,6 +288,7 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
 
 /// Reexport most useful structs as well as the code_grant core library.
 pub mod prelude {
+    pub use url::Url;
     pub use code_grant::prelude::*;
     pub use super::{IronGranter, IronOwnerAuthorizer, AuthenticationRequest, Authentication, OAuthError};
 }

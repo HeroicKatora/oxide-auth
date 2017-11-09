@@ -1,5 +1,5 @@
 [package]
-name = "oxide_auth"
+name = "oxide-auth"
 version = "0.1.0-0-noncompliant"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 
