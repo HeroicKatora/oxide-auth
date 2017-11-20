@@ -12,15 +12,16 @@
 use super::{Authorizer, Registrar, RegistrarError};
 use super::{Negotiated, NegotiationParameter};
 use super::{Issuer, IssuedToken, Request};
+use super::error::{AuthorizationErrorType};
 use std::borrow::Cow;
 use url::Url;
 use chrono::Utc;
 
-pub trait CodeRequest<'a> {
-    fn client_id(&'a self) -> Option<Cow<'a, str>>;
-    fn scope(&'a self) -> Option<Cow<'a, str>>;
-    fn redirect_url(&'a self) -> Option<Cow<'a, str>>;
-    fn state(&'a self) -> Option<Cow<'a, str>>;
+pub trait CodeRequest {
+    fn client_id(&self) -> Option<Cow<str>>;
+    fn scope(&self) -> Option<Cow<str>>;
+    fn redirect_url(&self) -> Option<Cow<str>>;
+    fn state(&self) -> Option<Cow<str>>;
 }
 
 /// CodeRef is a thin wrapper around necessary types to execute an authorization code grant.
@@ -34,6 +35,14 @@ pub enum CodeError {
     Redirect(Url) /* Redirect to the given url */,
 }
 
+type CodeResult<T> = Result<T, CodeError>;
+
+pub struct AuthorizationRequest<'a> {
+    negotiated: Negotiated<'a>,
+    code: CodeRef<'a>,
+    request: &'a CodeRequest,
+}
+
 impl<'u> CodeRef<'u> {
     /// Retrieve allowed scope and redirect url from the registrar.
     ///
@@ -44,13 +53,13 @@ impl<'u> CodeRef<'u> {
     /// If the client is not registered, the request will otherwise be ignored, if the request has
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
-    pub fn negotiate<'a>(&self, request: &'a CodeRequest<'a>)
-    -> Result<Negotiated<'a>, CodeError> {
+    pub fn negotiate<'r>(self, request: &'r CodeRequest)
+    -> CodeResult<AuthorizationRequest<'r>> where 'u: 'r {
         // Check preconditions
         let client_id = request.client_id().ok_or(CodeError::Ignore)?;
         let redirect_url = request.redirect_url().ok_or(CodeError::Ignore)?;
         let redirect_url = Url::parse(redirect_url.as_ref()).map_err(|_| CodeError::Ignore)?;
-        let redirect_url: Cow<'a, Url> = Cow::Owned(redirect_url);
+        let redirect_url: Cow<Url> = Cow::Owned(redirect_url);
 
         // Extract additional parameters
         let scope = request.scope();
@@ -75,15 +84,21 @@ impl<'u> CodeRef<'u> {
             Ok(negotiated) => negotiated,
         };
 
-        Ok(Negotiated {
+        let negotiated = Negotiated {
             client_id,
             redirect_url: redirect_url.into_owned(),
             scope
+        };
+
+        Ok(AuthorizationRequest {
+            negotiated,
+            code: CodeRef { registrar: self.registrar, authorizer: self.authorizer },
+            request,
         })
     }
 
     /// Use negotiated parameters to authorize a client for an owner.
-    pub fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, state: Option<Cow<'a, str>>)
+    fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, request: &'a CodeRequest)
      -> Result<Url, CodeError> {
         let grant = self.authorizer.authorize(Request{
             owner_id: &owner_id,
@@ -93,7 +108,7 @@ impl<'u> CodeRef<'u> {
         let mut url = negotiated.redirect_url;
         url.query_pairs_mut()
             .append_pair("code", grant.as_str())
-            .extend_pairs(state.map(|v| ("state", v)))
+            .extend_pairs(request.state().map(|v| ("state", v)))
             .finish();
         Ok(url)
     }
@@ -102,6 +117,26 @@ impl<'u> CodeRef<'u> {
         CodeRef { registrar, authorizer: t }
     }
 }
+
+impl<'a> AuthorizationRequest<'a> {
+    pub fn deny(self) -> CodeResult<Url> {
+        let mut url = self.negotiated.redirect_url;
+        url.query_pairs_mut()
+            .append_pair("error", AuthorizationErrorType::AccessDenied.as_ref())
+            .extend_pairs(self.request.state().map(|v| ("state", v)))
+            .finish();
+        Ok(url)
+    }
+
+    pub fn authorize(mut self, owner_id: Cow<'a, str>) -> CodeResult<Url> {
+        self.code.authorize(owner_id, self.negotiated, self.request)
+    }
+
+    pub fn negotiated(&self) -> &Negotiated<'a> {
+        &self.negotiated
+    }
+}
+
 
 /// Issuer is a thin wrapper around necessary types to execute an bearer token request..
 pub struct IssuerRef<'a> {

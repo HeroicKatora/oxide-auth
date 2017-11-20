@@ -76,11 +76,11 @@ fn extract_parameters(params: HashMap<String, Vec<String>>) -> Result<ClientPara
     })
 }
 
-impl<'s, 'a: 's> CodeRequest<'a> for ClientParameter<'s> {
-    fn client_id(&'a self) -> Option<Cow<'a, str>> { self.client_id.as_ref().map(|c| c.as_ref().into()) }
-    fn scope(&'a self) -> Option<Cow<'a, str>> { self.scope.as_ref().map(|c| c.as_ref().into()) }
-    fn redirect_url(&'a self) -> Option<Cow<'a, str>> { self.redirect_url.as_ref().map(|c| c.as_ref().into()) }
-    fn state(&'a self) -> Option<Cow<'a, str>> { self.state.as_ref().map(|c| c.as_ref().into()) }
+impl<'s> CodeRequest for ClientParameter<'s> {
+    fn client_id(&self) -> Option<Cow<str>> { self.client_id.as_ref().map(|c| c.as_ref().into()) }
+    fn scope(&self) -> Option<Cow<str>> { self.scope.as_ref().map(|c| c.as_ref().into()) }
+    fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.as_ref().map(|c| c.as_ref().into()) }
+    fn state(&self) -> Option<Cow<str>> { self.state.as_ref().map(|c| c.as_ref().into()) }
 }
 
 impl AuthorizationFlow {
@@ -99,9 +99,10 @@ impl AuthorizationFlow {
         Ok(PreparedAuthorization{request: incoming, urldecoded})
     }
 
-    pub fn handle<'l, Req, Auth>(mut granter: CodeRef, prepared: PreparedAuthorization<Req>, page_handler: &'l Auth) -> Result<<Req as WebRequest>::Response, OAuthError> where
+    pub fn handle<'c, Req, Auth>(granter: CodeRef<'c>, prepared: PreparedAuthorization<'c, Req>, page_handler: &Auth)
+    -> Result<<Req as WebRequest>::Response, OAuthError> where
         Req: WebRequest,
-        Auth: OwnerAuthorizer<Request=Req> + 'l
+        Auth: OwnerAuthorizer<Request=Req>
     {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(&urldecoded) {
@@ -110,19 +111,20 @@ impl AuthorizationFlow {
             Ok(v) => v,
         };
 
-        let auth = AuthenticationRequest{ client_id: negotiated.client_id.to_string(), scope: negotiated.scope.to_string() };
-        let owner = match page_handler.get_owner_authorization(req, auth)? {
-            (Authentication::Failed, _)
-                => return Err(OAuthError::AuthenticationFailed),
-            (Authentication::InProgress, response)
-                => return Ok(response),
-            (Authentication::Authenticated(v), _) => v,
+        let auth = AuthenticationRequest{
+            client_id: negotiated.negotiated().client_id.to_string(),
+            scope: negotiated.negotiated().scope.to_string(),
         };
 
-        let authorization = granter.authorize(
-            owner.clone().into(),
-            negotiated,
-            urldecoded.state.clone());
+        let authorization = match page_handler.get_owner_authorization(req, auth)? {
+            (Authentication::Failed, _)
+                => negotiated.deny(),
+            (Authentication::InProgress, response)
+                => return Ok(response),
+            (Authentication::Authenticated(owner), _)
+                => negotiated.authorize(owner.into()),
+        };
+
         let redirect_to = match authorization {
            Err(CodeError::Ignore) => return Err(OAuthError::BadRequest("Internal server error".to_string())),
            Err(CodeError::Redirect(url)) => return Req::Response::redirect(url),
