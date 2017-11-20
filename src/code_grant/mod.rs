@@ -52,6 +52,9 @@ pub enum RegistrarError {
 /// of provided parameters. In general, implementations of this trait will probably offer an
 /// interface for registering new clients. This interface is not covered by this library.
 pub trait Registrar {
+    /// Determine the allowed scope and redirection url for the client. The registrar may override
+    /// the scope entirely or simply substitute a default scope in case none is given. Redirection
+    /// urls should be matched verbatim, not partially.
     fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Cow<'a, str>, RegistrarError>;
 }
 
@@ -59,17 +62,26 @@ pub trait Registrar {
 ///
 /// The authorization code can be traded for a bearer token at the token endpoint.
 pub trait Authorizer {
+    /// Create a code which allows retrieval of a bearer token at a later time.
     fn authorize(&mut self, Request) -> String;
+    /// Retrieve the parameters associated with a token, invalidating the code in the process. In
+    /// particular, a code should not be usable twice (there is no stateless implementation of an
+    /// authorizer for this reason).
     fn extract<'a>(&mut self, &'a str) -> Option<Grant<'a>>;
 }
 
-/// Issuers create bearer tokens..
+/// Issuers create bearer tokens.
 ///
 /// It's the issuers decision whether a refresh token is offered or not. In any case, it is also
-/// responsible for determining the validity and parameters of any possible token string.
+/// responsible for determining the validity and parameters of any possible token string. Some
+/// backends or frontends may decide not to propagate the refresh token (for example because
+/// they do not intend to offer a statefull refresh api).
 pub trait Issuer {
+    /// Create a token authorizing the request parameters
     fn issue(&mut self, Request) -> IssuedToken;
+    /// Get the values corresponding to a bearer token
     fn recover_token<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+    /// Get the values corresponding to a refresh token
     fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
 }
 
@@ -77,6 +89,8 @@ pub trait Issuer {
 ///
 /// The interface may be reused for authentication codes, bearer tokens and refresh tokens.
 pub trait TokenGenerator {
+    /// For example sign a grant or generate a random token. The exact guarantees and uses depend
+    /// on the specific implementation.
     fn generate(&self, &Grant) -> String;
 }
 
