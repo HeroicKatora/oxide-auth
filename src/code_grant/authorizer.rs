@@ -12,14 +12,27 @@ struct SpecificGrant {
     until: Time,
 }
 
-impl<'a> Into<Grant<'a>> for &'a SpecificGrant {
+impl<'a> Into<Grant<'a>> for SpecificGrant {
     fn into(self) -> Grant<'a> {
         Grant {
-            owner_id: Cow::Borrowed(&self.owner_id),
-            client_id: Cow::Borrowed(&self.client_id),
-            scope: Cow::Borrowed(&self.scope),
-            redirect_url: Cow::Borrowed(&self.redirect_url),
-            until: Cow::Borrowed(&self.until),
+            owner_id: Cow::Owned(self.owner_id),
+            client_id: Cow::Owned(self.client_id),
+            scope: Cow::Owned(self.scope),
+            redirect_url: Cow::Owned(self.redirect_url),
+            until: Cow::Owned(self.until),
+        }
+    }
+}
+
+impl<'a> Grant<'a> {
+    fn from_refs(owner_id: &'a str, client_id: &'a str, scope: &'a str,
+        redirect_url: &'a Url, until: &'a Time) -> Grant<'a> {
+        Grant {
+            owner_id: Cow::Borrowed(owner_id),
+            client_id: Cow::Borrowed(client_id),
+            scope: Cow::Borrowed(scope),
+            redirect_url: Cow::Borrowed(redirect_url),
+            until: Cow::Borrowed(until),
         }
     }
 }
@@ -37,18 +50,21 @@ impl<I: TokenGenerator> Storage<I> {
 
 impl<I: TokenGenerator> Authorizer for Storage<I> {
     fn authorize(&mut self, req: Request) -> String {
-        let grant = SpecificGrant{
-                owner_id: req.owner_id.to_string(),
-                client_id: req.client_id.to_string(),
-                scope: req.scope.to_string(),
-                redirect_url: req.redirect_url.clone(),
-                until: Utc::now() + Duration::minutes(10)};
-        let token = self.issuer.generate(&(&grant).into());
-        self.tokens.insert(token.clone(), grant);
+        let owner_id = req.owner_id.to_string();
+        let client_id = req.client_id.to_string();
+        let scope = req.scope.to_string();
+        let redirect_url = req.redirect_url.clone();
+        let until = Utc::now() + Duration::minutes(10);
+
+        let token = self.issuer.generate(
+            &Grant::from_refs(&owner_id, &client_id, &scope, &redirect_url, &until));
+        self.tokens.insert(token.clone(), SpecificGrant {
+            owner_id, client_id, scope, redirect_url, until
+        });
         token
     }
 
-    fn recover_parameters<'a>(&'a self, grant: &'a str) -> Option<Grant<'a>> {
-        self.tokens.get(grant).map(|v| v.into())
+    fn extract<'a>(&mut self, grant: &'a str) -> Option<Grant<'a>> {
+        self.tokens.remove(grant).map(|v| v.into())
     }
 }

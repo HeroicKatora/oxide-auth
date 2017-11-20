@@ -190,7 +190,7 @@ impl<'u> IssuerRef<'u> {
     /// Try to redeem an authorization code.
     pub fn use_code<'a>(&'a mut self, code: String, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
     -> Result<IssuedToken, Cow<'static, str>> {
-        let saved_params = match self.authorizer.recover_parameters(code.as_ref()) {
+        let saved_params = match self.authorizer.extract(code.as_ref()) {
             None => return Err("Inactive code".into()),
             Some(v) => v,
         };

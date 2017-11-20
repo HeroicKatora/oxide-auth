@@ -60,7 +60,7 @@ pub trait Registrar {
 /// The authorization code can be traded for a bearer token at the token endpoint.
 pub trait Authorizer {
     fn authorize(&mut self, Request) -> String;
-    fn recover_parameters<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+    fn extract<'a>(&mut self, &'a str) -> Option<Grant<'a>>;
 }
 
 /// Issuers create bearer tokens..
