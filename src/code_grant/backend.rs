@@ -17,6 +17,7 @@ use std::borrow::Cow;
 use url::Url;
 use chrono::Utc;
 
+/// Interface required from a request to determine the handling in the backend.
 pub trait CodeRequest {
     fn client_id(&self) -> Option<Cow<str>>;
     fn scope(&self) -> Option<Cow<str>>;
@@ -30,11 +31,19 @@ pub struct CodeRef<'a> {
     authorizer: &'a mut Authorizer,
 }
 
+/// Defines the correct treatment of the error.
+/// Not all errors are signalled to the requesting party, especially when impersonation is possible
+/// it is integral for security to resolve the error internally instead of redirecting the user
+/// agent to a possibly crafted and malicious target.
 pub enum CodeError {
     Ignore /* Ignore the request entirely */,
     Redirect(ErrorUrl) /* Redirect to the given url */,
 }
 
+/// Encapsulates a redirect to a valid redirect_url with an error response. The implementation
+/// makes it possible to alter the contained error, for example to provide additional optional
+/// information. The error type should not be altered by the frontend but the specificalities
+/// of this should be enforced by the frontend instead.
 pub struct ErrorUrl {
     base_url: Url,
     error: AuthorizationError,
@@ -42,6 +51,8 @@ pub struct ErrorUrl {
 
 type CodeResult<T> = Result<T, CodeError>;
 
+/// Represents a valid, currently pending authorization request not bound to an owner. The frontend
+/// can signal a reponse using this object.
 pub struct AuthorizationRequest<'a> {
     negotiated: Negotiated<'a>,
     code: CodeRef<'a>,
@@ -49,18 +60,21 @@ pub struct AuthorizationRequest<'a> {
 }
 
 impl ErrorUrl {
+    /// Construct a new error, already fixing the state parameter if it exists.
     fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl where S: AsRef<str> {
         url.query_pairs_mut()
             .extend_pairs(state.as_ref().map(|st| ("state", st.as_ref())));
         ErrorUrl{ base_url: url, error: error }
     }
 
+    /// Modify the contained error.
     pub fn with<M>(&mut self, modifier: M) where M: AuthorizationErrorExt {
         modifier.modify(&mut self.error);
     }
 }
 
 impl Into<Url> for ErrorUrl {
+    /// Finalize the error url by saving its parameters in the query part of the redirect_url
     fn into(self) -> Url {
         let mut url = self.base_url;
         url.query_pairs_mut()
@@ -142,6 +156,7 @@ impl<'u> CodeRef<'u> {
 }
 
 impl<'a> AuthorizationRequest<'a> {
+    /// Denies the request, which redirects to the client for which the request originated.
     pub fn deny(self) -> CodeResult<Url> {
         let url = self.negotiated.redirect_url;
         let error = AuthorizationError::with(AuthorizationErrorType::AccessDenied);
@@ -149,15 +164,21 @@ impl<'a> AuthorizationRequest<'a> {
         Err(CodeError::Redirect(error))
     }
 
+    /// Inform the backend about consent from a resource owner.
     pub fn authorize(mut self, owner_id: Cow<'a, str>) -> CodeResult<Url> {
         self.code.authorize(owner_id, self.negotiated, self.request)
     }
 
+    /// Retrieve a reference to the negotiated parameters (e.g. scope). These should be displayed
+    /// to the resource owner when asking for his authorization.
     pub fn negotiated(&self) -> &Negotiated<'a> {
         &self.negotiated
     }
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////
+//                                      Code Issuer Endpoint                                    //
+//////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Issuer is a thin wrapper around necessary types to execute an bearer token request..
 pub struct IssuerRef<'a> {
