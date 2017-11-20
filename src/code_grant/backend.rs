@@ -2,9 +2,9 @@
 //!
 //! The backend codifies the requirements from the rfc into types and functions as safely as
 //! possible. It is, in contrast to the frontend, not concrete in the required type but rather
-//! uses a very generic internal reqpresentation.
+//! uses a trait based internal reqpresentation.
 //! The result of the backend are abstract results, actions which should be executed or relayed
-//! by the frontend usis its available types. Abstract in this sense means that the reponsens
+//! by the frontend using its available types. Abstract in this sense means that the reponses
 //! from the backend are not generic on an input type.
 //! Another consideration is the possiblilty of reusing some components with other oauth schemes.
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
@@ -12,7 +12,7 @@
 use super::{Authorizer, Registrar, RegistrarError};
 use super::{Negotiated, NegotiationParameter};
 use super::{Issuer, IssuedToken, Request};
-use super::error::{AuthorizationErrorType};
+use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
 use std::borrow::Cow;
 use url::Url;
 use chrono::Utc;
@@ -32,7 +32,12 @@ pub struct CodeRef<'a> {
 
 pub enum CodeError {
     Ignore /* Ignore the request entirely */,
-    Redirect(Url) /* Redirect to the given url */,
+    Redirect(ErrorUrl) /* Redirect to the given url */,
+}
+
+pub struct ErrorUrl {
+    base_url: Url,
+    error: AuthorizationError,
 }
 
 type CodeResult<T> = Result<T, CodeError>;
@@ -41,6 +46,27 @@ pub struct AuthorizationRequest<'a> {
     negotiated: Negotiated<'a>,
     code: CodeRef<'a>,
     request: &'a CodeRequest,
+}
+
+impl ErrorUrl {
+    fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl where S: AsRef<str> {
+        url.query_pairs_mut()
+            .extend_pairs(state.as_ref().map(|st| ("state", st.as_ref())));
+        ErrorUrl{ base_url: url, error: error }
+    }
+
+    pub fn with<M>(&mut self, modifier: M) where M: AuthorizationErrorExt {
+        modifier.modify(&mut self.error);
+    }
+}
+
+impl Into<Url> for ErrorUrl {
+    fn into(self) -> Url {
+        let mut url = self.base_url;
+        url.query_pairs_mut()
+            .extend_pairs(self.error.into_iter());
+        url
+    }
 }
 
 impl<'u> CodeRef<'u> {
@@ -75,11 +101,8 @@ impl<'u> CodeRef<'u> {
             Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
             Err(RegistrarError::Error(err)) => {
-                let mut url = redirect_url.into_owned();
-                url.query_pairs_mut()
-                    .extend_pairs(state.as_ref().map(|st| ("state", st.as_ref())))
-                    .extend_pairs(err.into_iter());
-                return Err(CodeError::Redirect(url))
+                let error = ErrorUrl::new(redirect_url.into_owned(), state, err);
+                return Err(CodeError::Redirect(error))
             }
             Ok(negotiated) => negotiated,
         };
@@ -120,12 +143,10 @@ impl<'u> CodeRef<'u> {
 
 impl<'a> AuthorizationRequest<'a> {
     pub fn deny(self) -> CodeResult<Url> {
-        let mut url = self.negotiated.redirect_url;
-        url.query_pairs_mut()
-            .append_pair("error", AuthorizationErrorType::AccessDenied.as_ref())
-            .extend_pairs(self.request.state().map(|v| ("state", v)))
-            .finish();
-        Ok(url)
+        let url = self.negotiated.redirect_url;
+        let error = AuthorizationError::with(AuthorizationErrorType::AccessDenied);
+        let error = ErrorUrl::new(url, self.request.state(), error);
+        Err(CodeError::Redirect(error))
     }
 
     pub fn authorize(mut self, owner_id: Cow<'a, str>) -> CodeResult<Url> {

@@ -11,7 +11,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use super::backend::{CodeRef, CodeRequest, CodeError, IssuerRef};
+use super::backend::{CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerRef};
 use url::Url;
 use serde_json;
 
@@ -47,6 +47,13 @@ pub trait WebResponse where Self: Sized {
     fn redirect(url: Url) -> Result<Self, OAuthError>;
     fn text(text: &str) -> Result<Self, OAuthError>;
     fn json(data: &str) -> Result<Self, OAuthError>;
+
+    /// Construct a redirect for the error. Here the response may choose to augment the error with
+    /// additional information (such as help websites, description strings), hence the default
+    /// implementation which does not do any of that.
+    fn redirect_error(target: ErrorUrl) -> Result<Self, OAuthError> {
+        Self::redirect(target.into())
+    }
 }
 
 pub trait OwnerAuthorizer {
@@ -107,7 +114,7 @@ impl AuthorizationFlow {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(&urldecoded) {
             Err(CodeError::Ignore) => return Err(OAuthError::BadRequest("Internal server error".to_string())),
-            Err(CodeError::Redirect(url)) => return Req::Response::redirect(url),
+            Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
             Ok(v) => v,
         };
 
@@ -127,7 +134,7 @@ impl AuthorizationFlow {
 
         let redirect_to = match authorization {
            Err(CodeError::Ignore) => return Err(OAuthError::BadRequest("Internal server error".to_string())),
-           Err(CodeError::Redirect(url)) => return Req::Response::redirect(url),
+           Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
            Ok(v) => v,
        };
 
