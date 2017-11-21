@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::borrow::Cow;
 use chrono::{Duration, Utc};
 
-use super::{Authorizer, Request, Grant, Time, TokenGenerator, Url};
+use super::{Authorizer, Request, Grant, Scope, Time, TokenGenerator, Url};
 
 struct SpecificGrant {
     owner_id: String,
     client_id: String,
-    scope: String,
+    scope: Scope,
     redirect_url: Url,
     until: Time,
 }
@@ -25,7 +25,7 @@ impl<'a> Into<Grant<'a>> for SpecificGrant {
 }
 
 impl<'a> Grant<'a> {
-    fn from_refs(owner_id: &'a str, client_id: &'a str, scope: &'a str,
+    fn from_refs(owner_id: &'a str, client_id: &'a str, scope: &'a Scope,
         redirect_url: &'a Url, until: &'a Time) -> Grant<'a> {
         Grant {
             owner_id: Cow::Borrowed(owner_id),
@@ -52,7 +52,7 @@ impl<I: TokenGenerator> Authorizer for Storage<I> {
     fn authorize(&mut self, req: Request) -> String {
         let owner_id = req.owner_id.to_string();
         let client_id = req.client_id.to_string();
-        let scope = req.scope.to_string();
+        let scope = req.scope.clone();
         let redirect_url = req.redirect_url.clone();
         let until = Utc::now() + Duration::minutes(10);
 

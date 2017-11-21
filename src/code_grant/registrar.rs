@@ -1,10 +1,10 @@
-use super::{Registrar, NegotiationParameter, RegistrarError};
+use super::{Registrar, NegotiationParameter, RegistrarError, Scope};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
 
 struct Data {
-    default_scope: String,
+    default_scope: Scope,
     redirect_url: Url,
 }
 
@@ -18,12 +18,13 @@ impl ClientMap {
     }
 
     pub fn register_client(&mut self, client_id: &str, redirect_url: Url) {
-        self.clients.insert(client_id.to_string(), Data{default_scope: "default".to_string(), redirect_url: redirect_url});
+        self.clients.insert(client_id.to_string(),
+            Data{ default_scope: "default".parse().unwrap(), redirect_url: redirect_url});
     }
 }
 
 impl Registrar for ClientMap {
-    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Cow<'a, str>, RegistrarError> {
+    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Cow<'a, Scope>, RegistrarError> {
         let client = match self.clients.get(params.client_id.as_ref()) {
             None => return Err(RegistrarError::Unregistered),
             Some(stored) => stored
@@ -33,6 +34,6 @@ impl Registrar for ClientMap {
             return Err(RegistrarError::MismatchedRedirect);
         }
         // Don't allow any scope deviation from the default
-        Ok(client.default_scope.clone().into())
+        Ok(Cow::Owned(client.default_scope.clone()))
     }
 }

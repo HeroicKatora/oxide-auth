@@ -9,12 +9,12 @@ type Time = DateTime<Utc>;
 pub struct NegotiationParameter<'a> {
     pub client_id: Cow<'a, str>,
     pub redirect_url: Cow<'a, Url>,
-    pub scope: Option<Cow<'a, str>>,
+    pub scope: Option<Cow<'a, Scope>>,
 }
 
 pub struct Negotiated<'a> {
     pub client_id: Cow<'a, str>,
-    pub scope: Cow<'a, str>,
+    pub scope: Cow<'a, Scope>,
     pub redirect_url: Url,
 }
 
@@ -22,14 +22,14 @@ pub struct Request<'a> {
     pub owner_id: &'a str,
     pub client_id: &'a str,
     pub redirect_url: &'a Url,
-    pub scope: &'a str,
+    pub scope: &'a Scope,
 }
 
 pub struct Grant<'a> {
     pub owner_id: Cow<'a, str>,
     pub client_id: Cow<'a, str>,
     pub redirect_url: Cow<'a, Url>,
-    pub scope: Cow<'a, str>,
+    pub scope: Cow<'a, Scope>,
     pub until: Cow<'a, Time>,
 }
 
@@ -55,7 +55,7 @@ pub trait Registrar {
     /// Determine the allowed scope and redirection url for the client. The registrar may override
     /// the scope entirely or simply substitute a default scope in case none is given. Redirection
     /// urls should be matched verbatim, not partially.
-    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Cow<'a, str>, RegistrarError>;
+    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Cow<'a, Scope>, RegistrarError>;
 }
 
 /// Authorizers create and manage authorization codes.

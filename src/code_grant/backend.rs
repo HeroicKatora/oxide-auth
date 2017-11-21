@@ -108,13 +108,18 @@ impl<'u> CodeRef<'u> {
         let state = request.state();
 
         // Setup an error with url and state, makes the code flow afterwards easier
-        let error_url = redirect_url.clone();
-        let prepared_error = || ErrorUrl::new(error_url.into_owned(), state,
+        let error_url = redirect_url.clone().into_owned();
+        let prepared_error = ErrorUrl::new(error_url.clone(), state,
             AuthorizationError::with(()));
 
         // Extract additional parameters
         let scope = request.scope();
-                // .map_err(|_| CodeError::Redirect(prepared_error().with(AuthorizationErrorType::InvalidScope)))
+        let scope = match scope.map(|scope| scope.as_ref().parse()) {
+            None => None,
+            Some(Err(_)) =>
+                return Err(CodeError::Redirect(prepared_error.with(AuthorizationErrorType::InvalidScope))),
+            Some(Ok(scope)) => Some(Cow::Owned(scope)),
+        };
 
         // Call the underlying registrar
         let parameter = NegotiationParameter {
@@ -122,11 +127,12 @@ impl<'u> CodeRef<'u> {
             scope: scope,
             redirect_url: redirect_url.clone(),
         };
+
         let scope = match self.registrar.negotiate(parameter) {
             Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
             Err(RegistrarError::Error(err)) => {
-                let error = prepared_error().with(err);
+                let error = prepared_error.with(err);
                 return Err(CodeError::Redirect(error))
             }
             Ok(negotiated) => negotiated,

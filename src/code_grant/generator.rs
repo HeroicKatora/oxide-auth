@@ -53,12 +53,13 @@ impl Assertion {
             rmp_serde::from_slice(message).map_err(|_| ())?;
 
         let redirect_url = Url::parse(redirectbytes).map_err(|_| ())?;
+        let scope = scope.parse().map_err(|_| ())?;
         let until = Utc::timestamp(&Utc, ts, tsnanos);
         Ok((Grant{
             owner_id: Cow::Owned(owner_id.to_string()),
             client_id: Cow::Owned(client_id.to_string()),
             redirect_url: Cow::Owned(redirect_url),
-            scope: Cow::Owned(scope.to_string()),
+            scope: Cow::Owned(scope),
             until: Cow::Owned(until),
         }, tag.to_string()))
     }
@@ -68,7 +69,7 @@ impl Assertion {
             &grant.owner_id,
             &grant.client_id,
             grant.redirect_url.as_str(),
-            &grant.scope,
+            &grant.scope.to_string(),
             (grant.until.timestamp(), grant.until.timestamp_subsec_nanos()),
             tag)).unwrap();
         let signature = ring::hmac::sign(&self.secret, &tosign);

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::clone::Clone;
 use std::borrow::Cow;
 use chrono::{Utc, Duration};
-use super::{Issuer, Grant, Request, Time, TokenGenerator, Url, IssuedToken};
+use super::{Issuer, Grant, Request, Scope, Time, TokenGenerator, Url, IssuedToken};
 use super::generator::Assertion;
 use ring::digest::SHA256;
 use ring::hmac::SigningKey;
@@ -11,7 +11,7 @@ use ring::hmac::SigningKey;
 struct SpecificGrant {
     owner_id: String,
     client_id: String,
-    scope: String,
+    scope: Scope,
     redirect_url: Url,
     until: Time
 }
@@ -49,7 +49,7 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
         let grant = SpecificGrant {
             owner_id: req.owner_id.to_string(),
             client_id: req.client_id.to_string(),
-            scope: req.scope.to_string(),
+            scope: req.scope.clone(),
             redirect_url: req.redirect_url.clone(),
             until: Utc::now() + Duration::hours(1),
         };
@@ -94,7 +94,7 @@ impl Issuer for TokenSigner {
         let grant = Grant {
             owner_id: req.owner_id.into(),
             client_id: req.client_id.into(),
-            scope: req.scope.into(),
+            scope: Cow::Borrowed(req.scope),
             redirect_url: Cow::Borrowed(req.redirect_url),
             until: Cow::Owned(Utc::now() + Duration::hours(1)),
         };

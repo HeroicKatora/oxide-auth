@@ -4,7 +4,7 @@ use std::{cmp, fmt, str};
 use std::collections::HashSet;
 
 /// Scope of a bearer token, a set of scope-tokens encoded with separation by spaces
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Scope {
     tokens: HashSet<String>,
 }
@@ -27,6 +27,7 @@ impl Scope {
     }
 }
 
+#[derive(Debug)]
 pub struct ParseScopeErr;
 
 impl str::FromStr for Scope {
