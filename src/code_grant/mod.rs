@@ -101,6 +101,9 @@ pub mod frontend;
 pub mod generator;
 pub mod issuer;
 pub mod registrar;
+mod scope;
+
+pub use self::scope::Scope;
 
 pub mod prelude {
     pub use super::authorizer::Storage;
