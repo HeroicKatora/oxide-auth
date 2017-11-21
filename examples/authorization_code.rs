@@ -93,7 +93,12 @@ mod main {
     /// needed in your implementation but merely exists to provide an interactive example.
     fn dummy_client(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
         use std::io::Read;
-        let code = match req.url.as_ref().query_pairs().collect::<HashMap<_, _>>().get("code") {
+        let query = req.url.as_ref().query_pairs().collect::<HashMap<_, _>>();
+        if let Some(error) = query.get("error") {
+            let message = "Error during owner authorization: ".to_string() + error.as_ref();
+            return Ok(iron::Response::with((iron::status::Ok, message)));
+        };
+        let code = match query.get("code") {
             None => return Ok(iron::Response::with((iron::status::BadRequest, "Missing code"))),
             Some(v) => v.clone()
         };
