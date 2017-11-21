@@ -68,8 +68,13 @@ impl ErrorUrl {
     }
 
     /// Modify the contained error.
-    pub fn with<M>(&mut self, modifier: M) where M: AuthorizationErrorExt {
+    pub fn with_mut<M>(&mut self, modifier: M) where M: AuthorizationErrorExt {
         modifier.modify(&mut self.error);
+    }
+
+    pub fn with<M>(mut self, modifier: M) -> Self where M: AuthorizationErrorExt {
+        modifier.modify(&mut self.error);
+        self
     }
 }
 
@@ -100,10 +105,16 @@ impl<'u> CodeRef<'u> {
         let redirect_url = request.redirect_url().ok_or(CodeError::Ignore)?;
         let redirect_url = Url::parse(redirect_url.as_ref()).map_err(|_| CodeError::Ignore)?;
         let redirect_url: Cow<Url> = Cow::Owned(redirect_url);
+        let state = request.state();
+
+        // Setup an error with url and state, makes the code flow afterwards easier
+        let error_url = redirect_url.clone();
+        let prepared_error = || ErrorUrl::new(error_url.into_owned(), state,
+            AuthorizationError::with(()));
 
         // Extract additional parameters
         let scope = request.scope();
-        let state = request.state();
+                // .map_err(|_| CodeError::Redirect(prepared_error().with(AuthorizationErrorType::InvalidScope)))
 
         // Call the underlying registrar
         let parameter = NegotiationParameter {
@@ -115,7 +126,7 @@ impl<'u> CodeRef<'u> {
             Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
             Err(RegistrarError::Error(err)) => {
-                let error = ErrorUrl::new(redirect_url.into_owned(), state, err);
+                let error = prepared_error().with(err);
                 return Err(CodeError::Redirect(error))
             }
             Ok(negotiated) => negotiated,

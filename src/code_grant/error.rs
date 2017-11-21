@@ -65,6 +65,18 @@ impl AuthorizationError {
 
 /* Error modifiers, changing or adding attributes if in proper format */
 
+impl AuthorizationErrorExt for () {
+    fn modify(self, _error: &mut AuthorizationError) { }
+}
+
+impl AuthorizationErrorExt for AuthorizationError {
+    fn modify(self, error: &mut AuthorizationError) {
+        error.error = self.error;
+        error.description = self.description;
+        error.uri = self.uri;
+    }
+}
+
 impl AuthorizationErrorExt for &'static str {
     fn modify(self, error: &mut AuthorizationError) {
         error.description = Some(Cow::Borrowed(self));
