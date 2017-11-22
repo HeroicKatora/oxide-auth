@@ -15,6 +15,7 @@ use super::{Issuer, IssuedToken, Request};
 use super::error::{AccessTokenError, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use url::Url;
 use chrono::Utc;
 use serde_json;
@@ -68,6 +69,8 @@ pub struct AuthorizationRequest<'a> {
     request: &'a CodeRequest,
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
 impl ErrorUrl {
     /// Construct a new error, already fixing the state parameter if it exists.
     fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl where S: AsRef<str> {
@@ -97,6 +100,7 @@ impl Into<Url> for ErrorUrl {
     }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl From<AccessTokenError> for IssuerError {
     fn from(error: AccessTokenError) -> IssuerError {
@@ -114,6 +118,25 @@ impl IssuerError {
         serde_json::to_string(&asmap).unwrap()
     }
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct BearerToken(IssuedToken, String);
+
+impl BearerToken {
+    pub fn to_json(self) -> String {
+        let remaining = self.0.until.signed_duration_since(Utc::now());
+        let kvmap: HashMap<_, _> = vec![
+            ("access_token", self.0.token),
+            ("refresh_token", self.0.refresh),
+            ("token_type", "bearer".to_string()),
+            ("expires_in", remaining.num_seconds().to_string()),
+            ("scope", self.1)].into_iter().collect();
+        serde_json::to_string(&kvmap).unwrap()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl<'u> CodeRef<'u> {
     /// Retrieve allowed scope and redirect url from the registrar.
@@ -233,7 +256,7 @@ pub struct IssuerRef<'a> {
 impl<'u> IssuerRef<'u> {
     /// Try to redeem an authorization code.
     pub fn use_code<'a>(&'a mut self, code: String, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
-    -> AccessTokenResult<IssuedToken> {
+    -> AccessTokenResult<BearerToken> {
         let saved_params = match self.authorizer.extract(code.as_ref()) {
             None => return Err(AccessTokenError::with(AccessTokenErrorType::InvalidRequest).into()),
             Some(v) => v,
@@ -253,7 +276,7 @@ impl<'u> IssuerRef<'u> {
             redirect_url: &saved_params.redirect_url,
             scope: &saved_params.scope,
         });
-        Ok(token)
+        Ok(BearerToken{0: token, 1: saved_params.scope.as_ref().to_string()})
     }
 
     pub fn with<'a>(t: &'a mut Authorizer, i: &'a mut Issuer) -> IssuerRef<'a> {

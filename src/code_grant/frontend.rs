@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use super::backend::{CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerRef};
 use url::Url;
-use serde_json;
 
 /// Holds the decode query fragments from the url
 struct ClientParameter<'a> {
@@ -188,18 +187,10 @@ impl GrantFlow {
         Req: WebRequest
     {
         let PreparedGrant { code, client, redirect_url, .. } = prepared;
-        let token = match issuer.use_code(code.to_string(), client.into(), redirect_url.into()) {
-            Err(json_data) => return Req::Response::json(&json_data.to_json()),
-            Ok(token) => token,
-        };
-
-        let serialized = serde_json::to_string(&[
-                ("token", token.token.as_str()),
-                ("refresh", token.refresh.as_str()),
-            ].iter().cloned().collect::<HashMap<_, _>>())
-            .unwrap(); // We control the input, this is valid json
-
-        Req::Response::json(&serialized)
+        match issuer.use_code(code.to_string(), client.into(), redirect_url.into()) {
+            Err(json_data) => Req::Response::json(&json_data.to_json()),
+            Ok(token) => Req::Response::json(&token.to_json()),
+        }
     }
 }
 
