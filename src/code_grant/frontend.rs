@@ -189,7 +189,7 @@ impl GrantFlow {
     {
         let PreparedGrant { code, client, redirect_url, .. } = prepared;
         let token = match issuer.use_code(code.to_string(), client.into(), redirect_url.into()) {
-            Err(st) => return Err(OAuthError::BadRequest(st.into_owned())),
+            Err(json_data) => return Req::Response::json(&json_data.to_json()),
             Ok(token) => token,
         };
 

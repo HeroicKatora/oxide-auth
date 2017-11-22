@@ -12,10 +12,12 @@
 use super::{Authorizer, Registrar, RegistrarError};
 use super::{Negotiated, NegotiationParameter};
 use super::{Issuer, IssuedToken, Request};
+use super::error::{AccessTokenError, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
 use std::borrow::Cow;
 use url::Url;
 use chrono::Utc;
+use serde_json;
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait CodeRequest {
@@ -49,7 +51,14 @@ pub struct ErrorUrl {
     error: AuthorizationError,
 }
 
+/// Simple wrapper around AccessTokenError to imbue the type with addtional json functionality. In
+/// addition this enforces backend specific behaviour for obtaining or handling the access error.
+pub struct IssuerError {
+    error: AccessTokenError,
+}
+
 type CodeResult<T> = Result<T, CodeError>;
+type AccessTokenResult<T> = Result<T, IssuerError>;
 
 /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
 /// can signal a reponse using this object.
@@ -85,6 +94,24 @@ impl Into<Url> for ErrorUrl {
         url.query_pairs_mut()
             .extend_pairs(self.error.into_iter());
         url
+    }
+}
+
+
+impl From<AccessTokenError> for IssuerError {
+    fn from(error: AccessTokenError) -> IssuerError {
+        IssuerError { error }
+    }
+}
+
+impl IssuerError {
+    pub fn to_json(self) -> String {
+        use std::iter::IntoIterator;
+        use std::collections::HashMap;
+        let asmap = self.error.into_iter()
+            .map(|(k, v)| (k.to_string(), v.into_owned()))
+            .collect::<HashMap<String, String>>();
+        serde_json::to_string(&asmap).unwrap()
     }
 }
 
@@ -206,18 +233,18 @@ pub struct IssuerRef<'a> {
 impl<'u> IssuerRef<'u> {
     /// Try to redeem an authorization code.
     pub fn use_code<'a>(&'a mut self, code: String, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
-    -> Result<IssuedToken, Cow<'static, str>> {
+    -> AccessTokenResult<IssuedToken> {
         let saved_params = match self.authorizer.extract(code.as_ref()) {
-            None => return Err("Inactive code".into()),
+            None => return Err(AccessTokenError::with(AccessTokenErrorType::InvalidRequest).into()),
             Some(v) => v,
         };
 
         if saved_params.client_id != expected_client || expected_url != saved_params.redirect_url.as_str() {
-            return Err("Invalid code".into())
+            return Err(AccessTokenError::with(AccessTokenErrorType::InvalidGrant).into())
         }
 
         if saved_params.until.as_ref() < &Utc::now() {
-            return Err("Code no longer valid".into())
+            return Err(AccessTokenError::with((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
         }
 
         let token = self.issuer.issue(Request{
