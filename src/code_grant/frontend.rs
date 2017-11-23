@@ -16,10 +16,11 @@ use url::Url;
 
 /// Holds the decode query fragments from the url
 struct ClientParameter<'a> {
-    pub client_id: Option<Cow<'a, str>>,
-    pub scope: Option<Cow<'a, str>>,
-    pub redirect_url: Option<Cow<'a, str>>,
-    pub state: Option<Cow<'a, str>>,
+    valid: bool,
+    client_id: Option<Cow<'a, str>>,
+    scope: Option<Cow<'a, str>>,
+    redirect_url: Option<Cow<'a, str>>,
+    state: Option<Cow<'a, str>>,
 }
 
 /// Sent to the OwnerAuthorizer to request owner permission.
@@ -37,6 +38,7 @@ pub enum Authentication {
 }
 
 struct AccessTokenParameter<'a> {
+    valid: bool,
     client_id: Option<Cow<'a, str>>,
     redirect_url: Option<Cow<'a, str>>,
     grant_type: Option<Cow<'a, str>>,
@@ -45,8 +47,13 @@ struct AccessTokenParameter<'a> {
 
 pub trait WebRequest {
     type Response: WebResponse;
-    fn query(&mut self) -> Option<HashMap<String, Vec<String>>>;
-    fn urlbody(&mut self) -> Option<&HashMap<String, Vec<String>>>;
+    /// Retrieve a parsed version of the url query. An Err return value indicates a malformed query
+    /// or an otherwise malformed WebRequest. Note that an empty query should result in
+    /// `Ok(HashMap::new())` instead of an Err.
+    fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()>;
+    /// Retriev the parsed `application/x-form-urlencoded` body of the request. An Err value
+    /// indicates a malformed body or a different Content-Type.
+    fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()>;
 }
 
 pub trait WebResponse where Self: Sized {
@@ -89,6 +96,7 @@ fn extract_parameters(params: HashMap<String, Vec<String>>) -> ClientParameter<'
         .collect::<HashMap<&str, &str>>();
 
     ClientParameter{
+        valid: true,
         client_id: map.get("client_id").map(|client| client.to_string().into()),
         scope: map.get("scope").map(|scope| scope.to_string().into()),
         redirect_url: map.get("redirect_url").map(|url| url.to_string().into()),
@@ -97,21 +105,26 @@ fn extract_parameters(params: HashMap<String, Vec<String>>) -> ClientParameter<'
 }
 
 impl<'s> CodeRequest for ClientParameter<'s> {
+    fn valid(&self) -> bool { self.valid }
     fn client_id(&self) -> Option<Cow<str>> { self.client_id.as_ref().map(|c| c.as_ref().into()) }
     fn scope(&self) -> Option<Cow<str>> { self.scope.as_ref().map(|c| c.as_ref().into()) }
     fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.as_ref().map(|c| c.as_ref().into()) }
     fn state(&self) -> Option<Cow<str>> { self.state.as_ref().map(|c| c.as_ref().into()) }
 }
 
+impl<'s> ClientParameter<'s> {
+    fn invalid() -> Self {
+        ClientParameter { valid: false, client_id: None, scope: None,
+            redirect_url: None, state: None }
+    }
+}
+
 impl AuthorizationFlow {
     /// Idempotent data processing, checks formats.
     pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, OAuthError> {
-        let urlparameters = match incoming.query() {
-            None => return Err(OAuthError::MissingQuery),
-            Some(res) => res,
-        };
-
-        let urldecoded = extract_parameters(urlparameters);
+        let urldecoded = incoming.query()
+            .map(extract_parameters)
+            .unwrap_or_else(ClientParameter::invalid);
 
         Ok(PreparedAuthorization{request: incoming, urldecoded})
     }
@@ -167,6 +180,7 @@ fn extract_access_token<'l>(params: &'l HashMap<String, Vec<String>>) -> AccessT
         .collect::<HashMap<_, _>>();
 
     AccessTokenParameter {
+        valid: true,
         client_id: map.get("client_id").map(|v| (*v).into()),
         code: map.get("code").map(|v| (*v).into()),
         redirect_url: map.get("redirect_url").map(|v| (*v).into()),
@@ -175,6 +189,7 @@ fn extract_access_token<'l>(params: &'l HashMap<String, Vec<String>>) -> AccessT
 }
 
 impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
+    fn valid(&self) -> bool { self.valid }
     fn code(&self) -> Option<Cow<str>> { self.code.clone() }
     fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
     fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.clone() }
@@ -182,13 +197,20 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
     fn authorization(&self) -> Option<(Cow<str>, Cow<str>)> { None }
 }
 
+impl<'l> AccessTokenParameter<'l> {
+    fn invalid() -> Self {
+        AccessTokenParameter { valid: false, code: None, client_id: None, redirect_url: None,
+            grant_type: None, authorization: None }
+    }
+}
+
 impl GrantFlow {
     pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedGrant<W>, OAuthError> {
-        let query = match req.urlbody() {
-            None => return Err(OAuthError::BadRequest("Invalid url encoded body".to_string())),
-            Some(v) => v,
-        };
-        Ok(PreparedGrant { params: extract_access_token(query), req: PhantomData })
+        let params = req.urlbody()
+            .map(extract_access_token)
+            .unwrap_or_else(AccessTokenParameter::invalid);
+
+        Ok(PreparedGrant { params: params, req: PhantomData })
     }
 
     pub fn handle<Req>(mut issuer: IssuerRef, prepared: PreparedGrant<Req>) -> Result<<Req as WebRequest>::Response, OAuthError> where

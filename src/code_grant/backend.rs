@@ -134,9 +134,18 @@ impl BearerToken {
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait CodeRequest {
+    /// Received request might not be encoded correctly. This method gives implementors the chance
+    /// to signal that a request was received but its encoding was generally malformed. If this is
+    /// the case, then no other attribute will be queried. This method exists mainly to make
+    /// frontends straightforward by not having them handle special cases for malformed requests.
+    fn valid(&self) -> bool;
+    /// Identity of the client trying to gain an oauth token.
     fn client_id(&self) -> Option<Cow<str>>;
+    /// Optionally specifies the requested scope
     fn scope(&self) -> Option<Cow<str>>;
+    /// Valid request have (one of) the registered redirect urls for this client.
     fn redirect_url(&self) -> Option<Cow<str>>;
+    /// Optional parameter the client can use to identify the redirected user-agent.
     fn state(&self) -> Option<Cow<str>>;
 }
 
@@ -166,6 +175,10 @@ impl<'u> CodeRef<'u> {
     /// response.
     pub fn negotiate<'r>(self, request: &'r CodeRequest)
     -> CodeResult<AuthorizationRequest<'r>> where 'u: 'r {
+        if !request.valid() {
+            return Err(CodeError::Ignore)
+        }
+
         // Check preconditions
         let client_id = request.client_id().ok_or(CodeError::Ignore)?;
         let redirect_url = request.redirect_url().ok_or(CodeError::Ignore)?;
@@ -271,11 +284,20 @@ pub struct IssuerRef<'a> {
 
 /// Necessary
 pub trait AccessTokenRequest {
+    /// Received request might not be encoded correctly. This method gives implementors the chance
+    /// to signal that a request was received but its encoding was generally malformed. If this is
+    /// the case, then no other attribute will be queried. This method exists mainly to make
+    /// frontends straightforward by not having them handle special cases for malformed requests.
+    fn valid(&self) -> bool;
+    /// The authorization code grant for which an access token is wanted.
     fn code(&self) -> Option<Cow<str>>;
-    /// User:password of a basic authorization header
+    /// User:password of a basic authorization header.
     fn authorization(&self) -> Option<(Cow<str>, Cow<str>)>;
+    /// The client_id, optional parameter for public clients.
     fn client_id(&self) -> Option<Cow<str>>;
+    /// Valid request have the redirect url used to request the authorization code grant.
     fn redirect_url(&self) -> Option<Cow<str>>;
+    /// Valid requests have this set to "authorization_code"
     fn grant_type(&self) -> Option<Cow<str>>;
 }
 
@@ -283,6 +305,10 @@ impl<'u> IssuerRef<'u> {
     /// Try to redeem an authorization code.
     pub fn use_code<'r>(&mut self, request: &'r AccessTokenRequest)
     -> AccessTokenResult<BearerToken> where 'u: 'r {
+        if !request.valid() {
+            return Err(IssuerError::invalid())
+        }
+
         match request.grant_type() {
             Some(ref cow) if cow == "authorization_code" => (),
             None => return Err(IssuerError::invalid(())),
