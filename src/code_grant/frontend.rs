@@ -60,6 +60,13 @@ pub trait WebResponse where Self: Sized {
     fn redirect_error(target: ErrorUrl) -> Result<Self, OAuthError> {
         Self::redirect(target.into())
     }
+
+    /// Set the response status to 400
+    fn as_client_error(self) -> Result<Self, OAuthError>;
+    /// Set the response status to 401
+    fn as_unauthorized(self) -> Result<Self, OAuthError>;
+    /// Add an Authorization header
+    fn with_authorization(self, kind: &str) -> Result<Self, OAuthError>;
 }
 
 pub trait OwnerAuthorizer {
@@ -190,9 +197,9 @@ impl GrantFlow {
         let PreparedGrant { params, .. } = prepared;
         match issuer.use_code(&params) {
             Err(IssuerError::Invalid(json_data))
-                => Req::Response::json(&json_data.to_json()),
+                => return Req::Response::json(&json_data.to_json())?.as_client_error(),
             Err(IssuerError::Unauthorized(json_data, scheme))
-                => Req::Response::json(&json_data.to_json()),
+                => return Req::Response::json(&json_data.to_json())?.as_unauthorized()?.with_authorization(&scheme),
             Ok(token) => Req::Response::json(&token.to_json()),
         }
     }

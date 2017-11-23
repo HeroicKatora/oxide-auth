@@ -204,6 +204,18 @@ impl WebResponse for iron::Response {
             data,
         )))
     }
+
+    fn as_client_error(self) -> Result<Self, OAuthError> {
+        Ok(self)
+    }
+
+    fn as_unauthorized(self) -> Result<Self, OAuthError> {
+        Ok(self)
+    }
+
+    fn with_authorization(self, kind: &str) -> Result<Self, OAuthError> {
+        Ok(self)
+    }
 }
 
 impl<R, A, I> IronGranter<R, A, I> where
