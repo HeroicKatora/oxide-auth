@@ -306,7 +306,7 @@ impl<'u> IssuerRef<'u> {
     pub fn use_code<'r>(&mut self, request: &'r AccessTokenRequest)
     -> AccessTokenResult<BearerToken> where 'u: 'r {
         if !request.valid() {
-            return Err(IssuerError::invalid())
+            return Err(IssuerError::invalid(()))
         }
 
         match request.grant_type() {

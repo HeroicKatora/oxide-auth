@@ -124,7 +124,7 @@ impl AuthorizationFlow {
     pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, OAuthError> {
         let urldecoded = incoming.query()
             .map(extract_parameters)
-            .unwrap_or_else(ClientParameter::invalid);
+            .unwrap_or_else(|_| ClientParameter::invalid());
 
         Ok(PreparedAuthorization{request: incoming, urldecoded})
     }
@@ -200,7 +200,7 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
 impl<'l> AccessTokenParameter<'l> {
     fn invalid() -> Self {
         AccessTokenParameter { valid: false, code: None, client_id: None, redirect_url: None,
-            grant_type: None, authorization: None }
+            grant_type: None, }
     }
 }
 
@@ -208,7 +208,7 @@ impl GrantFlow {
     pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedGrant<W>, OAuthError> {
         let params = req.urlbody()
             .map(extract_access_token)
-            .unwrap_or_else(AccessTokenParameter::invalid);
+            .unwrap_or_else(|_| AccessTokenParameter::invalid());
 
         Ok(PreparedGrant { params: params, req: PhantomData })
     }

@@ -175,12 +175,12 @@ impl<'l, 'a, 'b: 'a> OwnerAuthorizer for SpecificOwnerAuthorizer<'l, 'a, 'b> {
 
 impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
     type Response = iron::Response;
-    fn query(&mut self) -> Option<HashMap<String, Vec<String>>> {
-        self.get::<UrlEncodedQuery>().ok()
+    fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()> {
+        self.get::<UrlEncodedQuery>().map_err(|_| ())
     }
 
-    fn urlbody(&mut self) -> Option<&HashMap<String, Vec<String>>> {
-        self.get_ref::<UrlEncodedBody>().ok()
+    fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()> {
+        self.get_ref::<UrlEncodedBody>().map_err(|_| ())
     }
 }
 
@@ -205,15 +205,18 @@ impl WebResponse for iron::Response {
         )))
     }
 
-    fn as_client_error(self) -> Result<Self, OAuthError> {
+    fn as_client_error(mut self) -> Result<Self, OAuthError> {
+        self.status = Some(iron::status::BadRequest);
         Ok(self)
     }
 
-    fn as_unauthorized(self) -> Result<Self, OAuthError> {
+    fn as_unauthorized(mut self) -> Result<Self, OAuthError> {
+        self.status = Some(iron::status::Unauthorized);
         Ok(self)
     }
 
-    fn with_authorization(self, kind: &str) -> Result<Self, OAuthError> {
+    fn with_authorization(mut self, kind: &str) -> Result<Self, OAuthError> {
+        self.headers.set_raw("WWW-Authenticate", vec![kind.bytes().collect()]);
         Ok(self)
     }
 }
