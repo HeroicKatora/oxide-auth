@@ -12,7 +12,7 @@
 use super::{Authorizer, Registrar, RegistrarError};
 use super::{Negotiated, NegotiationParameter};
 use super::{Issuer, IssuedToken, Request};
-use super::error::{AccessTokenError, AccessTokenErrorType};
+use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -38,9 +38,15 @@ pub struct ErrorUrl {
     error: AuthorizationError,
 }
 
+/// Defines actions for the response to an access token request.
+pub enum IssuerError {
+    Invalid(ErrorDescription),
+    Unauthorized(ErrorDescription, String),
+}
+
 /// Simple wrapper around AccessTokenError to imbue the type with addtional json functionality. In
 /// addition this enforces backend specific behaviour for obtaining or handling the access error.
-pub struct IssuerError {
+pub struct ErrorDescription {
     error: AccessTokenError,
 }
 
@@ -80,13 +86,21 @@ impl Into<Url> for ErrorUrl {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl From<AccessTokenError> for IssuerError {
-    fn from(error: AccessTokenError) -> IssuerError {
-        IssuerError { error }
+impl IssuerError {
+    fn invalid<Mod>(modifier: Mod) -> IssuerError where Mod: AccessTokenErrorExt {
+        IssuerError::Invalid(ErrorDescription{
+            error: AccessTokenError::with((AccessTokenErrorType::InvalidRequest, modifier))
+        })
+    }
+
+    fn unauthorized<Mod>(modifier: Mod, authtype: &str) -> IssuerError where Mod: AccessTokenErrorExt {
+        IssuerError::Unauthorized(
+            ErrorDescription{error: AccessTokenError::with((AccessTokenErrorType::InvalidClient, modifier))},
+            authtype.to_string())
     }
 }
 
-impl IssuerError {
+impl ErrorDescription {
     pub fn to_json(self) -> String {
         use std::iter::IntoIterator;
         use std::collections::HashMap;
@@ -271,36 +285,38 @@ impl<'u> IssuerRef<'u> {
     -> AccessTokenResult<BearerToken> where 'u: 'r {
         match request.grant_type() {
             Some(ref cow) if cow == "authorization_code" => (),
-            None => return Err(AccessTokenError::with(AccessTokenErrorType::InvalidRequest).into()),
-            Some(_) => return Err(AccessTokenError::with(AccessTokenErrorType::UnsupportedGrantType).into()),
+            None => return Err(IssuerError::invalid(())),
+            Some(_) => return Err(IssuerError::invalid(AccessTokenErrorType::UnsupportedGrantType)),
         };
 
         let code = request.code()
-            .ok_or(AccessTokenError::with(AccessTokenErrorType::InvalidRequest))?;
+            .ok_or(IssuerError::invalid(()))?;
         let code = code.as_ref();
 
         let saved_params = match self.authorizer.extract(code) {
-            None => return Err(AccessTokenError::with(AccessTokenErrorType::InvalidRequest).into()),
+            None => return Err(IssuerError::invalid(())),
             Some(v) => v,
         };
 
         let redirect_url = request.redirect_url()
-            .ok_or(AccessTokenError::with(AccessTokenErrorType::InvalidRequest))?;
+            .ok_or(IssuerError::invalid(()))?;
         let redirect_url = redirect_url.as_ref();
 
         let client = match request.authorization() {
-            Some((client, _pass)) => client /*TODO validate with the registrar*/,
+            Some((_client, _pass)) => Err(())
+                /*TODO validate with the registrar*/
+                .map_err(|_| IssuerError::unauthorized((), "basic"))?,
             None => request.client_id()
                 /*TODO check this is not a confidential client*/
-                .ok_or(AccessTokenError::with(AccessTokenErrorType::InvalidRequest))?,
+                .ok_or(IssuerError::invalid(()))?,
         };
 
         if (saved_params.client_id.as_ref(), saved_params.redirect_url.as_str()) != (&client, redirect_url) {
-            return Err(AccessTokenError::with(AccessTokenErrorType::InvalidGrant).into())
+            return Err(IssuerError::invalid(AccessTokenErrorType::InvalidGrant))
         }
 
         if saved_params.until.as_ref() < &Utc::now() {
-            return Err(AccessTokenError::with((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
+            return Err(IssuerError::invalid((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
         }
 
         let token = self.issuer.issue(Request{

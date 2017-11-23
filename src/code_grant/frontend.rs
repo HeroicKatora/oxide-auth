@@ -11,7 +11,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerRef};
+use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerError, IssuerRef};
 use url::Url;
 
 /// Holds the decode query fragments from the url
@@ -189,7 +189,10 @@ impl GrantFlow {
     {
         let PreparedGrant { params, .. } = prepared;
         match issuer.use_code(&params) {
-            Err(json_data) => Req::Response::json(&json_data.to_json()),
+            Err(IssuerError::Invalid(json_data))
+                => Req::Response::json(&json_data.to_json()),
+            Err(IssuerError::Unauthorized(json_data, scheme))
+                => Req::Response::json(&json_data.to_json()),
             Ok(token) => Req::Response::json(&token.to_json()),
         }
     }
