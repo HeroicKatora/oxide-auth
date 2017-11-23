@@ -11,7 +11,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use super::backend::{CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerRef};
+use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerRef};
 use url::Url;
 
 /// Holds the decode query fragments from the url
@@ -34,6 +34,13 @@ pub enum Authentication {
     Failed,
     InProgress,
     Authenticated(String),
+}
+
+struct AccessTokenParameter<'a> {
+    client_id: Option<Cow<'a, str>>,
+    redirect_url: Option<Cow<'a, str>>,
+    grant_type: Option<Cow<'a, str>>,
+    code: Option<Cow<'a, str>>,
 }
 
 pub trait WebRequest {
@@ -68,18 +75,18 @@ pub struct PreparedAuthorization<'l, Req> where
     urldecoded: ClientParameter<'l>,
 }
 
-fn extract_parameters(params: HashMap<String, Vec<String>>) -> Result<ClientParameter<'static>, String> {
+fn extract_parameters(params: HashMap<String, Vec<String>>) -> ClientParameter<'static> {
     let map = params.iter()
         .filter(|&(_, v)| v.len() == 1)
         .map(|(k, v)| (k.as_str(), v[0].as_str()))
         .collect::<HashMap<&str, &str>>();
 
-    Ok(ClientParameter{
+    ClientParameter{
         client_id: map.get("client_id").map(|client| client.to_string().into()),
         scope: map.get("scope").map(|scope| scope.to_string().into()),
         redirect_url: map.get("redirect_url").map(|url| url.to_string().into()),
         state: map.get("state").map(|state| state.to_string().into()),
-    })
+    }
 }
 
 impl<'s> CodeRequest for ClientParameter<'s> {
@@ -97,10 +104,7 @@ impl AuthorizationFlow {
             Some(res) => res,
         };
 
-        let urldecoded = match extract_parameters(urlparameters) {
-            Err(st) => return Err(OAuthError::BadRequest(st)),
-            Ok(url) => url,
-        };
+        let urldecoded = extract_parameters(urlparameters);
 
         Ok(PreparedAuthorization{request: incoming, urldecoded})
     }
@@ -145,49 +149,46 @@ pub struct GrantFlow;
 pub struct PreparedGrant<'l, Req> where
     Req: WebRequest + 'l,
 {
-    client: &'l str,
-    code: &'l str,
-    redirect_url: &'l str,
+    params: AccessTokenParameter<'l>,
     req: PhantomData<Req>,
+}
+
+fn extract_access_token<'l>(params: &'l HashMap<String, Vec<String>>) -> AccessTokenParameter<'l> {
+    let map = params.iter()
+        .filter(|&(_, v)| v.len() == 1)
+        .map(|(k, v)| (k.as_str(), v[0].as_str()))
+        .collect::<HashMap<_, _>>();
+
+    AccessTokenParameter {
+        client_id: map.get("client_id").map(|v| (*v).into()),
+        code: map.get("code").map(|v| (*v).into()),
+        redirect_url: map.get("redirect_url").map(|v| (*v).into()),
+        grant_type: map.get("grant_type").map(|v| (*v).into()),
+    }
+}
+
+impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
+    fn code(&self) -> Option<Cow<str>> { self.code.clone() }
+    fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
+    fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.clone() }
+    fn grant_type(&self) -> Option<Cow<str>> { self.grant_type.clone() }
+    fn authorization(&self) -> Option<(Cow<str>, Cow<str>)> { None }
 }
 
 impl GrantFlow {
     pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedGrant<W>, OAuthError> {
-        use std::borrow::Cow;
-        let (client, code, redirect_url) = {
-            let query = match req.urlbody() {
-                None => return Err(OAuthError::BadRequest("Invalid url encoded body".to_string())),
-                Some(v) => v,
-            };
-
-            fn single_result<'l>(list: &'l Vec<String>) -> Result<&'l str, Cow<'static, str>>{
-                if list.len() == 1 { Ok(&list[0]) } else { Err("Invalid parameter".into()) }
-            }
-            let get_param = |name: &str| query.get(name).ok_or(Cow::Owned("Missing parameter".to_owned() + name)).and_then(single_result);
-
-            let grant_typev = get_param("grant_type").and_then(
-                |grant| if grant == "authorization_code" { Ok(grant) } else { Err(Cow::Owned("Invalid grant type".to_owned() + grant)) });
-            let client_idv = get_param("client_id");
-            let codev = get_param("code");
-            let redirect_urlv = get_param("redirect_url");
-
-            match (grant_typev, client_idv, codev, redirect_urlv) {
-                (Err(cause), _, _, _) => return Err(OAuthError::BadRequest(cause.into_owned())),
-                (_, Err(cause), _, _) => return Err(OAuthError::BadRequest(cause.into_owned())),
-                (_, _, Err(cause), _) => return Err(OAuthError::BadRequest(cause.into_owned())),
-                (_, _, _, Err(cause)) => return Err(OAuthError::BadRequest(cause.into_owned())),
-                (Ok(_), Ok(client), Ok(code), Ok(redirect))
-                    => (client, code, redirect)
-            }
+        let query = match req.urlbody() {
+            None => return Err(OAuthError::BadRequest("Invalid url encoded body".to_string())),
+            Some(v) => v,
         };
-        Ok(PreparedGrant { client, code, redirect_url, req: PhantomData })
+        Ok(PreparedGrant { params: extract_access_token(query), req: PhantomData })
     }
 
     pub fn handle<Req>(mut issuer: IssuerRef, prepared: PreparedGrant<Req>) -> Result<<Req as WebRequest>::Response, OAuthError> where
         Req: WebRequest
     {
-        let PreparedGrant { code, client, redirect_url, .. } = prepared;
-        match issuer.use_code(code.to_string(), client.into(), redirect_url.into()) {
+        let PreparedGrant { params, .. } = prepared;
+        match issuer.use_code(&params) {
             Err(json_data) => Req::Response::json(&json_data.to_json()),
             Ok(token) => Req::Response::json(&token.to_json()),
         }

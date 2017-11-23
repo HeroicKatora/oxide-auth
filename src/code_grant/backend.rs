@@ -20,20 +20,6 @@ use url::Url;
 use chrono::Utc;
 use serde_json;
 
-/// Interface required from a request to determine the handling in the backend.
-pub trait CodeRequest {
-    fn client_id(&self) -> Option<Cow<str>>;
-    fn scope(&self) -> Option<Cow<str>>;
-    fn redirect_url(&self) -> Option<Cow<str>>;
-    fn state(&self) -> Option<Cow<str>>;
-}
-
-/// CodeRef is a thin wrapper around necessary types to execute an authorization code grant.
-pub struct CodeRef<'a> {
-    registrar: &'a Registrar,
-    authorizer: &'a mut Authorizer,
-}
-
 /// Defines the correct treatment of the error.
 /// Not all errors are signalled to the requesting party, especially when impersonation is possible
 /// it is integral for security to resolve the error internally instead of redirecting the user
@@ -60,14 +46,6 @@ pub struct IssuerError {
 
 type CodeResult<T> = Result<T, CodeError>;
 type AccessTokenResult<T> = Result<T, IssuerError>;
-
-/// Represents a valid, currently pending authorization request not bound to an owner. The frontend
-/// can signal a reponse using this object.
-pub struct AuthorizationRequest<'a> {
-    negotiated: Negotiated<'a>,
-    code: CodeRef<'a>,
-    request: &'a CodeRequest,
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -136,7 +114,31 @@ impl BearerToken {
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////
+//                                     Authorization Endpoint                                   //
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Interface required from a request to determine the handling in the backend.
+pub trait CodeRequest {
+    fn client_id(&self) -> Option<Cow<str>>;
+    fn scope(&self) -> Option<Cow<str>>;
+    fn redirect_url(&self) -> Option<Cow<str>>;
+    fn state(&self) -> Option<Cow<str>>;
+}
+
+/// CodeRef is a thin wrapper around necessary types to execute an authorization code grant.
+pub struct CodeRef<'a> {
+    registrar: &'a Registrar,
+    authorizer: &'a mut Authorizer,
+}
+
+/// Represents a valid, currently pending authorization request not bound to an owner. The frontend
+/// can signal a reponse using this object.
+pub struct AuthorizationRequest<'a> {
+    negotiated: Negotiated<'a>,
+    code: CodeRef<'a>,
+    request: &'a CodeRequest,
+}
 
 impl<'u> CodeRef<'u> {
     /// Retrieve allowed scope and redirect url from the registrar.
@@ -253,16 +255,47 @@ pub struct IssuerRef<'a> {
     issuer: &'a mut Issuer,
 }
 
+/// Necessary
+pub trait AccessTokenRequest {
+    fn code(&self) -> Option<Cow<str>>;
+    /// User:password of a basic authorization header
+    fn authorization(&self) -> Option<(Cow<str>, Cow<str>)>;
+    fn client_id(&self) -> Option<Cow<str>>;
+    fn redirect_url(&self) -> Option<Cow<str>>;
+    fn grant_type(&self) -> Option<Cow<str>>;
+}
+
 impl<'u> IssuerRef<'u> {
     /// Try to redeem an authorization code.
-    pub fn use_code<'a>(&'a mut self, code: String, expected_client: Cow<'a, str>, expected_url: Cow<'a, str>)
-    -> AccessTokenResult<BearerToken> {
-        let saved_params = match self.authorizer.extract(code.as_ref()) {
+    pub fn use_code<'r>(&mut self, request: &'r AccessTokenRequest)
+    -> AccessTokenResult<BearerToken> where 'u: 'r {
+        match request.grant_type() {
+            Some(ref cow) if cow == "authorization_code" => (),
+            None => return Err(AccessTokenError::with(AccessTokenErrorType::InvalidRequest).into()),
+            Some(_) => return Err(AccessTokenError::with(AccessTokenErrorType::UnsupportedGrantType).into()),
+        };
+
+        let code = request.code()
+            .ok_or(AccessTokenError::with(AccessTokenErrorType::InvalidRequest))?;
+        let code = code.as_ref();
+
+        let saved_params = match self.authorizer.extract(code) {
             None => return Err(AccessTokenError::with(AccessTokenErrorType::InvalidRequest).into()),
             Some(v) => v,
         };
 
-        if saved_params.client_id != expected_client || expected_url != saved_params.redirect_url.as_str() {
+        let redirect_url = request.redirect_url()
+            .ok_or(AccessTokenError::with(AccessTokenErrorType::InvalidRequest))?;
+        let redirect_url = redirect_url.as_ref();
+
+        let client = match request.authorization() {
+            Some((client, _pass)) => client /*TODO validate with the registrar*/,
+            None => request.client_id()
+                /*TODO check this is not a confidential client*/
+                .ok_or(AccessTokenError::with(AccessTokenErrorType::InvalidRequest))?,
+        };
+
+        if (saved_params.client_id.as_ref(), saved_params.redirect_url.as_str()) != (&client, redirect_url) {
             return Err(AccessTokenError::with(AccessTokenErrorType::InvalidGrant).into())
         }
 
