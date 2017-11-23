@@ -103,6 +103,9 @@ pub mod issuer;
 pub mod registrar;
 mod scope;
 
+#[cfg(test)]
+mod tests;
+
 pub use self::scope::Scope;
 
 pub mod prelude {
