@@ -11,6 +11,8 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::fmt;
+use std::error;
 use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerError, IssuerRef};
 use super::backend::{AccessError, GuardRequest, GuardRef};
 use url::Url;
@@ -274,10 +276,23 @@ impl AccessFlow {
         })
     }
 }
+
 #[derive(Debug)]
 pub enum OAuthError {
     ParameterNegotiationFailed,
     AuthorizationFailed,
     BadRequest(String),
     Other(String),
+}
+
+impl fmt::Display for OAuthError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        fmt.write_str("OAuthError")
+    }
+}
+
+impl error::Error for OAuthError {
+    fn description(&self) -> &str {
+        "OAuthError"
+    }
 }

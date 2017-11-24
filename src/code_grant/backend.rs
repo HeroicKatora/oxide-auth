@@ -412,8 +412,8 @@ impl<'a> GuardRef<'a> {
 
     /// Construct a guard from an issuer backend and a choice of scopes. A grant need only have
     /// ONE of the scopes to access the resource but each scope can require multiple subscopes.
-    pub fn with<I, S>(issuer: &'a mut I, scopes: &'a mut S) -> Self
-    where I: AsMut<Issuer>, S: AsMut<[Scope]> {
-        GuardRef { scopes: scopes.as_mut(), issuer: issuer.as_mut() }
+    pub fn with<S>(issuer: &'a mut Issuer, scopes: &'a S) -> Self
+    where S: AsRef<[Scope]> {
+        GuardRef { scopes: scopes.as_ref(), issuer: issuer }
     }
 }

@@ -110,7 +110,7 @@ pub use self::scope::Scope;
 
 pub mod prelude {
     pub use super::authorizer::Storage;
-    pub use super::backend::{CodeRef, IssuerRef};
+    pub use super::backend::{CodeRef, IssuerRef, GuardRef};
     pub use super::issuer::{TokenMap, TokenSigner};
     pub use super::generator::RandomGenerator;
     pub use super::registrar::ClientMap;

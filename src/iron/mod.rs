@@ -61,8 +61,9 @@ extern crate urlencoded;
 
 use super::code_grant::prelude::*;
 use super::code_grant::{Authorizer, Issuer, Registrar};
-use super::code_grant::frontend::{AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
+use super::code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
 pub use super::code_grant::frontend::{AuthenticationRequest, Authentication, OAuthError};
+pub use super::code_grant::Scope;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
@@ -112,6 +113,14 @@ pub struct IronTokenRequest<A, I> where
     I: Issuer + Send + 'static
 {
     authorizer: Arc<Mutex<A>>,
+    issuer: Arc<Mutex<I>>,
+}
+
+/// Protects a resource as an AroundMiddleware
+pub struct IronGuard<I> where
+    I: Issuer + Send + 'static
+{
+    scopes: Vec<Scope>,
     issuer: Arc<Mutex<I>>,
 }
 
@@ -191,7 +200,7 @@ impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
             Some(hdr) => hdr,
         };
         let position = string.find(' ').ok_or(())?;
-        let (scheme, content): (&str, &str) = string.split_at(position);
+        let (scheme, content) = string.split_at(position);
         Ok(Some(Cow::Borrowed(content)))
     }
 }
@@ -228,7 +237,7 @@ impl WebResponse for iron::Response {
     }
 
     fn with_authorization(mut self, kind: &str) -> Result<Self, OAuthError> {
-        self.headers.set_raw("WWW-Authenticate", vec![kind.bytes().collect()]);
+        self.headers.set_raw("WWW-Authenticate", vec![kind.as_bytes().to_vec()]);
         Ok(self)
     }
 }
@@ -274,6 +283,12 @@ fn from_oauth_error(error: OAuthError) -> IronResult<Response> {
     }
 }
 
+impl From<OAuthError> for IronError {
+    fn from(this: OAuthError) -> IronError {
+        IronError::new(this, iron::status::Unauthorized)
+    }
+}
+
 impl<PH, R, A> iron::Handler for IronAuthorizer<PH, R, A> where
     PH: GenericOwnerAuthorizer + Send + Sync + 'static,
     R: Registrar + Send + 'static,
@@ -310,6 +325,20 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
         let issuer = IssuerRef::with(locked_authorizer.deref_mut(), locked_issuer.deref_mut());
 
         GrantFlow::handle(issuer, prepared).or_else(from_oauth_error)
+    }
+}
+
+impl<I> iron::BeforeMiddleware for IronGuard<I> where
+    I: Issuer + Send + 'static
+{
+    fn before(&self, request: &mut Request) -> IronResult<()> {
+        let prepared = AccessFlow::prepare(request)?;
+
+        let mut locked_issuer = self.issuer.lock().unwrap();
+        let guard = GuardRef::with(locked_issuer.deref_mut(), &self.scopes);
+
+        let ok = AccessFlow::handle(guard, prepared)?;
+        Ok(ok)
     }
 }
 
