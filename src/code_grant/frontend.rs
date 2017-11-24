@@ -136,7 +136,7 @@ impl AuthorizationFlow {
     {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(&urldecoded) {
-            Err(CodeError::Ignore) => return Err(OAuthError::BadRequest("Internal server error".to_string())),
+            Err(CodeError::Ignore) => return Err(OAuthError::ParameterNegotiationFailed),
             Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
             Ok(v) => v,
         };
@@ -156,7 +156,7 @@ impl AuthorizationFlow {
         };
 
         let redirect_to = match authorization {
-           Err(CodeError::Ignore) => return Err(OAuthError::BadRequest("Internal server error".to_string())),
+           Err(CodeError::Ignore) => return Err(OAuthError::AuthorizationFailed),
            Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
            Ok(v) => v,
        };
@@ -227,9 +227,10 @@ impl GrantFlow {
     }
 }
 
+#[derive(Debug)]
 pub enum OAuthError {
-    MissingQuery,
+    ParameterNegotiationFailed,
+    AuthorizationFailed,
     BadRequest(String),
-    AuthenticationFailed,
     Other(String),
 }
