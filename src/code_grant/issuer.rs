@@ -111,3 +111,27 @@ impl Issuer for TokenSigner {
         self.signer.tag("refresh").extract(token).ok()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn token_signer_roundtrip() {
+        let passwd = "Some secret password";
+        let mut issuer = TokenSigner::new_from_passphrase(passwd);
+        let request = Request {
+            client_id: "Client".into(),
+            owner_id: "Owner".into(),
+            redirect_url: &"https://example.com".parse().unwrap(),
+            scope: &"default".parse().unwrap(),
+        };
+
+        let issued = issuer.issue(request);
+        assert!(Utc::now() < issued.until);
+
+        let from_token = issuer.recover_token(&issued.token).unwrap();
+        assert_eq!(from_token.client_id, "Client");
+        assert_eq!(from_token.owner_id, "Owner");
+        assert!(Utc::now() < *from_token.until.as_ref());
+    }
+}

@@ -31,7 +31,7 @@ pub struct Assertion {
 #[derive(Serialize, Deserialize)]
 pub struct InternalAssertionGrant<'a>(&'a str, &'a str, &'a str, &'a str, (i64, u32), &'a str);
 #[derive(Serialize, Deserialize)]
-pub struct AssertGrant<'a>(&'a [u8], &'a [u8]);
+pub struct AssertGrant(Vec<u8>, Vec<u8>);
 
 pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
@@ -46,11 +46,11 @@ impl Assertion {
 
     fn extract<'a>(&self, token: &'a str) -> Result<(Grant<'a>, String), ()> {
         let readbytes = decode(token).map_err(|_| ())?;
-        let AssertGrant(message, digest) = rmp_serde::from_slice(&readbytes).map_err(|_| ())?;
+        let AssertGrant(message, digest) = rmp_serde::from_slice(&readbytes).unwrap();
 
-        ring::hmac::verify_with_own_key(&self.secret, message, digest).map_err(|_| ())?;
+        ring::hmac::verify_with_own_key(&self.secret, &message, &digest).map_err(|_| ())?;
         let InternalAssertionGrant(owner_id, client_id, redirectbytes, scope, (ts, tsnanos), tag) =
-            rmp_serde::from_slice(message).map_err(|_| ())?;
+            rmp_serde::from_slice(&message).map_err(|_| ())?;
 
         let redirect_url = Url::parse(redirectbytes).map_err(|_| ())?;
         let scope = scope.parse().map_err(|_| ())?;
@@ -73,7 +73,7 @@ impl Assertion {
             (grant.until.timestamp(), grant.until.timestamp_subsec_nanos()),
             tag)).unwrap();
         let signature = ring::hmac::sign(&self.secret, &tosign);
-        encode(&rmp_serde::to_vec(&AssertGrant(&tosign, signature.as_ref())).unwrap())
+        encode(&rmp_serde::to_vec(&AssertGrant(tosign, signature.as_ref().to_vec())).unwrap())
     }
 }
 
