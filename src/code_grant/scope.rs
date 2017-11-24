@@ -44,11 +44,11 @@ impl str::FromStr for Scope {
 
 impl fmt::Display for Scope {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        for (i, entry) in self.tokens.iter().enumerate() {
-            if  i < self.tokens.len() { fmt.write_str(" ")?; }
-            fmt.write_str(entry)?;
-        }
-        Ok(())
+        let output = self.tokens.iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<&str>>()
+            .join(" ");
+        fmt.write_str(&output)
     }
 }
 
