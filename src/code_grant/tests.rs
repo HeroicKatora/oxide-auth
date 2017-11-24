@@ -1,11 +1,15 @@
 use super::frontend::*;
-use super::backend::{CodeRef, ErrorUrl, IssuerRef};
+use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
 use super::authorizer::Storage;
 use super::issuer::TokenMap;
 use super::registrar::ClientMap;
+use super::scope::Scope;
+
 use std::borrow::Cow;
 use std::collections::HashMap;
+
 use url::Url;
+use serde_json;
 
 struct CraftedRequest {
     query: Option<HashMap<String, Vec<String>>>,
@@ -130,11 +134,27 @@ fn authorize_and_get() {
     };
 
     let prepared = GrantFlow::prepare(&mut tokenrequest).expect("Failure during access token preparation");
-    match GrantFlow::handle(IssuerRef::with(&mut authorizer, &mut issuer), prepared)
+    let (token, scope) = match GrantFlow::handle(IssuerRef::with(&mut authorizer, &mut issuer), prepared)
           .expect("Failure during access token handling") {
-        CraftedResponse::Json(_) // TODO check json data for correct return value
-            => (),
+        CraftedResponse::Json(json)
+            => {
+                let parsed: HashMap<String, String> = serde_json::from_str(&json).unwrap();
+                assert!(parsed.get("error").is_none());
+                assert!(parsed.get("expires_in").unwrap().parse::<i32>().unwrap() > 0);
+                let token = parsed.get("access_token").unwrap().to_string();
+                let scope = parsed.get("scope").unwrap().to_string();
+                (token, scope)
+            },
         _ => panic!(),
-    }
+    };
 
+    let mut accessrequest = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some(token),
+    };
+
+    let prepared = AccessFlow::prepare(&mut accessrequest).expect("Failure during access preparation");
+    let scope: [Scope; 1] = [scope.parse().unwrap()];
+    AccessFlow::handle(GuardRef::with(&mut issuer, &scope), prepared).expect("Failed to authorize");
 }

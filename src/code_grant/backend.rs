@@ -403,7 +403,7 @@ impl<'a> GuardRef<'a> {
         }
 
         if !self.scopes.iter()
-            .any(|scope| grant.scope.as_ref() < scope) {
+            .any(|scope| grant.scope.as_ref() <= scope) {
             return Err(AccessError::AccessDenied);
         }
 
