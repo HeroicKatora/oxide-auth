@@ -254,6 +254,7 @@ impl<R, A, I> IronGranter<R, A, I> where
             issuer: Arc::new(Mutex::new(issuer)) }
     }
 
+    /// Create an authorization code endpoint.
     pub fn authorize<H: GenericOwnerAuthorizer + Send + Sync>(&self, page_handler: H) -> IronAuthorizer<H, R, A> {
         IronAuthorizer {
             authorizer: self.authorizer.clone(),
@@ -261,17 +262,27 @@ impl<R, A, I> IronGranter<R, A, I> where
             registrar: self.registrar.clone() }
     }
 
+    /// Create an access token endpoint.
     pub fn token(&self) -> IronTokenRequest<A, I> {
         IronTokenRequest { authorizer: self.authorizer.clone(), issuer: self.issuer.clone() }
     }
 
+    /// Create a BeforeMiddleware capable of guarding other resources.
+    pub fn guard<S>(&self, scopes: S) -> IronGuard<I> where S: Into<Vec<Scope>> {
+        IronGuard { issuer: self.issuer.clone(), scopes: scopes.into() }
+    }
+
+    /// Thread-safely access the underlying registrar, which is responsible for client registrarion.
     pub fn registrar(&self) -> LockResult<MutexGuard<R>> {
         self.registrar.lock()
     }
 
+    /// Thread-safely access the underlying authorizer, which builds and holds authorization codes.
     pub fn authorizer(&self) -> LockResult<MutexGuard<A>> {
         self.authorizer.lock()
     }
+
+    /// Thread-safely access the underlying issuer, which builds and holds access tokens.
     pub fn issuer(&self) -> LockResult<MutexGuard<I>> {
         self.issuer.lock()
     }
