@@ -22,7 +22,7 @@ mod main {
 
         // Create the main token instance, a code_granter with an iron frontend.
         let ohandler = IronGranter::new(
-            // Stores clients in a simple in-memory hash map.
+            // Stores clients in a simple in-memory hash map. Will only hand out `default` scopes.
             ClientMap::new(),
             // Authorization tokens are 16 byte random keys to a memory hash map.
             Storage::new(RandomGenerator::new(16)),
@@ -37,11 +37,16 @@ mod main {
         let mut protected = iron::Chain::new(|_: &mut Request| {
             Ok(Response::with((iron::status::Ok, "Hello World!")))
         });
-        protected.link_before(ohandler.guard(vec!["default".parse::<Scope>().unwrap()]));
-        protected.link_after(HelpfulAuthorizationError());
+
+        // Set up required oauth endpoints
         router.get("/authorize", ohandler.authorize(handle_get), "authorize");
         router.post("/authorize", ohandler.authorize(IronOwnerAuthorizer(handle_post)), "authorize");
         router.post("/token", ohandler.token(), "token");
+
+        // Set up a protected resource, only accessible with a token with `default scope`.
+        protected.link_before(ohandler.guard(vec!["default".parse::<Scope>().unwrap()]));
+        // Instead of an error, show a warning and instructions
+        protected.link_after(HelpfulAuthorizationError());
         router.get("/", protected, "protected");
 
         // Start the server
@@ -54,35 +59,36 @@ mod main {
         join.join().expect("Failed to run");
         client.join().expect("Failed to run client");
 
-        /// A simple implementation of the first part of an authentication handler. This will
-        /// display a page to the user asking for his permission to proceed. The submitted form
-        /// will then trigger the other authorization handler which actually completes the flow.
-        fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> {
-            let (client_id, scope) = (auth.client_id, auth.scope);
-            let text = format!(
-                "<html>'{}' is requesting permission for '{}'
-                <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint\" method=\"post\">
-                    <input type=\"submit\" value=\"Accept\">
-                </form>
-                <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint&deny=1\" method=\"post\">
-                    <input type=\"submit\" value=\"Deny\">
-                </form>
-                </html>", client_id, scope, client_id, client_id);
-            let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
-            Ok((Authentication::InProgress, response))
-        }
+    }
+    
+    /// A simple implementation of the first part of an authentication handler. This will
+    /// display a page to the user asking for his permission to proceed. The submitted form
+    /// will then trigger the other authorization handler which actually completes the flow.
+    fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> {
+        let (client_id, scope) = (auth.client_id, auth.scope);
+        let text = format!(
+            "<html>'{}' is requesting permission for '{}'
+            <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint\" method=\"post\">
+                <input type=\"submit\" value=\"Accept\">
+            </form>
+            <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint&deny=1\" method=\"post\">
+                <input type=\"submit\" value=\"Deny\">
+            </form>
+            </html>", client_id, scope, client_id, client_id);
+        let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
+        Ok((Authentication::InProgress, response))
+    }
 
-        /// This shows the second style of authentication handler, a iron::Handler compatible form.
-        /// Allows composition with other libraries or frameworks built around iron.
-        fn handle_post(req: &mut Request) -> IronResult<Response> {
-            // No real user authentication is done here, in production you SHOULD use session keys or equivalent
-            if req.get::<UrlEncodedQuery>().unwrap_or(HashMap::new()).contains_key("deny") {
-                req.extensions.insert::<Authentication>(Authentication::Failed);
-            } else {
-                req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
-            }
-            Ok(Response::with(iron::status::Ok))
+    /// This shows the second style of authentication handler, a iron::Handler compatible form.
+    /// Allows composition with other libraries or frameworks built around iron.
+    fn handle_post(req: &mut Request) -> IronResult<Response> {
+        // No real user authentication is done here, in production you SHOULD use session keys or equivalent
+        if req.get::<UrlEncodedQuery>().unwrap_or(HashMap::new()).contains_key("deny") {
+            req.extensions.insert::<Authentication>(Authentication::Failed);
+        } else {
+            req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
         }
+        Ok(Response::with(iron::status::Ok))
     }
 
     struct HelpfulAuthorizationError();
