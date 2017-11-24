@@ -5,6 +5,8 @@ mod main {
     extern crate router;
     extern crate url;
     extern crate reqwest;
+    extern crate serde;
+    extern crate serde_json;
     extern crate urlencoded;
     use self::iron::prelude::*;
     use self::oxide_auth::iron::prelude::*;
@@ -26,7 +28,7 @@ mod main {
             TokenSigner::new_from_passphrase(passphrase));
 
         // Register a dummy client instance
-        ohandler.registrar().unwrap().register_client("myself", url::Url::parse("http://localhost:8021/endpoint").unwrap());
+        ohandler.registrar().unwrap().register_client("LocalClient", url::Url::parse("http://localhost:8021/endpoint").unwrap());
 
         // Create a router and bind the relevant pages
         let mut router = router::Router::new();
@@ -34,10 +36,11 @@ mod main {
             Ok(Response::with((iron::status::Ok, "Hello World!")))
         });
         protected.link_before(ohandler.guard(vec!["default".parse::<Scope>().unwrap()]));
+        protected.link_after(HelpfulAuthorizationError());
         router.get("/authorize", ohandler.authorize(handle_get), "authorize");
         router.post("/authorize", ohandler.authorize(IronOwnerAuthorizer(handle_post)), "authorize");
         router.post("/token", ohandler.token(), "token");
-        router.get("/protected", protected, "protected");
+        router.get("/", protected, "protected");
 
         // Start the server
         let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
@@ -55,7 +58,7 @@ mod main {
         fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> {
             let (client_id, scope) = (auth.client_id, auth.scope);
             let text = format!(
-                "<html>{} is requesting permission for {}
+                "<html>'{}' is requesting permission for '{}'
                 <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint\" method=\"post\">
                     <input type=\"submit\" value=\"Accept\">
                 </form>
@@ -80,8 +83,29 @@ mod main {
         }
     }
 
+    struct HelpfulAuthorizationError();
+
+    impl iron::middleware::AfterMiddleware for HelpfulAuthorizationError {
+        fn catch(&self, _: &mut Request, err: iron::IronError) -> IronResult<Response> {
+            if !err.error.is::<OAuthError>() {
+                return Err(err);
+            }
+            use main::iron::modifier::Modifier;
+            let mut response = err.response;
+            let text =
+                "<html>
+                This page should be accessed via an oauth token from the client in the example. Click
+                <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient&redirect_url=http://localhost:8021/endpoint\">
+                here</a> to begin the authorization process.
+                </html>";
+            text.modify(&mut response);
+            iron::modifiers::Header(iron::headers::ContentType::html()).modify(&mut response);
+            Ok(response)
+        }
+    }
+
     fn open_in_browser() {
-        let target_addres = "localhost:8020/authorize?response_type=code&client_id=myself&redirect_url=http://localhost:8021/endpoint";
+        let target_addres = "http://localhost:8020/";
         use std::io::{Error, ErrorKind};
         use std::process::Command;
         let can_open = if cfg!(target_os = "linux") {
@@ -98,6 +122,8 @@ mod main {
     /// needed in your implementation but merely exists to provide an interactive example.
     fn dummy_client(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
         use std::io::Read;
+        use main::serde::ser::Serialize;
+        // Check the received parameters in the input
         let query = req.url.as_ref().query_pairs().collect::<HashMap<_, _>>();
         if let Some(error) = query.get("error") {
             let message = "Error during owner authorization: ".to_string() + error.as_ref();
@@ -108,26 +134,53 @@ mod main {
             Some(v) => v.clone()
         };
 
+        // Construct a request against http://localhost:8020/token, the access token endpoint
         let client = reqwest::Client::new();
         let mut params = HashMap::new();
         params.insert("grant_type", "authorization_code");
-        params.insert("client_id", "myself");
+        params.insert("client_id", "LocalClient");
         params.insert("code", &code);
         params.insert("redirect_url", "http://localhost:8021/endpoint");
-        let constructed_req = client
+        let access_token_request = client
             .post("http://localhost:8020/token")
             .form(&params).build().unwrap();
-        let mut token_req = match client.execute(constructed_req) {
-            Err(_) => return Ok(iron::Response::with((iron::status::InternalServerError, "Error retrieving token from server"))),
-            Ok(v) => v
-        };
+        let mut token_response = client.execute(access_token_request).unwrap();
         let mut token = String::new();
-        token_req.read_to_string(&mut token).unwrap();
+        token_response.read_to_string(&mut token).unwrap();
+        let token_map: HashMap<String, String> = serde_json::from_str(&token).unwrap();
+
+        if token_map.get("error").is_some() || !token_map.get("access_token").is_some() {
+            return Ok(iron::Response::with((iron::status::BadRequest, token)));
+        }
+
+        // Request the page with the oauth token
+        let page_request = client
+            .get("http://localhost:8020/")
+            .header(reqwest::header::Authorization("Bearer ".to_string() + token_map.get("access_token").unwrap()))
+            .build().unwrap();
+        let mut page_response = client.execute(page_request).unwrap();
+        let mut protected_page = String::new();
+        page_response.read_to_string(&mut protected_page).unwrap();
+
+        let token = serde_json::to_string_pretty(&token_map).unwrap();
+        let token = token.replace(",", ",</br>");
+        let display_page = format!(
+            "<html><style>
+                aside{{overflow: auto; word-break: keep-all; white-space: nowrap}}
+                main{{text-align: center}}
+                main>aside,main>article{{margin: auto; text-align: left; border: 1px solid black; width: 50%}}
+            </style>
+            <main>
+            Used token <aside style>{}</aside> to access
+            <a href=\"http://localhost:8020/\">http://localhost:8020/</a>.
+            Its contents are:
+            <article>{}</article>
+            </main></html>", token, protected_page);
 
         Ok(Response::with((
             iron::status::Ok,
-            iron::modifiers::Header(iron::headers::ContentType::json()),
-            token,
+            iron::modifiers::Header(iron::headers::ContentType::html()),
+            display_page,
         )))
     }
 }

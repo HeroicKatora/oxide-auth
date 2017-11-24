@@ -196,10 +196,9 @@ impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
         let string = match self.headers.get::<AuthHeader<String>>() {
-            None => { println!("No auth header"); return Ok(None) },
+            None => return Ok(None),
             Some(hdr) => hdr,
         };
-        println!("Header:{:?}", string);
         let position = string.find(' ').ok_or(())?;
         let (scheme, content) = string.split_at(position);
         Ok(Some(Cow::Borrowed(&content[1..])))
