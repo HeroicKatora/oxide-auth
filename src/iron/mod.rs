@@ -63,11 +63,13 @@ use super::code_grant::prelude::*;
 use super::code_grant::{Authorizer, Issuer, Registrar};
 use super::code_grant::frontend::{AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
 pub use super::code_grant::frontend::{AuthenticationRequest, Authentication, OAuthError};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 use std::ops::DerefMut;
 use std::marker::PhantomData;
 use self::iron::prelude::*;
+use self::iron::headers::{Authorization as AuthHeader};
 use self::iron::modifiers::Redirect;
 use self::urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use url::Url;
@@ -181,6 +183,16 @@ impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
 
     fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()> {
         self.get_ref::<UrlEncodedBody>().map_err(|_| ())
+    }
+
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
+        let string = match self.headers.get::<AuthHeader<String>>() {
+            None => return Ok(None),
+            Some(hdr) => hdr,
+        };
+        let position = string.find(' ').ok_or(())?;
+        let (scheme, content): (&str, &str) = string.split_at(position);
+        Ok(Some(Cow::Borrowed(content)))
     }
 }
 

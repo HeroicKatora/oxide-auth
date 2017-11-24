@@ -383,7 +383,7 @@ pub trait GuardRequest {
     /// frontends straightforward by not having them handle special cases for malformed requests.
     fn valid(&self) -> bool;
     /// The bearer token trying to access some resource.
-    fn token(&self) -> Option<&str>;
+    fn token(&self) -> Option<Cow<str>>;
 }
 
 impl<'a> GuardRef<'a> {

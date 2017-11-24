@@ -3,12 +3,14 @@ use super::backend::{CodeRef, ErrorUrl, IssuerRef};
 use super::authorizer::Storage;
 use super::issuer::TokenMap;
 use super::registrar::ClientMap;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
 
 struct CraftedRequest {
     query: Option<HashMap<String, Vec<String>>>,
     urlbody: Option<HashMap<String, Vec<String>>>,
+    auth: Option<String>,
 }
 
 enum CraftedResponse {
@@ -30,6 +32,10 @@ impl WebRequest for CraftedRequest {
 
     fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()> {
         self.urlbody.as_ref().ok_or(())
+    }
+
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
+        Ok(self.auth.as_ref().map(|bearer| bearer.as_str().into()))
     }
 }
 
@@ -100,6 +106,7 @@ fn authorize_and_get() {
             .into_iter()
             .map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()),
         urlbody: Some(HashMap::new()),
+        auth: None,
     };
 
     let prepared = AuthorizationFlow::prepare(&mut authrequest).expect("Failure during authorization preparation");
@@ -119,6 +126,7 @@ fn authorize_and_get() {
                            ("grant_type", "authorization_code")]
             .into_iter()
             .map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()),
+        auth: None,
     };
 
     let prepared = GrantFlow::prepare(&mut tokenrequest).expect("Failure during access token preparation");

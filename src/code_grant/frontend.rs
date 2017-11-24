@@ -12,6 +12,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerError, IssuerRef};
+use super::backend::{AccessError, GuardRequest, GuardRef};
 use url::Url;
 
 /// Holds the decode query fragments from the url
@@ -45,6 +46,11 @@ struct AccessTokenParameter<'a> {
     code: Option<Cow<'a, str>>,
 }
 
+struct GuardParameter<'a> {
+    valid: bool,
+    token: Option<Cow<'a, str>>,
+}
+
 pub trait WebRequest {
     type Response: WebResponse;
     /// Retrieve a parsed version of the url query. An Err return value indicates a malformed query
@@ -54,6 +60,9 @@ pub trait WebRequest {
     /// Retriev the parsed `application/x-form-urlencoded` body of the request. An Err value
     /// indicates a malformed body or a different Content-Type.
     fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()>;
+    /// Contents of the authorization header or none if none exists. An Err value indicates a
+    /// malformed header or request.
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>;
 }
 
 pub trait WebResponse where Self: Sized {
@@ -130,7 +139,7 @@ impl AuthorizationFlow {
     }
 
     pub fn handle<'c, Req, Auth>(granter: CodeRef<'c>, prepared: PreparedAuthorization<'c, Req>, page_handler: &Auth)
-    -> Result<<Req as WebRequest>::Response, OAuthError> where
+    -> Result<Req::Response, OAuthError> where
         Req: WebRequest,
         Auth: OwnerAuthorizer<Request=Req>
     {
@@ -213,8 +222,8 @@ impl GrantFlow {
         Ok(PreparedGrant { params: params, req: PhantomData })
     }
 
-    pub fn handle<Req>(mut issuer: IssuerRef, prepared: PreparedGrant<Req>) -> Result<<Req as WebRequest>::Response, OAuthError> where
-        Req: WebRequest
+    pub fn handle<Req>(mut issuer: IssuerRef, prepared: PreparedGrant<Req>)
+    -> Result<Req::Response, OAuthError> where Req: WebRequest
     {
         let PreparedGrant { params, .. } = prepared;
         match issuer.use_code(&params) {
@@ -227,6 +236,44 @@ impl GrantFlow {
     }
 }
 
+pub struct AccessFlow;
+pub struct PreparedAccess<'l, Req> where
+    Req: WebRequest + 'l,
+{
+    params: GuardParameter<'l>,
+    req: PhantomData<Req>,
+}
+
+impl<'l> GuardRequest for GuardParameter<'l> {
+    fn valid(&self) -> bool { self.valid }
+    fn token(&self) -> Option<Cow<str>> { self.token.clone() }
+}
+
+impl<'l> GuardParameter<'l> {
+    fn invalid() -> Self {
+        GuardParameter { valid: false, token: None }
+    }
+}
+
+impl AccessFlow {
+    pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedAccess<W>, OAuthError> {
+        let params = req.authheader()
+            .map(|auth| GuardParameter { valid: true, token: auth })
+            .unwrap_or_else(|_| GuardParameter::invalid());
+
+        Ok(PreparedAccess { params: params, req: PhantomData })
+    }
+
+    pub fn handle<Req>(guard: GuardRef, prepared: PreparedAccess<Req>)
+    -> Result<(), OAuthError> where Req: WebRequest {
+        guard.protect(&prepared.params).map_err(|err| {
+            match err {
+                AccessError::InvalidRequest => OAuthError::BadRequest("Invalid format".to_string()),
+                AccessError::AccessDenied => OAuthError::AuthorizationFailed,
+            }
+        })
+    }
+}
 #[derive(Debug)]
 pub enum OAuthError {
     ParameterNegotiationFailed,
