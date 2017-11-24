@@ -12,6 +12,7 @@
 use super::{Authorizer, Registrar, RegistrarError};
 use super::{Negotiated, NegotiationParameter};
 use super::{Issuer, IssuedToken, Request};
+use super::{Scope};
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
 use std::borrow::Cow;
@@ -50,8 +51,15 @@ pub struct ErrorDescription {
     error: AccessTokenError,
 }
 
+/// Indicates the reason for access failure.
+pub enum AccessError {
+    InvalidRequest,
+    AccessDenied,
+}
+
 type CodeResult<T> = Result<T, CodeError>;
 type AccessTokenResult<T> = Result<T, IssuerError>;
+type AccessResult<T> = Result<T, AccessError>;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -246,7 +254,7 @@ impl<'u> CodeRef<'u> {
         Ok(url)
     }
 
-    pub fn with<'a>(registrar: &'a Registrar, t: &'a mut Authorizer) -> CodeRef<'a> {
+    pub fn with(registrar: &'u Registrar, t: &'u mut Authorizer) -> Self {
         CodeRef { registrar, authorizer: t }
     }
 }
@@ -341,7 +349,7 @@ impl<'u> IssuerRef<'u> {
             return Err(IssuerError::invalid(AccessTokenErrorType::InvalidGrant))
         }
 
-        if saved_params.until.as_ref() < &Utc::now() {
+        if *saved_params.until.as_ref() < Utc::now() {
             return Err(IssuerError::invalid((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
         }
 
@@ -354,7 +362,58 @@ impl<'u> IssuerRef<'u> {
         Ok(BearerToken{0: token, 1: saved_params.scope.as_ref().to_string()})
     }
 
-    pub fn with<'a>(t: &'a mut Authorizer, i: &'a mut Issuer) -> IssuerRef<'a> {
+    pub fn with(t: &'u mut Authorizer, i: &'u mut Issuer) -> Self {
         IssuerRef { authorizer: t, issuer: i }
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+//                                    Access protected Endpoint                                 //
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct GuardRef<'a> {
+    scopes: &'a [Scope],
+    issuer: &'a mut Issuer,
+}
+
+pub trait GuardRequest {
+    /// Received request might not be encoded correctly. This method gives implementors the chance
+    /// to signal that a request was received but its encoding was generally malformed. If this is
+    /// the case, then no other attribute will be queried. This method exists mainly to make
+    /// frontends straightforward by not having them handle special cases for malformed requests.
+    fn valid(&self) -> bool;
+    /// The bearer token trying to access some resource.
+    fn token(&self) -> Option<&str>;
+}
+
+impl<'a> GuardRef<'a> {
+    pub fn protect<'r>(&self, req: &'r GuardRequest)
+    -> AccessResult<()> where 'a: 'r {
+        if !req.valid() {
+            return Err(AccessError::InvalidRequest)
+        }
+
+        let token = req.token()
+            .ok_or(AccessError::AccessDenied)?;
+        let grant = self.issuer.recover_token(&token)
+            .ok_or(AccessError::AccessDenied)?;
+
+        if *grant.until.as_ref() < Utc::now() {
+            return Err(AccessError::AccessDenied);
+        }
+
+        if !self.scopes.iter()
+            .any(|scope| grant.scope.as_ref() < scope) {
+            return Err(AccessError::AccessDenied);
+        }
+
+        return Ok(())
+    }
+
+    /// Construct a guard from an issuer backend and a choice of scopes. A grant need only have
+    /// ONE of the scopes to access the resource but each scope can require multiple subscopes.
+    pub fn with<I, S>(issuer: &'a mut I, scopes: &'a mut S) -> Self
+    where I: AsMut<Issuer>, S: AsMut<[Scope]> {
+        GuardRef { scopes: scopes.as_mut(), issuer: issuer.as_mut() }
     }
 }
