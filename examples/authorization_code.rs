@@ -30,9 +30,14 @@ mod main {
 
         // Create a router and bind the relevant pages
         let mut router = router::Router::new();
+        let mut protected = iron::Chain::new(|_: &mut Request| {
+            Ok(Response::with((iron::status::Ok, "Hello World!")))
+        });
+        protected.link_before(ohandler.guard(vec!["default".parse::<Scope>().unwrap()]));
         router.get("/authorize", ohandler.authorize(handle_get), "authorize");
         router.post("/authorize", ohandler.authorize(IronOwnerAuthorizer(handle_post)), "authorize");
         router.post("/token", ohandler.token(), "token");
+        router.get("/protected", protected, "protected");
 
         // Start the server
         let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());

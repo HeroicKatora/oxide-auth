@@ -114,4 +114,5 @@ pub mod prelude {
     pub use super::issuer::{TokenMap, TokenSigner};
     pub use super::generator::RandomGenerator;
     pub use super::registrar::ClientMap;
+    pub use super::scope::Scope;
 }
