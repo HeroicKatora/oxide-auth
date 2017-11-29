@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth"
-version = "0.1.0-0-noncompliant"
+version = "0.1.0-alpha"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 
 description = "A OAuth2 server library, for use in combination with iron or other frontends, featuring a set of configurable and pluggable backends."
