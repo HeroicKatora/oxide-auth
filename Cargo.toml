@@ -1,7 +1,8 @@
 [package]
 name = "oxide-auth"
-version = "0.1.0-alpha"
+version = "0.1.0-alpha.1"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
+repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
 description = "A OAuth2 server library, for use in combination with iron or other frontends, featuring a set of configurable and pluggable backends."
 readme = "Readme.md"
