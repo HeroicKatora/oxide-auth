@@ -1,3 +1,10 @@
+//! Authorizers are need to swap code grants for bearer tokens.
+//!
+//! The role of an authorizer is the ensure the consistency and security of request in which a
+//! client is willing to trade a code grant for a bearer token. As such, it will first issue grants
+//! to client according to parameters given by the resource owner and the registrar. Upon a client
+//! side request, it will then check the given parameters to determine the authorization of such
+//! clients.
 use std::collections::HashMap;
 use std::borrow::Cow;
 use chrono::{Duration, Utc};

@@ -1,3 +1,14 @@
+//! Generators produce string code grant and bearer tokens for a determined grant.
+//!
+//! In short, a code grant needs to encapsulate information about the owner, client, redirect_url,
+//! scope, and lifetime of a grant. This information needs to be uniquely recoverable.
+//! 
+//! Two major implementation exists:
+//!     - `RandomGenerator` depends on the entropy of the generated token to make guessing
+//!     infeasible.
+//!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
+//!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
+//!     is not currently expressed in the type system or with traits.
 use super::{Grant, TokenGenerator};
 use chrono::{Utc, TimeZone};
 use std::borrow::Cow;

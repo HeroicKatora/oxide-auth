@@ -1,3 +1,7 @@
+//! Generates bearer tokens and refresh tokens.
+//!
+//! Internally similar to the authorization module, tokens generated here live longer and can be
+//! renewed [WIP].
 use std::collections::HashMap;
 use std::clone::Clone;
 use std::borrow::Cow;
