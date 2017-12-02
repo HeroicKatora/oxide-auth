@@ -91,7 +91,8 @@ pub trait WebResponse where Self: Sized {
 
 pub trait OwnerAuthorizer {
     type Request: WebRequest;
-    fn get_owner_authorization(&self, &mut Self::Request, AuthenticationRequest) -> Result<(Authentication, <Self::Request as WebRequest>::Response), OAuthError>;
+    fn get_owner_authorization(&self, &mut Self::Request, AuthenticationRequest)
+      -> Result<(Authentication, <Self::Request as WebRequest>::Response), <Self::Request as WebRequest>::Error>;
 }
 
 pub struct AuthorizationFlow;
@@ -149,7 +150,7 @@ impl AuthorizationFlow {
     {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(&urldecoded) {
-            Err(CodeError::Ignore) => return Err(OAuthError::ParameterNegotiationFailed.into()),
+            Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
             Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
             Ok(v) => v,
         };
@@ -169,7 +170,7 @@ impl AuthorizationFlow {
         };
 
         let redirect_to = match authorization {
-           Err(CodeError::Ignore) => return Err(OAuthError::AuthorizationFailed.into()),
+           Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
            Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
            Ok(v) => v,
        };
@@ -272,19 +273,22 @@ impl AccessFlow {
     -> Result<(), Req::Error> where Req: WebRequest {
         guard.protect(&prepared.params).map_err(|err| {
             match err {
-                AccessError::InvalidRequest => OAuthError::BadRequest("Invalid format".to_string()).into(),
-                AccessError::AccessDenied => OAuthError::AuthorizationFailed.into(),
-            }
+                AccessError::InvalidRequest => OAuthError::InternalAccessError(),
+                AccessError::AccessDenied => OAuthError::AccessDenied,
+            }.into()
         })
     }
 }
 
+/// Errors which should not or need not be communicated to the requesting party but which are of
+/// interest to the server. See the documentation for each enum variant for more documentation on
+/// each as some may have an expected response. These include badly formatted headers or url encoded
+/// body, unexpected parameters, or security relevant required parameters.
 #[derive(Debug)]
 pub enum OAuthError {
-    ParameterNegotiationFailed,
-    AuthorizationFailed,
-    BadRequest(String),
-    Other(String),
+    InternalCodeError(),
+    InternalAccessError(),
+    AccessDenied,
 }
 
 impl fmt::Display for OAuthError {

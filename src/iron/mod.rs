@@ -159,7 +159,7 @@ impl iron::typemap::Key for AuthenticationRequest { type Value = AuthenticationR
 impl iron::typemap::Key for Authentication { type Value = Authentication; }
 
 pub trait GenericOwnerAuthorizer {
-    fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> Result<(Authentication, iron::Response), OAuthError>;
+    fn get_owner_authorization(&self, &mut iron::Request, AuthenticationRequest) -> IronResult<(Authentication, iron::Response)>;
 }
 
 /// Wraps an iron::Handler for use as an OwnerAuthorizer.
@@ -179,9 +179,9 @@ pub struct IronOwnerAuthorizer<A: iron::Handler>(pub A);
 /// ```
 impl GenericOwnerAuthorizer for iron::Handler {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
-    -> Result<(Authentication, Response), OAuthError> {
+    -> IronResult<(Authentication, Response)> {
         req.extensions.insert::<AuthenticationRequest>(auth);
-        let response = self.handle(req).map_err(|_| OAuthError::Other("Internal error".to_string()))?;
+        let response = self.handle(req)?;
         match req.extensions.get::<Authentication>() {
             None => return Ok((Authentication::Failed, Response::with((iron::status::InternalServerError, "No authentication response")))),
             Some(v) => return Ok((v.clone(), response)),
@@ -192,14 +192,14 @@ impl GenericOwnerAuthorizer for iron::Handler {
 impl<F> GenericOwnerAuthorizer for F
     where F :Fn(&mut iron::Request, AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> + Send + Sync + 'static {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
-    -> Result<(Authentication, Response), OAuthError> {
-        self(req, auth)
+    -> IronResult<(Authentication, Response)> {
+        self(req, auth).map_err(|o| o.into())
     }
 }
 
 impl<A: iron::Handler> GenericOwnerAuthorizer for IronOwnerAuthorizer<A> {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: AuthenticationRequest)
-    -> Result<(Authentication, Response), OAuthError> {
+    -> IronResult<(Authentication, Response)> {
         (&self.0 as &iron::Handler).get_owner_authorization(req, auth)
     }
 }
@@ -209,7 +209,7 @@ struct SpecificOwnerAuthorizer<'l, 'a, 'b: 'a>(&'l GenericOwnerAuthorizer, Phant
 impl<'l, 'a, 'b: 'a> OwnerAuthorizer for SpecificOwnerAuthorizer<'l, 'a, 'b> {
     type Request = iron::Request<'a, 'b>;
     fn get_owner_authorization(&self, req: &mut Self::Request, auth: AuthenticationRequest)
-    -> Result<(Authentication, Response), OAuthError> {
+    -> IronResult<(Authentication, Response)> {
         self.0.get_owner_authorization(req, auth)
     }
 }
@@ -242,7 +242,8 @@ impl WebResponse for Response {
 
     fn redirect(url: Url) -> Result<Response, IronError> {
         let real_url = match iron::Url::from_generic_url(url) {
-            Err(_) => return Err(OAuthError::Other("Error parsing redirect target".to_string()).into()),
+            Err(p) => return Err(IronError::new(OAuthError::InternalCodeError(),
+                iron::status::InternalServerError)),
             Ok(v) => v,
         };
         Ok(Response::with((iron::status::Found, Redirect(real_url))))
