@@ -8,15 +8,15 @@
 //! extern crate router;
 //! use oxide_auth::iron::prelude::*;
 //! use iron::prelude::*;
-//! 
+//!
 //! use std::thread;
 //! use iron::modifier::Modifier;
 //! use router::Router;
-//! 
+//!
 //! /// Example of a main function of a iron server supporting oauth.
 //! pub fn main() {
 //!     let passphrase = "This is a super secret phrase";
-//! 
+//!
 //!     // Create the main token instance, a code_granter with an iron frontend.
 //!     let ohandler = IronGranter::new(
 //!         // Stores clients in a simple in-memory hash map.
@@ -25,19 +25,19 @@
 //!         Storage::new(RandomGenerator::new(16)),
 //!         // Bearer tokens are signed (but not encrypted) using a passphrase.
 //!         TokenSigner::new_from_passphrase(passphrase));
-//! 
+//!
 //!     // Register a dummy client instance
 //!     ohandler.registrar().unwrap().register_client(
 //!         "example",
 //!         Url::parse("http://example.com/endpoint").unwrap());
-//! 
+//!
 //!     // Create a router and bind the relevant pages
 //!     let mut router = Router::new();
 //!     router.get("/authorize", ohandler.authorize(handle_get), "authorize");
 //!     router.post("/authorize", ohandler.authorize(IronOwnerAuthorizer(handle_post)),
 //!         "authorize");
 //!     router.post("/token", ohandler.token(), "token");
-//! 
+//!
 //!     let mut protected = iron::Chain::new(|_: &mut Request| {
 //!         Ok(Response::with((iron::status::Ok, "Hello World!")))
 //!     });
@@ -46,28 +46,28 @@
 //!     // Instead of an error, show a warning and instructions
 //!     protected.link_after(HelpfulAuthorizationError());
 //!     router.get("/", protected, "protected");
-//! 
+//!
 //!     // Start the server
 //!     // let server = thread::spawn(||
 //!     //    iron::Iron::new(router).http("localhost:8020").unwrap());
-//! 
+//!
 //!     // server.join().expect("Failed to run");
 //! }
-//! 
+//!
 //! /// This should display a page to the user asking for his permission to proceed.
 //! /// You can use the Response in Ok to achieve this.
 //! fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> {
 //!     unimplemented!();
 //! }
-//! 
+//!
 //! /// This shows the second style of authentication handler, a iron::Handler compatible form.
 //! /// Allows composition with other libraries or frameworks built around iron.
 //! fn handle_post(req: &mut Request) -> IronResult<Response> {
 //!     unimplemented!();
 //! }
-//! 
+//!
 //! struct HelpfulAuthorizationError();
-//! 
+//!
 //! impl iron::middleware::AfterMiddleware for HelpfulAuthorizationError {
 //!     fn catch(&self, _: &mut Request, err: iron::IronError) -> IronResult<Response> {
 //!         if !err.error.is::<OAuthError>() {
@@ -83,7 +83,7 @@
 //!         Ok(response)
 //!     }
 //! }
-//! 
+//!
 //! ```
 
 extern crate iron;
@@ -215,7 +215,9 @@ impl<'l, 'a, 'b: 'a> OwnerAuthorizer for SpecificOwnerAuthorizer<'l, 'a, 'b> {
 }
 
 impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
-    type Response = iron::Response;
+    type Response = Response;
+    type Error = IronError;
+
     fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()> {
         self.get::<UrlEncodedQuery>().map_err(|_| ())
     }
@@ -235,20 +237,22 @@ impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
     }
 }
 
-impl WebResponse for iron::Response {
-    fn redirect(url: Url) -> Result<Response, OAuthError> {
+impl WebResponse for Response {
+    type Error = IronError;
+
+    fn redirect(url: Url) -> Result<Response, IronError> {
         let real_url = match iron::Url::from_generic_url(url) {
-            Err(_) => return Err(OAuthError::Other("Error parsing redirect target".to_string())),
+            Err(_) => return Err(OAuthError::Other("Error parsing redirect target".to_string()).into()),
             Ok(v) => v,
         };
         Ok(Response::with((iron::status::Found, Redirect(real_url))))
     }
 
-    fn text(text: &str) -> Result<Response, OAuthError> {
+    fn text(text: &str) -> Result<Response, IronError> {
         Ok(Response::with((iron::status::Ok, text)))
     }
 
-    fn json(data: &str) -> Result<Response, OAuthError> {
+    fn json(data: &str) -> Result<Response, IronError> {
         Ok(Response::with((
             iron::status::Ok,
             iron::modifiers::Header(iron::headers::ContentType::json()),
@@ -256,17 +260,17 @@ impl WebResponse for iron::Response {
         )))
     }
 
-    fn as_client_error(mut self) -> Result<Self, OAuthError> {
+    fn as_client_error(mut self) -> Result<Self, IronError> {
         self.status = Some(iron::status::BadRequest);
         Ok(self)
     }
 
-    fn as_unauthorized(mut self) -> Result<Self, OAuthError> {
+    fn as_unauthorized(mut self) -> Result<Self, IronError> {
         self.status = Some(iron::status::Unauthorized);
         Ok(self)
     }
 
-    fn with_authorization(mut self, kind: &str) -> Result<Self, OAuthError> {
+    fn with_authorization(mut self, kind: &str) -> Result<Self, IronError> {
         self.headers.set_raw("WWW-Authenticate", vec![kind.as_bytes().to_vec()]);
         Ok(self)
     }
@@ -318,12 +322,6 @@ impl<R, A, I> IronGranter<R, A, I> where
     }
 }
 
-fn from_oauth_error(error: OAuthError) -> IronResult<Response> {
-    match error {
-        _ => Ok(Response::with(iron::status::InternalServerError))
-    }
-}
-
 impl From<OAuthError> for IronError {
     fn from(this: OAuthError) -> IronError {
         IronError::new(this, iron::status::Unauthorized)
@@ -336,17 +334,14 @@ impl<PH, R, A> iron::Handler for IronAuthorizer<PH, R, A> where
     A: Authorizer + Send + 'static
 {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        let prepared = match AuthorizationFlow::prepare(req).map_err(from_oauth_error) {
-            Err(res) => return res,
-            Ok(v) => v,
-        };
+        let prepared = AuthorizationFlow::prepare(req)?;
 
         let mut locked_registrar = self.registrar.lock().unwrap();
         let mut locked_authorizer = self.authorizer.lock().unwrap();
         let code = CodeRef::with(locked_registrar.deref_mut(), locked_authorizer.deref_mut());
 
         let handler = SpecificOwnerAuthorizer(self.page_handler.as_ref(), PhantomData);
-        AuthorizationFlow::handle(code, prepared, &handler).or_else(from_oauth_error)
+        AuthorizationFlow::handle(code, prepared, &handler)
     }
 }
 
@@ -356,16 +351,13 @@ impl<A, I> iron::Handler for IronTokenRequest<A, I> where
     I: Issuer + Send + 'static
 {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        let prepared = match GrantFlow::prepare(req).map_err(from_oauth_error) {
-            Err(res) => return res,
-            Ok(v) => v,
-        };
+        let prepared = GrantFlow::prepare(req)?;
 
         let mut locked_authorizer = self.authorizer.lock().unwrap();
         let mut locked_issuer = self.issuer.lock().unwrap();
         let issuer = IssuerRef::with(locked_authorizer.deref_mut(), locked_issuer.deref_mut());
 
-        GrantFlow::handle(issuer, prepared).or_else(from_oauth_error)
+        GrantFlow::handle(issuer, prepared)
     }
 }
 

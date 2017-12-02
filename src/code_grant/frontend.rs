@@ -54,7 +54,8 @@ struct GuardParameter<'a> {
 }
 
 pub trait WebRequest {
-    type Response: WebResponse;
+    type Error: From<OAuthError>;
+    type Response: WebResponse<Error=Self::Error>;
     /// Retrieve a parsed version of the url query. An Err return value indicates a malformed query
     /// or an otherwise malformed WebRequest. Note that an empty query should result in
     /// `Ok(HashMap::new())` instead of an Err.
@@ -68,23 +69,24 @@ pub trait WebRequest {
 }
 
 pub trait WebResponse where Self: Sized {
-    fn redirect(url: Url) -> Result<Self, OAuthError>;
-    fn text(text: &str) -> Result<Self, OAuthError>;
-    fn json(data: &str) -> Result<Self, OAuthError>;
+    type Error: From<OAuthError>;
+    fn redirect(url: Url) -> Result<Self, Self::Error>;
+    fn text(text: &str) -> Result<Self, Self::Error>;
+    fn json(data: &str) -> Result<Self, Self::Error>;
 
     /// Construct a redirect for the error. Here the response may choose to augment the error with
     /// additional information (such as help websites, description strings), hence the default
     /// implementation which does not do any of that.
-    fn redirect_error(target: ErrorUrl) -> Result<Self, OAuthError> {
+    fn redirect_error(target: ErrorUrl) -> Result<Self, Self::Error> {
         Self::redirect(target.into())
     }
 
     /// Set the response status to 400
-    fn as_client_error(self) -> Result<Self, OAuthError>;
+    fn as_client_error(self) -> Result<Self, Self::Error>;
     /// Set the response status to 401
-    fn as_unauthorized(self) -> Result<Self, OAuthError>;
+    fn as_unauthorized(self) -> Result<Self, Self::Error>;
     /// Add an Authorization header
-    fn with_authorization(self, kind: &str) -> Result<Self, OAuthError>;
+    fn with_authorization(self, kind: &str) -> Result<Self, Self::Error>;
 }
 
 pub trait OwnerAuthorizer {
@@ -132,7 +134,7 @@ impl<'s> ClientParameter<'s> {
 
 impl AuthorizationFlow {
     /// Idempotent data processing, checks formats.
-    pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, OAuthError> {
+    pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, W::Error> {
         let urldecoded = incoming.query()
             .map(extract_parameters)
             .unwrap_or_else(|_| ClientParameter::invalid());
@@ -141,13 +143,13 @@ impl AuthorizationFlow {
     }
 
     pub fn handle<'c, Req, Auth>(granter: CodeRef<'c>, prepared: PreparedAuthorization<'c, Req>, page_handler: &Auth)
-    -> Result<Req::Response, OAuthError> where
+    -> Result<Req::Response, Req::Error> where
         Req: WebRequest,
         Auth: OwnerAuthorizer<Request=Req>
     {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(&urldecoded) {
-            Err(CodeError::Ignore) => return Err(OAuthError::ParameterNegotiationFailed),
+            Err(CodeError::Ignore) => return Err(OAuthError::ParameterNegotiationFailed.into()),
             Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
             Ok(v) => v,
         };
@@ -167,7 +169,7 @@ impl AuthorizationFlow {
         };
 
         let redirect_to = match authorization {
-           Err(CodeError::Ignore) => return Err(OAuthError::AuthorizationFailed),
+           Err(CodeError::Ignore) => return Err(OAuthError::AuthorizationFailed.into()),
            Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
            Ok(v) => v,
        };
@@ -216,7 +218,7 @@ impl<'l> AccessTokenParameter<'l> {
 }
 
 impl GrantFlow {
-    pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedGrant<W>, OAuthError> {
+    pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedGrant<W>, W::Error> {
         let params = req.urlbody()
             .map(extract_access_token)
             .unwrap_or_else(|_| AccessTokenParameter::invalid());
@@ -225,7 +227,7 @@ impl GrantFlow {
     }
 
     pub fn handle<Req>(mut issuer: IssuerRef, prepared: PreparedGrant<Req>)
-    -> Result<Req::Response, OAuthError> where Req: WebRequest
+    -> Result<Req::Response, Req::Error> where Req: WebRequest
     {
         let PreparedGrant { params, .. } = prepared;
         match issuer.use_code(&params) {
@@ -258,7 +260,7 @@ impl<'l> GuardParameter<'l> {
 }
 
 impl AccessFlow {
-    pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedAccess<W>, OAuthError> {
+    pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedAccess<W>, W::Error> {
         let params = req.authheader()
             .map(|auth| GuardParameter { valid: true, token: auth })
             .unwrap_or_else(|_| GuardParameter::invalid());
@@ -267,11 +269,11 @@ impl AccessFlow {
     }
 
     pub fn handle<Req>(guard: GuardRef, prepared: PreparedAccess<Req>)
-    -> Result<(), OAuthError> where Req: WebRequest {
+    -> Result<(), Req::Error> where Req: WebRequest {
         guard.protect(&prepared.params).map_err(|err| {
             match err {
-                AccessError::InvalidRequest => OAuthError::BadRequest("Invalid format".to_string()),
-                AccessError::AccessDenied => OAuthError::AuthorizationFailed,
+                AccessError::InvalidRequest => OAuthError::BadRequest("Invalid format".to_string()).into(),
+                AccessError::AccessDenied => OAuthError::AuthorizationFailed.into(),
             }
         })
     }

@@ -29,6 +29,7 @@ enum CraftedResponse {
 
 impl WebRequest for CraftedRequest {
     type Response = CraftedResponse;
+    type Error = OAuthError;
 
     fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()> {
         self.query.clone().ok_or(())
@@ -44,6 +45,7 @@ impl WebRequest for CraftedRequest {
 }
 
 impl WebResponse for CraftedResponse {
+    type Error = OAuthError;
     fn redirect(url: Url) -> Result<Self, OAuthError> {
         Ok(CraftedResponse::Redirect(url))
     }
