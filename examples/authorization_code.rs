@@ -44,12 +44,12 @@ mod main {
         router.post("/token", ohandler.token(), "token");
 
         // Set up a protected resource, only accessible with a token with `default scope`.
-        protected.link_before(ohandler.guard(vec!["default".parse::<Scope>().unwrap()]));
+        protected.link_before(ohandler.guard(vec!["default".parse().unwrap()]));
         // Instead of an error, show a warning and instructions
         protected.link_after(HelpfulAuthorizationError());
         router.get("/", protected, "protected");
 
-        // Start the server
+        // Start the server, in a real application this MUST be https instead
         let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
         // Start a dummy client instance which simply relays the token/response
         let client = thread::spawn(|| iron::Iron::new(dummy_client).http("localhost:8021").unwrap());
@@ -58,9 +58,8 @@ mod main {
         open_in_browser();
         join.join().expect("Failed to run");
         client.join().expect("Failed to run client");
-
     }
-    
+
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.

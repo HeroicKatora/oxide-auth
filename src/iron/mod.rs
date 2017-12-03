@@ -303,8 +303,8 @@ impl<R, A, I> IronGranter<R, A, I> where
     }
 
     /// Create a BeforeMiddleware capable of guarding other resources.
-    pub fn guard<S>(&self, scopes: S) -> IronGuard<I> where S: Into<Vec<Scope>> {
-        IronGuard { issuer: self.issuer.clone(), scopes: scopes.into() }
+    pub fn guard<T>(&self, scopes: T) -> IronGuard<I> where T: IntoIterator<Item=Scope> {
+        IronGuard { issuer: self.issuer.clone(), scopes: scopes.into_iter().collect() }
     }
 
     /// Thread-safely access the underlying registrar, which is responsible for client registrarion.
