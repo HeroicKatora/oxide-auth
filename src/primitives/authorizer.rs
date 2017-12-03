@@ -9,7 +9,20 @@ use std::collections::HashMap;
 use std::borrow::Cow;
 use chrono::{Duration, Utc};
 
-use super::{Authorizer, Request, Grant, Scope, Time, TokenGenerator, Url};
+use super::{Request, Grant, Scope, Time, Url};
+use super::generator::TokenGenerator;
+
+/// Authorizers create and manage authorization codes.
+///
+/// The authorization code can be traded for a bearer token at the token endpoint.
+pub trait Authorizer {
+    /// Create a code which allows retrieval of a bearer token at a later time.
+    fn authorize(&mut self, Request) -> String;
+    /// Retrieve the parameters associated with a token, invalidating the code in the process. In
+    /// particular, a code should not be usable twice (there is no stateless implementation of an
+    /// authorizer for this reason).
+    fn extract<'a>(&mut self, &'a str) -> Option<Grant<'a>>;
+}
 
 struct SpecificGrant {
     owner_id: String,

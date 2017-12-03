@@ -1,9 +1,11 @@
 use super::frontend::*;
 use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
-use super::authorizer::Storage;
-use super::issuer::TokenMap;
-use super::registrar::ClientMap;
-use super::scope::Scope;
+use primitives::authorizer::Storage;
+use primitives::generator::TokenGenerator;
+use primitives::issuer::TokenMap;
+use primitives::registrar::ClientMap;
+use primitives::scope::Scope;
+use primitives::Grant;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -77,8 +79,8 @@ impl WebResponse for CraftedResponse {
 
 struct TestGenerator(String);
 
-impl super::TokenGenerator for TestGenerator {
-    fn generate(&self, _grant: &super::Grant) -> String {
+impl TokenGenerator for TestGenerator {
+    fn generate(&self, _grant: &Grant) -> String {
         self.0.clone()
     }
 }

@@ -6,10 +6,25 @@ use std::collections::HashMap;
 use std::clone::Clone;
 use std::borrow::Cow;
 use chrono::{Utc, Duration};
-use super::{Issuer, Grant, Request, Scope, Time, TokenGenerator, Url, IssuedToken};
-use super::generator::Assertion;
+use super::{Grant, Request, Scope, Time, Url, IssuedToken};
+use super::generator::{TokenGenerator, Assertion};
 use ring::digest::SHA256;
 use ring::hmac::SigningKey;
+
+/// Issuers create bearer tokens.
+///
+/// It's the issuers decision whether a refresh token is offered or not. In any case, it is also
+/// responsible for determining the validity and parameters of any possible token string. Some
+/// backends or frontends may decide not to propagate the refresh token (for example because
+/// they do not intend to offer a statefull refresh api).
+pub trait Issuer {
+    /// Create a token authorizing the request parameters
+    fn issue(&mut self, Request) -> IssuedToken;
+    /// Get the values corresponding to a bearer token
+    fn recover_token<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+    /// Get the values corresponding to a refresh token
+    fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+}
 
 #[derive(Clone)]
 struct SpecificGrant {

@@ -90,7 +90,6 @@ extern crate iron;
 extern crate urlencoded;
 
 use super::code_grant::prelude::*;
-use super::code_grant::{Authorizer, Issuer, Registrar};
 use super::code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
 pub use super::code_grant::frontend::{AuthenticationRequest, Authentication, OAuthError};
 pub use super::code_grant::Scope;

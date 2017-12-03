@@ -9,9 +9,10 @@
 //! Another consideration is the possiblilty of reusing some components with other oauth schemes.
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
-use super::{Authorizer, Registrar, RegistrarError};
-use super::{Negotiated, NegotiationParameter};
-use super::{Issuer, IssuedToken, Request};
+use primitives::authorizer::Authorizer;
+use primitives::registrar::{Registrar, RegistrarError};
+use primitives::{Negotiated, IssuedToken, NegotiationParameter, Request};
+use primitives::issuer::{Issuer};
 use super::{Scope};
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
@@ -218,10 +219,7 @@ impl<'u> CodeRef<'u> {
         let scope = match self.registrar.negotiate(parameter) {
             Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
-            Err(RegistrarError::Error(err)) => {
-                let error = prepared_error.with(err);
-                return Err(CodeError::Redirect(error))
-            }
+            Err(RegistrarError::UnauthorizedClient) => return Err(CodeError::Ignore),
             Ok(negotiated) => negotiated,
         };
 

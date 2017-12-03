@@ -2,14 +2,14 @@
 //!
 //! In short, a code grant needs to encapsulate information about the owner, client, redirect_url,
 //! scope, and lifetime of a grant. This information needs to be uniquely recoverable.
-//! 
+//!
 //! Two major implementation exists:
 //!     - `RandomGenerator` depends on the entropy of the generated token to make guessing
 //!     infeasible.
 //!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
 //!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
 //!     is not currently expressed in the type system or with traits.
-use super::{Grant, TokenGenerator};
+use super::Grant;
 use chrono::{Utc, TimeZone};
 use std::borrow::Cow;
 use rand::{thread_rng, Rng};
@@ -17,6 +17,15 @@ use ring;
 use rmp_serde;
 use url::Url;
 use base64::{encode, decode};
+
+/// Generic token for a specific grant.
+///
+/// The interface may be reused for authentication codes, bearer tokens and refresh tokens.
+pub trait TokenGenerator {
+    /// For example sign a grant or generate a random token. The exact guarantees and uses depend
+    /// on the specific implementation.
+    fn generate(&self, &Grant) -> String;
+}
 
 pub struct RandomGenerator {
     len: usize

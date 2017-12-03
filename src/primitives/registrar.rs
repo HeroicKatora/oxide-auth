@@ -3,12 +3,30 @@
 //! It will govern their redirect urls and allowed scopes to request tokens for. When an oauth
 //! request turns up, it is the registrars duty to verify the requested scope and redirect url for
 //! consistency in the permissions granted and urls registered.
-//! 
+//!
 //! For confidential clients [WIP], it is also responsible for authentication verification.
-use super::{Registrar, NegotiationParameter, RegistrarError, Scope};
+use super::{NegotiationParameter, Scope};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
+
+/// Registrars provie a way to interact with clients.
+///
+/// Most importantly, they determine defaulted parameters for a request as well as the validity
+/// of provided parameters. In general, implementations of this trait will probably offer an
+/// interface for registering new clients. This interface is not covered by this library.
+pub trait Registrar {
+    /// Determine the allowed scope and redirection url for the client. The registrar may override
+    /// the scope entirely or simply substitute a default scope in case none is given. Redirection
+    /// urls should be matched verbatim, not partially.
+    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Cow<'a, Scope>, RegistrarError>;
+}
+
+pub enum RegistrarError {
+    Unregistered,
+    MismatchedRedirect,
+    UnauthorizedClient,
+}
 
 struct Data {
     default_scope: Scope,
