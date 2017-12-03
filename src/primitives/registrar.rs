@@ -20,6 +20,10 @@ pub trait Registrar {
     /// the scope entirely or simply substitute a default scope in case none is given. Redirection
     /// urls should be matched verbatim, not partially.
     fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Cow<'a, Scope>, RegistrarError>;
+
+    /// Return the authenticated client if authentication with the provided passphrase succeeded.
+    /// In case the client is not a confidential client, fail as well.
+    fn authenticate(&self, client_id: &str, passphrase: &str) -> Result<&Client, ()>;
 }
 
 pub enum RegistrarError {
@@ -28,13 +32,46 @@ pub enum RegistrarError {
     UnauthorizedClient,
 }
 
-struct Data {
-    default_scope: Scope,
+pub struct Client {
+    client_id: String,
     redirect_url: Url,
+    default_scope: Scope,
+    client_type: ClientType,
+}
+
+enum ClientType {
+    Public,
+    Confidential{ passphrase: String, },
 }
 
 pub struct ClientMap {
-    clients: HashMap<String, Data>,
+    clients: HashMap<String, Client>,
+}
+
+impl Client {
+    /// Create a public client
+    pub fn public(client_id: &str, redirect_url: Url, default_scope: Scope) -> Client {
+        Client { client_id: client_id.to_string(), redirect_url, default_scope, client_type: ClientType::Public }
+    }
+
+    /// Create a confidential client
+    pub fn confidential(client_id: &str, redirect_url: Url, default_scope: Scope, passphrase: &str) -> Client {
+        Client {
+            client_id: client_id.to_string(),
+            redirect_url,
+            default_scope,
+            client_type: ClientType::Confidential { passphrase: passphrase.to_string() },
+        }
+    }
+
+    /// Ok only if this client is confidential and the passphrase matches
+    pub fn authenticate(&self, passphrase: &str) -> Result<(), ()> {
+        let secret = match self.client_type {
+            ClientType::Confidential{ ref passphrase } => passphrase,
+            _ => return Err(())
+        };
+        Err(())
+    }
 }
 
 impl ClientMap {
@@ -42,9 +79,8 @@ impl ClientMap {
         ClientMap { clients: HashMap::new() }
     }
 
-    pub fn register_client(&mut self, client_id: &str, redirect_url: Url) {
-        self.clients.insert(client_id.to_string(),
-            Data{ default_scope: "default".parse().unwrap(), redirect_url: redirect_url});
+    pub fn register_client(&mut self, client: Client) {
+        self.clients.insert(client.client_id.clone(), client);
     }
 }
 
@@ -60,5 +96,11 @@ impl Registrar for ClientMap {
         }
         // Don't allow any scope deviation from the default
         Ok(Cow::Owned(client.default_scope.clone()))
+    }
+
+    fn authenticate(&self, client_id: &str, passphrase: &str) -> Result<&Client, ()> {
+        let client = self.clients.get(client_id).ok_or(())?;
+        client.authenticate(passphrase)?;
+        Ok(client)
     }
 }

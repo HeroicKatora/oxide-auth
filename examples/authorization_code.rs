@@ -30,7 +30,10 @@ mod main {
             TokenSigner::new_from_passphrase(passphrase));
 
         // Register a dummy client instance
-        ohandler.registrar().unwrap().register_client("LocalClient", "http://localhost:8021/endpoint".parse().unwrap());
+        let client = Client::public("LocalClient", // Client id
+            "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
+            "default".parse().unwrap()); // Allowed client scope
+        ohandler.registrar().unwrap().register_client(client);
 
         // Create a router and bind the relevant pages
         let mut router = router::Router::new();

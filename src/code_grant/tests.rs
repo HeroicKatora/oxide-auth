@@ -3,7 +3,7 @@ use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
 use primitives::authorizer::Storage;
 use primitives::generator::TokenGenerator;
 use primitives::issuer::TokenMap;
-use primitives::registrar::ClientMap;
+use primitives::registrar::{Client, ClientMap};
 use primitives::scope::Scope;
 use primitives::grant::GrantRef;
 
@@ -105,7 +105,8 @@ fn authorize_and_get() {
     let owner_id = "Owner";
     let redirect_url = "https://client.example/endpoint";
 
-    registrar.register_client(client_id, Url::parse(redirect_url).unwrap());
+    let client = Client::public(client_id, Url::parse(redirect_url).unwrap(), "default".parse().unwrap());
+    registrar.register_client(client);
 
     let mut authrequest = CraftedRequest {
         query: Some(vec![("client_id", client_id),
