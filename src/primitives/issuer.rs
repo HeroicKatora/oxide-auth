@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use std::clone::Clone;
 use std::borrow::Cow;
 use chrono::{Utc, Duration};
-use super::{Grant, Request, Scope, Time, Url, IssuedToken};
+use super::{Request, IssuedToken};
+use super::grant::{Grant, GrantRef};
 use super::generator::{TokenGenerator, Assertion};
 use ring::digest::SHA256;
 use ring::hmac::SigningKey;
@@ -21,36 +22,15 @@ pub trait Issuer {
     /// Create a token authorizing the request parameters
     fn issue(&mut self, Request) -> IssuedToken;
     /// Get the values corresponding to a bearer token
-    fn recover_token<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
+    fn recover_token<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
     /// Get the values corresponding to a refresh token
-    fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant<'a>>;
-}
-
-#[derive(Clone)]
-struct SpecificGrant {
-    owner_id: String,
-    client_id: String,
-    scope: Scope,
-    redirect_url: Url,
-    until: Time
-}
-
-impl<'a> Into<Grant<'a>> for &'a SpecificGrant {
-    fn into(self) -> Grant<'a> {
-        Grant {
-            owner_id: Cow::Borrowed(&self.owner_id),
-            client_id: Cow::Borrowed(&self.client_id),
-            scope: Cow::Borrowed(&self.scope),
-            redirect_url: Cow::Borrowed(&self.redirect_url),
-            until: Cow::Borrowed(&self.until),
-        }
-    }
+    fn recover_refresh<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
 }
 
 pub struct TokenMap<G: TokenGenerator> {
     generator: G,
-    access: HashMap<String, SpecificGrant>,
-    refresh: HashMap<String, SpecificGrant>,
+    access: HashMap<String, Grant>,
+    refresh: HashMap<String, Grant>,
 }
 
 impl<G: TokenGenerator> TokenMap<G> {
@@ -65,7 +45,7 @@ impl<G: TokenGenerator> TokenMap<G> {
 
 impl<G: TokenGenerator> Issuer for TokenMap<G> {
     fn issue(&mut self, req: Request) -> IssuedToken {
-        let grant = SpecificGrant {
+        let grant = Grant {
             owner_id: req.owner_id.to_string(),
             client_id: req.client_id.to_string(),
             scope: req.scope.clone(),
@@ -84,11 +64,11 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
         IssuedToken { token, refresh, until }
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
         self.access.get(token).map(|v| v.into())
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
         self.refresh.get(token).map(|v| v.into())
     }
 }
@@ -110,7 +90,7 @@ impl TokenSigner {
 
 impl Issuer for TokenSigner {
     fn issue(&mut self, req: Request) -> IssuedToken {
-        let grant = Grant {
+        let grant = GrantRef {
             owner_id: req.owner_id.into(),
             client_id: req.client_id.into(),
             scope: Cow::Borrowed(req.scope),
@@ -122,11 +102,11 @@ impl Issuer for TokenSigner {
         IssuedToken {token, refresh, until: grant.until.into_owned() }
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
         self.signer.tag("token").extract(token).ok()
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant<'a>> {
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
         self.signer.tag("refresh").extract(token).ok()
     }
 }

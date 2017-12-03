@@ -6,10 +6,10 @@
 //! side request, it will then check the given parameters to determine the authorization of such
 //! clients.
 use std::collections::HashMap;
-use std::borrow::Cow;
 use chrono::{Duration, Utc};
 
-use super::{Request, Grant, Scope, Time, Url};
+use super::Request;
+use super::grant::{Grant, GrantRef};
 use super::generator::TokenGenerator;
 
 /// Authorizers create and manage authorization codes.
@@ -21,45 +21,12 @@ pub trait Authorizer {
     /// Retrieve the parameters associated with a token, invalidating the code in the process. In
     /// particular, a code should not be usable twice (there is no stateless implementation of an
     /// authorizer for this reason).
-    fn extract<'a>(&mut self, &'a str) -> Option<Grant<'a>>;
-}
-
-struct SpecificGrant {
-    owner_id: String,
-    client_id: String,
-    scope: Scope,
-    redirect_url: Url,
-    until: Time,
-}
-
-impl<'a> Into<Grant<'a>> for SpecificGrant {
-    fn into(self) -> Grant<'a> {
-        Grant {
-            owner_id: Cow::Owned(self.owner_id),
-            client_id: Cow::Owned(self.client_id),
-            scope: Cow::Owned(self.scope),
-            redirect_url: Cow::Owned(self.redirect_url),
-            until: Cow::Owned(self.until),
-        }
-    }
-}
-
-impl<'a> Grant<'a> {
-    fn from_refs(owner_id: &'a str, client_id: &'a str, scope: &'a Scope,
-        redirect_url: &'a Url, until: &'a Time) -> Grant<'a> {
-        Grant {
-            owner_id: Cow::Borrowed(owner_id),
-            client_id: Cow::Borrowed(client_id),
-            scope: Cow::Borrowed(scope),
-            redirect_url: Cow::Borrowed(redirect_url),
-            until: Cow::Borrowed(until),
-        }
-    }
+    fn extract<'a>(&mut self, &'a str) -> Option<GrantRef<'a>>;
 }
 
 pub struct Storage<I: TokenGenerator> {
     issuer: I,
-    tokens: HashMap<String, SpecificGrant>
+    tokens: HashMap<String, Grant>
 }
 
 impl<I: TokenGenerator> Storage<I> {
@@ -75,16 +42,14 @@ impl<I: TokenGenerator> Authorizer for Storage<I> {
         let scope = req.scope.clone();
         let redirect_url = req.redirect_url.clone();
         let until = Utc::now() + Duration::minutes(10);
+        let grant = Grant {owner_id, client_id, scope, redirect_url, until };
 
-        let token = self.issuer.generate(
-            &Grant::from_refs(&owner_id, &client_id, &scope, &redirect_url, &until));
-        self.tokens.insert(token.clone(), SpecificGrant {
-            owner_id, client_id, scope, redirect_url, until
-        });
+        let token = self.issuer.generate(&(&grant).into());
+        self.tokens.insert(token.clone(), grant);
         token
     }
 
-    fn extract<'a>(&mut self, grant: &'a str) -> Option<Grant<'a>> {
+    fn extract<'a>(&mut self, grant: &'a str) -> Option<GrantRef<'a>> {
         self.tokens.remove(grant).map(|v| v.into())
     }
 }

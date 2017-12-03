@@ -6,6 +6,7 @@ use std::borrow::Cow;
 
 pub mod authorizer;
 pub mod generator;
+pub mod grant;
 pub mod issuer;
 pub mod registrar;
 pub mod scope;
@@ -30,14 +31,6 @@ pub struct Request<'a> {
     pub client_id: &'a str,
     pub redirect_url: &'a Url,
     pub scope: &'a Scope,
-}
-
-pub struct Grant<'a> {
-    pub owner_id: Cow<'a, str>,
-    pub client_id: Cow<'a, str>,
-    pub redirect_url: Cow<'a, Url>,
-    pub scope: Cow<'a, Scope>,
-    pub until: Cow<'a, Time>,
 }
 
 #[derive(Clone, Debug)]
