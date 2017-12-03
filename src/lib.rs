@@ -26,7 +26,7 @@ extern crate serde_derive;
 extern crate serde_json;
 
 pub mod code_grant;
-mod primitives;
+pub mod primitives;
 #[cfg(feature = "iron-backend")]
 pub mod iron;
 

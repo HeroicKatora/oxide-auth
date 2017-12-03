@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::clone::Clone;
 use std::borrow::Cow;
 use chrono::{Utc, Duration};
-use super::{Request, IssuedToken};
+use super::{Request, Time};
 use super::grant::{Grant, GrantRef};
 use super::generator::{TokenGenerator, Assertion};
 use ring::digest::SHA256;
@@ -25,6 +25,13 @@ pub trait Issuer {
     fn recover_token<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
     /// Get the values corresponding to a refresh token
     fn recover_refresh<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
+}
+
+#[derive(Clone, Debug)]
+pub struct IssuedToken {
+    pub token: String,
+    pub refresh: String,
+    pub until: Time,
 }
 
 pub struct TokenMap<G: TokenGenerator> {

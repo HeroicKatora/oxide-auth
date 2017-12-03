@@ -11,8 +11,8 @@
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 use primitives::authorizer::Authorizer;
 use primitives::registrar::{Registrar, RegistrarError};
-use primitives::{Negotiated, IssuedToken, NegotiationParameter, Request};
-use primitives::issuer::{Issuer};
+use primitives::{Negotiated, NegotiationParameter, Request};
+use primitives::issuer::{IssuedToken, Issuer};
 use super::{Scope};
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
