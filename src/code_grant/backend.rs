@@ -225,7 +225,7 @@ impl<'u> CodeRef<'u> {
 
         let negotiated = Negotiated {
             client_id,
-            redirect_url: redirect_url.into_owned(),
+            redirect_url,
             scope
         };
 
@@ -236,21 +236,6 @@ impl<'u> CodeRef<'u> {
         })
     }
 
-    /// Use negotiated parameters to authorize a client for an owner.
-    fn authorize<'a>(&'a mut self, owner_id: Cow<'a, str>, negotiated: Negotiated<'a>, request: &'a CodeRequest)
-     -> Result<Url, CodeError> {
-        let grant = self.authorizer.authorize(Request{
-            owner_id: &owner_id,
-            client_id: &negotiated.client_id,
-            redirect_url: &negotiated.redirect_url,
-            scope: &negotiated.scope});
-        let mut url = negotiated.redirect_url;
-        url.query_pairs_mut()
-            .append_pair("code", grant.as_str())
-            .extend_pairs(request.state().map(|v| ("state", v)))
-            .finish();
-        Ok(url)
-    }
 
     pub fn with(registrar: &'u Registrar, t: &'u mut Authorizer) -> Self {
         CodeRef { registrar, authorizer: t }
@@ -260,15 +245,26 @@ impl<'u> CodeRef<'u> {
 impl<'a> AuthorizationRequest<'a> {
     /// Denies the request, which redirects to the client for which the request originated.
     pub fn deny(self) -> CodeResult<Url> {
-        let url = self.negotiated.redirect_url;
+        let url = self.negotiated.redirect_url.into_owned();
         let error = AuthorizationError::with(AuthorizationErrorType::AccessDenied);
         let error = ErrorUrl::new(url, self.request.state(), error);
         Err(CodeError::Redirect(error))
     }
 
-    /// Inform the backend about consent from a resource owner.
-    pub fn authorize(mut self, owner_id: Cow<'a, str>) -> CodeResult<Url> {
-        self.code.authorize(owner_id, self.negotiated, self.request)
+    /// Inform the backend about consent from a resource owner. Use negotiated parameters to
+    /// authorize a client for an owner.
+    pub fn authorize(self, owner_id: Cow<'a, str>) -> CodeResult<Url> {
+       let grant = self.code.authorizer.authorize(Request{
+           owner_id: &owner_id,
+           client_id: &self.negotiated.client_id,
+           redirect_url: &self.negotiated.redirect_url,
+           scope: &self.negotiated.scope});
+       let mut url = self.negotiated.redirect_url.into_owned();
+       url.query_pairs_mut()
+           .append_pair("code", grant.as_str())
+           .extend_pairs(self.request.state().map(|v| ("state", v)))
+           .finish();
+       Ok(url)
     }
 
     /// Retrieve a reference to the negotiated parameters (e.g. scope). These should be displayed

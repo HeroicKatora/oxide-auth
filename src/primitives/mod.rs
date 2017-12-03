@@ -25,7 +25,7 @@ pub struct NegotiationParameter<'a> {
 pub struct Negotiated<'a> {
     pub client_id: Cow<'a, str>,
     pub scope: Cow<'a, Scope>,
-    pub redirect_url: Url,
+    pub redirect_url: Cow<'a, Url>,
 }
 
 pub struct Request<'a> {
