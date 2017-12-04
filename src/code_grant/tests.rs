@@ -126,7 +126,7 @@ fn authorize_public() {
           .expect("Failure during authorization handling") {
         CraftedResponse::Redirect(ref url) if url.as_str() == "https://client.example/endpoint?code=AuthToken"
             => (),
-        _ => panic!()
+        resp => panic!("{:?}", resp),
     };
 
     let mut tokenrequest = CraftedRequest {
@@ -152,7 +152,7 @@ fn authorize_public() {
                 let scope = parsed.get("scope").unwrap().to_string();
                 (token, scope)
             },
-        _ => panic!(),
+        resp => panic!("{:?}", resp),
     };
 
     let mut accessrequest = CraftedRequest {
