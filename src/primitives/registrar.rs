@@ -5,7 +5,7 @@
 //! consistency in the permissions granted and urls registered.
 //!
 //! For confidential clients [WIP], it is also responsible for authentication verification.
-use super::{NegotiationParameter, Scope};
+use super::scope::Scope;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
@@ -21,10 +21,22 @@ pub trait Registrar {
     /// Determine the allowed scope and redirection url for the client. The registrar may override
     /// the scope entirely or simply substitute a default scope in case none is given. Redirection
     /// urls should be matched verbatim, not partially.
-    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<Cow<'a, Scope>, RegistrarError>;
+    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<ClientParameter<'a>, RegistrarError>;
 
     /// Look up a client id.
     fn client(&self, client_id: &str) -> Option<&Client>;
+}
+
+pub struct NegotiationParameter<'a> {
+    pub client_id: Cow<'a, str>,
+    pub redirect_url: Cow<'a, Url>,
+    pub scope: Option<Cow<'a, Scope>>,
+}
+
+pub struct ClientParameter<'a> {
+    pub client_id: Cow<'a, str>,
+    pub redirect_url: Cow<'a, Url>,
+    pub scope: Cow<'a, Scope>,
 }
 
 pub enum RegistrarError {
@@ -51,6 +63,16 @@ enum ClientType {
 /// A very simple, in-memory hash map of client ids to Client entries.
 pub struct ClientMap {
     clients: HashMap<String, Client>,
+}
+
+impl<'a> NegotiationParameter<'a> {
+    fn set_scope(self, scope: Scope) -> ClientParameter<'a> {
+        ClientParameter {
+            client_id: self.client_id,
+            redirect_url: self.redirect_url,
+            scope: Cow::Owned(scope),
+        }
+    }
 }
 
 impl Client {
@@ -130,7 +152,7 @@ impl ClientMap {
 }
 
 impl Registrar for ClientMap {
-    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<Cow<'a, Scope>, RegistrarError> {
+    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<ClientParameter<'a>, RegistrarError> {
         let client = match self.clients.get(params.client_id.as_ref()) {
             None => return Err(RegistrarError::Unregistered),
             Some(stored) => stored
@@ -140,7 +162,7 @@ impl Registrar for ClientMap {
             return Err(RegistrarError::MismatchedRedirect);
         }
         // Don't allow any scope deviation from the default
-        Ok(Cow::Owned(client.default_scope.clone()))
+        Ok(params.set_scope(client.default_scope.clone()))
     }
 
     fn client(&self, client_id: &str) -> Option<&Client> {

@@ -10,8 +10,8 @@
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 use primitives::authorizer::Authorizer;
-use primitives::registrar::{Registrar, RegistrarError};
-use primitives::{Negotiated, NegotiationParameter, Request};
+use primitives::registrar::{ClientParameter, NegotiationParameter, Registrar, RegistrarError};
+use primitives::Request;
 use primitives::issuer::{IssuedToken, Issuer};
 use super::{Scope};
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
@@ -167,7 +167,7 @@ pub struct CodeRef<'a> {
 /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
 /// can signal a reponse using this object.
 pub struct AuthorizationRequest<'a> {
-    negotiated: Negotiated<'a>,
+    negotiated: ClientParameter<'a>,
     code: CodeRef<'a>,
     request: &'a CodeRequest,
 }
@@ -211,22 +211,16 @@ impl<'u> CodeRef<'u> {
 
         // Call the underlying registrar
         let parameter = NegotiationParameter {
-            client_id: client_id.clone(),
+            client_id: client_id,
             scope: scope,
-            redirect_url: redirect_url.clone(),
+            redirect_url: redirect_url,
         };
 
-        let scope = match self.registrar.negotiate(parameter) {
+        let negotiated = match self.registrar.negotiate(parameter) {
             Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
             Err(RegistrarError::UnauthorizedClient) => return Err(CodeError::Ignore),
             Ok(negotiated) => negotiated,
-        };
-
-        let negotiated = Negotiated {
-            client_id,
-            redirect_url,
-            scope
         };
 
         Ok(AuthorizationRequest {
@@ -269,7 +263,7 @@ impl<'a> AuthorizationRequest<'a> {
 
     /// Retrieve a reference to the negotiated parameters (e.g. scope). These should be displayed
     /// to the resource owner when asking for his authorization.
-    pub fn negotiated(&self) -> &Negotiated<'a> {
+    pub fn negotiated(&self) -> &ClientParameter<'a> {
         &self.negotiated
     }
 }

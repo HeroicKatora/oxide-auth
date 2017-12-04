@@ -4,8 +4,6 @@ use chrono::DateTime;
 use chrono::Utc;
 use url::Url;
 
-use std::borrow::Cow;
-
 pub mod authorizer;
 pub mod generator;
 pub mod grant;
@@ -15,18 +13,6 @@ pub mod scope;
 
 type Time = DateTime<Utc>;
 use self::scope::Scope;
-
-pub struct NegotiationParameter<'a> {
-    pub client_id: Cow<'a, str>,
-    pub redirect_url: Cow<'a, Url>,
-    pub scope: Option<Cow<'a, Scope>>,
-}
-
-pub struct Negotiated<'a> {
-    pub client_id: Cow<'a, str>,
-    pub scope: Cow<'a, Scope>,
-    pub redirect_url: Cow<'a, Url>,
-}
 
 pub struct Request<'a> {
     pub owner_id: &'a str,

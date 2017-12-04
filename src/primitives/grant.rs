@@ -1,4 +1,5 @@
-use super::{Scope, Url, Time};
+use super::{Url, Time};
+use super::scope::Scope;
 use std::borrow::Cow;
 
 #[derive(Clone)]
