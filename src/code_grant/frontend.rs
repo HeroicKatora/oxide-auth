@@ -16,6 +16,7 @@ use std::error;
 use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerError, IssuerRef};
 use super::backend::{AccessError, GuardRequest, GuardRef};
 use url::Url;
+use base64;
 
 /// Holds the decode query fragments from the url
 struct ClientParameter<'a> {
@@ -46,6 +47,7 @@ struct AccessTokenParameter<'a> {
     redirect_url: Option<Cow<'a, str>>,
     grant_type: Option<Cow<'a, str>>,
     code: Option<Cow<'a, str>>,
+    authorization: Option<(String, Vec<u8>)>,
 }
 
 struct GuardParameter<'a> {
@@ -199,6 +201,7 @@ fn extract_access_token<'l>(params: &'l HashMap<String, Vec<String>>) -> AccessT
         code: map.get("code").map(|v| (*v).into()),
         redirect_url: map.get("redirect_url").map(|v| (*v).into()),
         grant_type: map.get("grant_type").map(|v| (*v).into()),
+        authorization: None,
     }
 }
 
@@ -208,23 +211,61 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
     fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
     fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.clone() }
     fn grant_type(&self) -> Option<Cow<str>> { self.grant_type.clone() }
-    fn authorization(&self) -> Option<(Cow<str>, Cow<str>)> { None }
+    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
+        match self.authorization {
+            None => None,
+            Some((ref id, ref pass))
+                => Some((id.as_str().into(), pass.as_slice().into())),
+        }
+    }
 }
 
 impl<'l> AccessTokenParameter<'l> {
     fn invalid() -> Self {
         AccessTokenParameter { valid: false, code: None, client_id: None, redirect_url: None,
-            grant_type: None, }
+            grant_type: None, authorization: None }
     }
 }
 
 impl GrantFlow {
     pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedGrant<W>, W::Error> {
-        let params = req.urlbody()
-            .map(extract_access_token)
-            .unwrap_or_else(|_| AccessTokenParameter::invalid());
-
+        let params = GrantFlow::create_valid_params(req)
+            .unwrap_or(AccessTokenParameter::invalid());
         Ok(PreparedGrant { params: params, req: PhantomData })
+    }
+
+    fn create_valid_params<'a, W: WebRequest>(req: &'a mut W) -> Option<AccessTokenParameter<'a>> {
+        let authorization = match req.authheader().unwrap() {
+            None => None,
+            Some(ref header) => {
+                if !header.starts_with("Basic ") {
+                    return None
+                }
+
+                let mut split =  header[6..].splitn(2, ':');
+                let client = match split.next() {
+                    None => return None,
+                    Some(client) => client,
+                };
+                let passwd64 = match split.next() {
+                    None => return None,
+                    Some(passwd64) => passwd64,
+                };
+                let passwd = match base64::decode(&passwd64) {
+                    Err(_) => return None,
+                    Ok(vec) => vec,
+                };
+
+                Some((client.to_string(), passwd))
+            },
+        };
+
+        let mut params = req.urlbody()
+            .map(extract_access_token).unwrap();
+
+        params.authorization = authorization;
+
+        Some(params)
     }
 
     pub fn handle<Req>(mut issuer: IssuerRef, prepared: PreparedGrant<Req>)

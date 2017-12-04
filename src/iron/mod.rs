@@ -135,13 +135,12 @@ pub struct IronAuthorizer<PH, R, A> where
 }
 
 /// Handles token requests from clients.
-///
-/// WIP: Client authorization is currently not supported, making this extremely insecure. Basic
-/// auth with a registered secret should be used instead.
-pub struct IronTokenRequest<A, I> where
+pub struct IronTokenRequest<R, A, I> where
+    R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
 {
+    registrar: Arc<Mutex<R>>,
     authorizer: Arc<Mutex<A>>,
     issuer: Arc<Mutex<I>>,
 }
@@ -298,8 +297,11 @@ impl<R, A, I> IronGranter<R, A, I> where
     }
 
     /// Create an access token endpoint.
-    pub fn token(&self) -> IronTokenRequest<A, I> {
-        IronTokenRequest { authorizer: self.authorizer.clone(), issuer: self.issuer.clone() }
+    pub fn token(&self) -> IronTokenRequest<R, A, I> {
+        IronTokenRequest {
+            registrar: self.registrar.clone(),
+            authorizer: self.authorizer.clone(),
+            issuer: self.issuer.clone() }
     }
 
     /// Create a BeforeMiddleware capable of guarding other resources.
@@ -347,16 +349,21 @@ impl<PH, R, A> iron::Handler for IronAuthorizer<PH, R, A> where
 }
 
 
-impl<A, I> iron::Handler for IronTokenRequest<A, I> where
+impl<R, A, I> iron::Handler for IronTokenRequest<R, A, I> where
+    R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
 {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         let prepared = GrantFlow::prepare(req)?;
 
+        let mut locked_registrar = self.registrar.lock().unwrap();
         let mut locked_authorizer = self.authorizer.lock().unwrap();
         let mut locked_issuer = self.issuer.lock().unwrap();
-        let issuer = IssuerRef::with(locked_authorizer.deref_mut(), locked_issuer.deref_mut());
+        let issuer = IssuerRef::with(
+            locked_registrar.deref_mut(),
+            locked_authorizer.deref_mut(),
+            locked_issuer.deref_mut());
 
         GrantFlow::handle(issuer, prepared)
     }

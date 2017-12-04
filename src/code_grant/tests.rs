@@ -12,6 +12,7 @@ use std::collections::HashMap;
 
 use url::Url;
 use serde_json;
+use base64;
 
 struct CraftedRequest {
     query: Option<HashMap<String, Vec<String>>>,
@@ -19,6 +20,7 @@ struct CraftedRequest {
     auth: Option<String>,
 }
 
+#[derive(Debug)]
 enum CraftedResponse {
     Redirect(Url),
     Text(String),
@@ -96,7 +98,7 @@ impl OwnerAuthorizer for Allow {
 }
 
 #[test]
-fn authorize_and_get() {
+fn authorize_public() {
     let mut registrar = ClientMap::new();
     let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
     let mut issuer = TokenMap::new(TestGenerator("AcessToken".to_string()));
@@ -139,7 +141,7 @@ fn authorize_and_get() {
     };
 
     let prepared = GrantFlow::prepare(&mut tokenrequest).expect("Failure during access token preparation");
-    let (token, scope) = match GrantFlow::handle(IssuerRef::with(&mut authorizer, &mut issuer), prepared)
+    let (token, scope) = match GrantFlow::handle(IssuerRef::with(&mut registrar, &mut authorizer, &mut issuer), prepared)
           .expect("Failure during access token handling") {
         CraftedResponse::Json(json)
             => {
@@ -151,6 +153,76 @@ fn authorize_and_get() {
                 (token, scope)
             },
         _ => panic!(),
+    };
+
+    let mut accessrequest = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some(token),
+    };
+
+    let prepared = AccessFlow::prepare(&mut accessrequest).expect("Failure during access preparation");
+    let scope: [Scope; 1] = [scope.parse().unwrap()];
+    AccessFlow::handle(GuardRef::with(&mut issuer, &scope), prepared).expect("Failed to authorize");
+}
+
+#[test]
+fn authorize_confidential() {
+    let mut registrar = ClientMap::new();
+    let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+    let mut issuer = TokenMap::new(TestGenerator("AcessToken".to_string()));
+
+    let client_id = "ClientId";
+    let owner_id = "Owner";
+    let redirect_url = "https://client.example/endpoint";
+    let passphrase = "VGhpcyBpcyBhIHZlcnkgc2VjdXJlIHBhc3NwaHJhc2UK";
+
+    let client = Client::confidential(client_id, Url::parse(redirect_url).unwrap(), "default".parse().unwrap(),
+        passphrase.as_bytes());
+    registrar.register_client(client);
+
+    let mut authrequest = CraftedRequest {
+        query: Some(vec![("client_id", client_id),
+                         ("redirect_url", redirect_url),
+                         ("response_type", "code")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()),
+        urlbody: Some(HashMap::new()),
+        auth: None,
+    };
+
+    let prepared = AuthorizationFlow::prepare(&mut authrequest).expect("Failure during authorization preparation");
+    let pagehandler = Allow(owner_id.to_string());
+    match AuthorizationFlow::handle(CodeRef::with(&mut registrar, &mut authorizer), prepared, &pagehandler)
+          .expect("Failure during authorization handling") {
+        CraftedResponse::Redirect(ref url) if url.as_str() == "https://client.example/endpoint?code=AuthToken"
+            => (),
+        resp => panic!("{:?}", resp)
+    };
+
+    let mut tokenrequest = CraftedRequest {
+        query: Some(HashMap::new()),
+        urlbody: Some(vec![("redirect_url", redirect_url),
+                           ("code", "AuthToken"),
+                           ("grant_type", "authorization_code")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()),
+        auth: Some("Basic ".to_string() + client_id + ":" + &base64::encode(passphrase)),
+    };
+
+    let prepared = GrantFlow::prepare(&mut tokenrequest).expect("Failure during access token preparation");
+    let (token, scope) = match GrantFlow::handle(IssuerRef::with(&mut registrar, &mut authorizer, &mut issuer), prepared)
+          .expect("Failure during access token handling") {
+        CraftedResponse::Json(json)
+            => {
+                let parsed: HashMap<String, String> = serde_json::from_str(&json).unwrap();
+                assert!(parsed.get("error").is_none());
+                assert!(parsed.get("expires_in").unwrap().parse::<i32>().unwrap() > 0);
+                let token = parsed.get("access_token").unwrap().to_string();
+                let scope = parsed.get("scope").unwrap().to_string();
+                (token, scope)
+            },
+        resp => panic!("{:?}", resp),
     };
 
     let mut accessrequest = CraftedRequest {

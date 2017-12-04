@@ -280,6 +280,7 @@ impl<'a> AuthorizationRequest<'a> {
 
 /// Issuer is a thin wrapper around necessary types to execute an bearer token request..
 pub struct IssuerRef<'a> {
+    registrar: &'a Registrar,
     authorizer: &'a mut Authorizer,
     issuer: &'a mut Issuer,
 }
@@ -294,7 +295,7 @@ pub trait AccessTokenRequest {
     /// The authorization code grant for which an access token is wanted.
     fn code(&self) -> Option<Cow<str>>;
     /// User:password of a basic authorization header.
-    fn authorization(&self) -> Option<(Cow<str>, Cow<str>)>;
+    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)>;
     /// The client_id, optional parameter for public clients.
     fn client_id(&self) -> Option<Cow<str>>;
     /// Valid request have the redirect url used to request the authorization code grant.
@@ -310,6 +311,21 @@ impl<'u> IssuerRef<'u> {
         if !request.valid() {
             return Err(IssuerError::invalid(()))
         }
+
+        let authorization = request.authorization();
+        let client_id = request.client_id();
+        let (client_id, auth): (&str, Option<&[u8]>) = match (&client_id, &authorization) {
+            (&None, &Some((ref client_id, ref auth))) => (client_id.as_ref(), Some(auth.as_ref())),
+            (&Some(ref client_id), &None) => (client_id.as_ref(), None),
+            _ => return Err(IssuerError::invalid(())),
+        };
+
+        let client = self.registrar.client(&client_id).ok_or(
+            IssuerError::unauthorized((), "basic"))?;
+        println!("Registered client");
+        client.check_authentication(auth).map_err(|_|
+            IssuerError::unauthorized((), "basic"))?;
+        println!("Authorized client");
 
         match request.grant_type() {
             Some(ref cow) if cow == "authorization_code" => (),
@@ -330,16 +346,7 @@ impl<'u> IssuerRef<'u> {
             .ok_or(IssuerError::invalid(()))?;
         let redirect_url = redirect_url.as_ref();
 
-        let client = match request.authorization() {
-            Some((_client, _pass)) => Err(())
-                /*TODO validate with the registrar*/
-                .map_err(|_| IssuerError::unauthorized((), "basic"))?,
-            None => request.client_id()
-                /*TODO check this is not a confidential client*/
-                .ok_or(IssuerError::invalid(()))?,
-        };
-
-        if (saved_params.client_id.as_ref(), saved_params.redirect_url.as_str()) != (&client, redirect_url) {
+        if (saved_params.client_id.as_ref(), saved_params.redirect_url.as_str()) != (client_id, redirect_url) {
             return Err(IssuerError::invalid(AccessTokenErrorType::InvalidGrant))
         }
 
@@ -356,8 +363,8 @@ impl<'u> IssuerRef<'u> {
         Ok(BearerToken{0: token, 1: saved_params.scope.as_ref().to_string()})
     }
 
-    pub fn with(t: &'u mut Authorizer, i: &'u mut Issuer) -> Self {
-        IssuerRef { authorizer: t, issuer: i }
+    pub fn with(r: &'u Registrar, t: &'u mut Authorizer, i: &'u mut Issuer) -> Self {
+        IssuerRef { registrar: r, authorizer: t, issuer: i }
     }
 }
 
