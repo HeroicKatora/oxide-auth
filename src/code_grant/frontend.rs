@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::fmt;
 use std::error;
-use primitives::registrar::ClientParameter;
+use primitives::registrar::PreGrant;
 use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerError, IssuerRef};
 use super::backend::{AccessError, GuardRequest, GuardRef};
 use url::Url;
@@ -88,7 +88,7 @@ pub trait WebResponse where Self: Sized {
 
 pub trait OwnerAuthorizer {
     type Request: WebRequest;
-    fn get_owner_authorization(&self, &mut Self::Request, &ClientParameter)
+    fn get_owner_authorization(&self, &mut Self::Request, &PreGrant)
       -> Result<(Authentication, <Self::Request as WebRequest>::Response), <Self::Request as WebRequest>::Error>;
 }
 
@@ -152,7 +152,7 @@ impl AuthorizationFlow {
             Ok(v) => v,
         };
 
-        let authorization = match page_handler.get_owner_authorization(req, negotiated.negotiated())? {
+        let authorization = match page_handler.get_owner_authorization(req, negotiated.pre_grant())? {
             (Authentication::Failed, _)
                 => negotiated.deny(),
             (Authentication::InProgress, response)

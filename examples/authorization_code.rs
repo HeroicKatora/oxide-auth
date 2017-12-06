@@ -66,7 +66,7 @@ mod main {
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.
-    fn handle_get(_: &mut Request, auth: &ClientParameter) -> Result<(Authentication, Response), OAuthError> {
+    fn handle_get(_: &mut Request, grant: &PreGrant) -> Result<(Authentication, Response), OAuthError> {
         let text = format!(
             "<html>'{}' (at {}) is requesting permission for '{}'
             <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint\" method=\"post\">
@@ -75,7 +75,7 @@ mod main {
             <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint&deny=1\" method=\"post\">
                 <input type=\"submit\" value=\"Deny\">
             </form>
-            </html>", auth.client_id, auth.redirect_url, auth.scope, auth.client_id, auth.client_id);
+            </html>", grant.client_id, grant.redirect_url, grant.scope, grant.client_id, grant.client_id);
         let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
         Ok((Authentication::InProgress, response))
     }

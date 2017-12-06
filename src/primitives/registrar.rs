@@ -21,7 +21,7 @@ pub trait Registrar {
     /// Determine the allowed scope and redirection url for the client. The registrar may override
     /// the scope entirely or simply substitute a default scope in case none is given. Redirection
     /// urls should be matched verbatim, not partially.
-    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<ClientParameter<'a>, RegistrarError>;
+    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<PreGrant<'a>, RegistrarError>;
 
     /// Look up a client id.
     fn client(&self, client_id: &str) -> Option<&Client>;
@@ -33,7 +33,11 @@ pub struct NegotiationParameter<'a> {
     pub scope: Option<Cow<'a, Scope>>,
 }
 
-pub struct ClientParameter<'a> {
+/// These are the parameters presented to the resource owner when confirming or denying a grant
+/// request. Together with the owner_id and a computed expiration time stamp, this will form a
+/// grant of some sort. In the case of the authorization code grant flow, it will be an
+/// authorization code at first, which can be traded for an access code by the client acknowledged.
+pub struct PreGrant<'a> {
     pub client_id: Cow<'a, str>,
     pub redirect_url: Cow<'a, Url>,
     pub scope: Cow<'a, Scope>,
@@ -66,8 +70,8 @@ pub struct ClientMap {
 }
 
 impl<'a> NegotiationParameter<'a> {
-    fn set_scope(self, scope: Scope) -> ClientParameter<'a> {
-        ClientParameter {
+    fn set_scope(self, scope: Scope) -> PreGrant<'a> {
+        PreGrant {
             client_id: self.client_id,
             redirect_url: self.redirect_url,
             scope: Cow::Owned(scope),
@@ -152,7 +156,7 @@ impl ClientMap {
 }
 
 impl Registrar for ClientMap {
-    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<ClientParameter<'a>, RegistrarError> {
+    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<PreGrant<'a>, RegistrarError> {
         let client = match self.clients.get(params.client_id.as_ref()) {
             None => return Err(RegistrarError::Unregistered),
             Some(stored) => stored

@@ -10,7 +10,7 @@
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 use primitives::authorizer::Authorizer;
-use primitives::registrar::{ClientParameter, NegotiationParameter, Registrar, RegistrarError};
+use primitives::registrar::{PreGrant, NegotiationParameter, Registrar, RegistrarError};
 use primitives::Request;
 use primitives::issuer::{IssuedToken, Issuer};
 use super::{Scope};
@@ -167,7 +167,7 @@ pub struct CodeRef<'a> {
 /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
 /// can signal a reponse using this object.
 pub struct AuthorizationRequest<'a> {
-    negotiated: ClientParameter<'a>,
+    pre_grant: PreGrant<'a>,
     code: CodeRef<'a>,
     request: &'a CodeRequest,
 }
@@ -216,15 +216,15 @@ impl<'u> CodeRef<'u> {
             redirect_url: redirect_url,
         };
 
-        let negotiated = match self.registrar.negotiate(parameter) {
+        let pre_grant = match self.registrar.negotiate(parameter) {
             Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
             Err(RegistrarError::UnauthorizedClient) => return Err(CodeError::Ignore),
-            Ok(negotiated) => negotiated,
+            Ok(pre_grant) => pre_grant,
         };
 
         Ok(AuthorizationRequest {
-            negotiated,
+            pre_grant,
             code: CodeRef { registrar: self.registrar, authorizer: self.authorizer },
             request,
         })
@@ -239,7 +239,7 @@ impl<'u> CodeRef<'u> {
 impl<'a> AuthorizationRequest<'a> {
     /// Denies the request, which redirects to the client for which the request originated.
     pub fn deny(self) -> CodeResult<Url> {
-        let url = self.negotiated.redirect_url.into_owned();
+        let url = self.pre_grant.redirect_url.into_owned();
         let error = AuthorizationError::with(AuthorizationErrorType::AccessDenied);
         let error = ErrorUrl::new(url, self.request.state(), error);
         Err(CodeError::Redirect(error))
@@ -250,10 +250,10 @@ impl<'a> AuthorizationRequest<'a> {
     pub fn authorize(self, owner_id: Cow<'a, str>) -> CodeResult<Url> {
        let grant = self.code.authorizer.authorize(Request{
            owner_id: &owner_id,
-           client_id: &self.negotiated.client_id,
-           redirect_url: &self.negotiated.redirect_url,
-           scope: &self.negotiated.scope});
-       let mut url = self.negotiated.redirect_url.into_owned();
+           client_id: &self.pre_grant.client_id,
+           redirect_url: &self.pre_grant.redirect_url,
+           scope: &self.pre_grant.scope});
+       let mut url = self.pre_grant.redirect_url.into_owned();
        url.query_pairs_mut()
            .append_pair("code", grant.as_str())
            .extend_pairs(self.request.state().map(|v| ("state", v)))
@@ -263,8 +263,8 @@ impl<'a> AuthorizationRequest<'a> {
 
     /// Retrieve a reference to the negotiated parameters (e.g. scope). These should be displayed
     /// to the resource owner when asking for his authorization.
-    pub fn negotiated(&self) -> &ClientParameter<'a> {
-        &self.negotiated
+    pub fn pre_grant(&self) -> &PreGrant<'a> {
+        &self.pre_grant
     }
 }
 

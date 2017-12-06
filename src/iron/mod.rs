@@ -49,15 +49,15 @@
 //!     router.get("/", protected, "protected");
 //!
 //!     // Start the server
-//!     // let server = thread::spawn(||
-//!     //    iron::Iron::new(router).http("localhost:8020").unwrap());
+//!     let server = thread::spawn(||
+//!         iron::Iron::new(router).http("localhost:8020").unwrap());
 //!
-//!     // server.join().expect("Failed to run");
+//!     server.join().expect("Failed to run");
 //! }
 //!
 //! /// This should display a page to the user asking for his permission to proceed.
 //! /// You can use the Response in Ok to achieve this.
-//! fn handle_get(_: &mut Request, auth: &ClientParameter) -> Result<(Authentication, Response), OAuthError> {
+//! fn handle_get(_: &mut Request, auth: &PreGrant) -> Result<(Authentication, Response), OAuthError> {
 //!     unimplemented!();
 //! }
 //!
@@ -94,7 +94,7 @@ use super::code_grant::prelude::*;
 use super::code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
 pub use super::code_grant::frontend::{Authentication, OAuthError};
 pub use super::code_grant::Scope;
-pub use super::code_grant::prelude::ClientParameter;
+pub use super::code_grant::prelude::PreGrant;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
@@ -154,12 +154,12 @@ pub struct IronGuard<I> where
     issuer: Arc<Mutex<I>>,
 }
 
-impl iron::typemap::Key for ClientParameter<'static> { type Value = ClientParameter<'static>; }
+impl iron::typemap::Key for PreGrant<'static> { type Value = PreGrant<'static>; }
 
 impl iron::typemap::Key for Authentication { type Value = Authentication; }
 
 pub trait GenericOwnerAuthorizer {
-    fn get_owner_authorization(&self, &mut iron::Request, &ClientParameter) -> IronResult<(Authentication, iron::Response)>;
+    fn get_owner_authorization(&self, &mut iron::Request, &PreGrant) -> IronResult<(Authentication, iron::Response)>;
 }
 
 /// Wraps an iron::Handler for use as an OwnerAuthorizer.
@@ -178,14 +178,14 @@ pub struct IronOwnerAuthorizer<A: iron::Handler>(pub A);
 /// // TODO: example needed for this seemingly more complex but common use case
 /// ```
 impl GenericOwnerAuthorizer for iron::Handler {
-    fn get_owner_authorization(&self, req: &mut iron::Request, auth: &ClientParameter)
+    fn get_owner_authorization(&self, req: &mut iron::Request, auth: &PreGrant)
     -> IronResult<(Authentication, Response)> {
-        let owned_auth = ClientParameter::<'static> {
+        let owned_auth = PreGrant::<'static> {
             client_id: Cow::Owned(auth.client_id.as_ref().to_string()),
             redirect_url: Cow::Owned(auth.redirect_url.as_ref().clone()),
             scope: Cow::Owned(auth.scope.as_ref().clone()),
         };
-        req.extensions.insert::<ClientParameter>(owned_auth);
+        req.extensions.insert::<PreGrant>(owned_auth);
         let response = self.handle(req)?;
         match req.extensions.get::<Authentication>() {
             None => return Ok((Authentication::Failed, Response::with((iron::status::InternalServerError, "No authentication response")))),
@@ -195,15 +195,15 @@ impl GenericOwnerAuthorizer for iron::Handler {
 }
 
 impl<F> GenericOwnerAuthorizer for F
-    where F :Fn(&mut iron::Request, &ClientParameter) -> Result<(Authentication, Response), OAuthError> + Send + Sync + 'static {
-    fn get_owner_authorization(&self, req: &mut iron::Request, auth: &ClientParameter)
+    where F :Fn(&mut iron::Request, &PreGrant) -> Result<(Authentication, Response), OAuthError> + Send + Sync + 'static {
+    fn get_owner_authorization(&self, req: &mut iron::Request, auth: &PreGrant)
     -> IronResult<(Authentication, Response)> {
         self(req, auth).map_err(|o| o.into())
     }
 }
 
 impl<A: iron::Handler> GenericOwnerAuthorizer for IronOwnerAuthorizer<A> {
-    fn get_owner_authorization(&self, req: &mut iron::Request, auth: &ClientParameter)
+    fn get_owner_authorization(&self, req: &mut iron::Request, auth: &PreGrant)
     -> IronResult<(Authentication, Response)> {
         (&self.0 as &iron::Handler).get_owner_authorization(req, auth)
     }
@@ -213,7 +213,7 @@ struct SpecificOwnerAuthorizer<'l, 'a, 'b: 'a>(&'l GenericOwnerAuthorizer, Phant
 
 impl<'l, 'a, 'b: 'a> OwnerAuthorizer for SpecificOwnerAuthorizer<'l, 'a, 'b> {
     type Request = iron::Request<'a, 'b>;
-    fn get_owner_authorization(&self, req: &mut Self::Request, auth: &ClientParameter)
+    fn get_owner_authorization(&self, req: &mut Self::Request, auth: &PreGrant)
     -> IronResult<(Authentication, Response)> {
         self.0.get_owner_authorization(req, auth)
     }
@@ -393,5 +393,5 @@ impl<I> iron::BeforeMiddleware for IronGuard<I> where
 pub mod prelude {
     pub use url::Url;
     pub use code_grant::prelude::*;
-    pub use super::{IronGranter, IronOwnerAuthorizer, ClientParameter, Authentication, OAuthError};
+    pub use super::{IronGranter, IronOwnerAuthorizer, PreGrant, Authentication, OAuthError};
 }
