@@ -67,6 +67,7 @@
 //!     unimplemented!();
 //! }
 //!
+//! /// Show a message to unauthorized requests of the protected resource.
 //! struct HelpfulAuthorizationError();
 //!
 //! impl iron::middleware::AfterMiddleware for HelpfulAuthorizationError {

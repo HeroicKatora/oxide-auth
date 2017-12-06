@@ -15,11 +15,9 @@ extern crate iron;
 extern crate router;
 use oxide_auth::iron::prelude::*;
 use iron::prelude::*;
-
 use std::thread;
 use iron::modifier::Modifier;
 use router::Router;
-
 /// Example of a main function of a iron server supporting oauth.
 pub fn main() {
     let passphrase = "This is a super secret phrase";
@@ -34,9 +32,10 @@ pub fn main() {
         TokenSigner::new_from_passphrase(passphrase));
 
     // Register a dummy client instance
-    ohandler.registrar().unwrap().register_client(
-        "example",
-        Url::parse("http://example.com/endpoint").unwrap());
+    let client = Client::public("LocalClient", // Client id
+        "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
+        "default".parse().unwrap()); // Allowed client scope
+    ohandler.registrar().unwrap().register_client(client);
 
     // Create a router and bind the relevant pages
     let mut router = Router::new();
@@ -55,24 +54,40 @@ pub fn main() {
     router.get("/", protected, "protected");
 
     // Start the server
-    // let server = thread::spawn(||
-    //    iron::Iron::new(router).http("localhost:8020").unwrap());
+    let server = thread::spawn(||
+        iron::Iron::new(router).http("localhost:8020").unwrap());
 
-    // server.join().expect("Failed to run");
+    server.join().expect("Failed to run");
 }
 
 /// This should display a page to the user asking for his permission to proceed.
 /// You can use the Response in Ok to achieve this.
-fn handle_get(_: &mut Request, auth: AuthenticationRequest) -> Result<(Authentication, Response), OAuthError> {
-    unimplemented!();
+fn handle_get(_: &mut Request, auth: &PreGrant) -> Result<(Authentication, Response), OAuthError> {
+    let text = format!(
+        "<html>'{}' (at {}) is requesting permission for '{}'",
+        grant.client_id, grant.redirect_url, grant.scope, grant.client_id, grant.client_id);
+    // Missing some more code for user interaction
+    let response = Response::with((
+        iron::status::Ok,
+        iron::modifiers::Header(iron::headers::ContentType::html()), text));
+    Ok((Authentication::InProgress, response))
 }
 
-/// This shows the second style of authentication handler, a iron::Handler compatible form.
-/// Allows composition with other libraries or frameworks built around iron.
+/// This shows the second style of authentication handler, a iron::Handler
+/// compatible form. Allows composition with other libraries or frameworks built
+/// around iron.
 fn handle_post(req: &mut Request) -> IronResult<Response> {
-    unimplemented!();
+    // User verification/sign-in must be replaced with your own mechanism. The
+    // following would then allow the request:
+    // req.extensions.insert::<Authentication>(
+    //     Authentication::Authenticated("dummy user".to_string()));
+
+    // Deny the request
+    req.extensions.insert::<Authentication>(Authentication::Failed);
+    Ok(Response::with(iron::status::Ok))
 }
 
+/// Show a message to unauthorized requests of the protected resource.
 struct HelpfulAuthorizationError();
 
 impl iron::middleware::AfterMiddleware for HelpfulAuthorizationError {

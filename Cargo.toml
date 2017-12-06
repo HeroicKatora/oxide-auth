@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth"
-version = "0.1.0-alpha.1"
+version = "0.1.0-beta"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 

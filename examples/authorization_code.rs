@@ -22,7 +22,7 @@ mod main {
 
         // Create the main token instance, a code_granter with an iron frontend.
         let ohandler = IronGranter::new(
-            // Stores clients in a simple in-memory hash map. Will only hand out `default` scopes.
+            // Stores clients in a simple in-memory hash map.
             ClientMap::new(),
             // Authorization tokens are 16 byte random keys to a memory hash map.
             Storage::new(RandomGenerator::new(16)),
@@ -92,6 +92,7 @@ mod main {
         Ok(Response::with(iron::status::Ok))
     }
 
+    /// Show a message to unauthorized requests of the protected resource.
     struct HelpfulAuthorizationError();
 
     impl iron::middleware::AfterMiddleware for HelpfulAuthorizationError {
