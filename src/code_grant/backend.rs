@@ -316,10 +316,8 @@ impl<'u> IssuerRef<'u> {
 
         let client = self.registrar.client(&client_id).ok_or(
             IssuerError::unauthorized((), "basic"))?;
-        println!("Registered client");
         client.check_authentication(auth).map_err(|_|
             IssuerError::unauthorized((), "basic"))?;
-        println!("Authorized client");
 
         match request.grant_type() {
             Some(ref cow) if cow == "authorization_code" => (),

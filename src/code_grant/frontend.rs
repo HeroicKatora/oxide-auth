@@ -13,24 +13,19 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::fmt;
 use std::error;
+use primitives::registrar::ClientParameter;
 use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerError, IssuerRef};
 use super::backend::{AccessError, GuardRequest, GuardRef};
 use url::Url;
 use base64;
 
 /// Holds the decode query fragments from the url
-struct ClientParameter<'a> {
+struct AuthorizationParameter<'a> {
     valid: bool,
     client_id: Option<Cow<'a, str>>,
     scope: Option<Cow<'a, str>>,
     redirect_url: Option<Cow<'a, str>>,
     state: Option<Cow<'a, str>>,
-}
-
-/// Sent to the OwnerAuthorizer to request owner permission.
-pub struct AuthenticationRequest {
-    pub client_id: String,
-    pub scope: String,
 }
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
@@ -93,7 +88,7 @@ pub trait WebResponse where Self: Sized {
 
 pub trait OwnerAuthorizer {
     type Request: WebRequest;
-    fn get_owner_authorization(&self, &mut Self::Request, AuthenticationRequest)
+    fn get_owner_authorization(&self, &mut Self::Request, &ClientParameter)
       -> Result<(Authentication, <Self::Request as WebRequest>::Response), <Self::Request as WebRequest>::Error>;
 }
 
@@ -102,16 +97,16 @@ pub struct PreparedAuthorization<'l, Req> where
     Req: WebRequest + 'l,
 {
     request: &'l mut Req,
-    urldecoded: ClientParameter<'l>,
+    urldecoded: AuthorizationParameter<'l>,
 }
 
-fn extract_parameters(params: HashMap<String, Vec<String>>) -> ClientParameter<'static> {
+fn extract_parameters(params: HashMap<String, Vec<String>>) -> AuthorizationParameter<'static> {
     let map = params.iter()
         .filter(|&(_, v)| v.len() == 1)
         .map(|(k, v)| (k.as_str(), v[0].as_str()))
         .collect::<HashMap<&str, &str>>();
 
-    ClientParameter{
+    AuthorizationParameter{
         valid: true,
         client_id: map.get("client_id").map(|client| client.to_string().into()),
         scope: map.get("scope").map(|scope| scope.to_string().into()),
@@ -120,7 +115,7 @@ fn extract_parameters(params: HashMap<String, Vec<String>>) -> ClientParameter<'
     }
 }
 
-impl<'s> CodeRequest for ClientParameter<'s> {
+impl<'s> CodeRequest for AuthorizationParameter<'s> {
     fn valid(&self) -> bool { self.valid }
     fn client_id(&self) -> Option<Cow<str>> { self.client_id.as_ref().map(|c| c.as_ref().into()) }
     fn scope(&self) -> Option<Cow<str>> { self.scope.as_ref().map(|c| c.as_ref().into()) }
@@ -128,9 +123,9 @@ impl<'s> CodeRequest for ClientParameter<'s> {
     fn state(&self) -> Option<Cow<str>> { self.state.as_ref().map(|c| c.as_ref().into()) }
 }
 
-impl<'s> ClientParameter<'s> {
+impl<'s> AuthorizationParameter<'s> {
     fn invalid() -> Self {
-        ClientParameter { valid: false, client_id: None, scope: None,
+        AuthorizationParameter { valid: false, client_id: None, scope: None,
             redirect_url: None, state: None }
     }
 }
@@ -140,7 +135,7 @@ impl AuthorizationFlow {
     pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, W::Error> {
         let urldecoded = incoming.query()
             .map(extract_parameters)
-            .unwrap_or_else(|_| ClientParameter::invalid());
+            .unwrap_or_else(|_| AuthorizationParameter::invalid());
 
         Ok(PreparedAuthorization{request: incoming, urldecoded})
     }
@@ -157,12 +152,7 @@ impl AuthorizationFlow {
             Ok(v) => v,
         };
 
-        let auth = AuthenticationRequest{
-            client_id: negotiated.negotiated().client_id.to_string(),
-            scope: negotiated.negotiated().scope.to_string(),
-        };
-
-        let authorization = match page_handler.get_owner_authorization(req, auth)? {
+        let authorization = match page_handler.get_owner_authorization(req, negotiated.negotiated())? {
             (Authentication::Failed, _)
                 => negotiated.deny(),
             (Authentication::InProgress, response)

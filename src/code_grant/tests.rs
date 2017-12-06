@@ -3,7 +3,7 @@ use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
 use primitives::authorizer::Storage;
 use primitives::generator::TokenGenerator;
 use primitives::issuer::TokenMap;
-use primitives::registrar::{Client, ClientMap};
+use primitives::registrar::{Client, ClientMap, ClientParameter};
 use primitives::scope::Scope;
 use primitives::grant::GrantRef;
 
@@ -91,7 +91,7 @@ struct Allow(String);
 
 impl OwnerAuthorizer for Allow {
     type Request = CraftedRequest;
-    fn get_owner_authorization(&self, _: &mut CraftedRequest, _: AuthenticationRequest)
+    fn get_owner_authorization(&self, _: &mut CraftedRequest, _: &ClientParameter)
     -> Result<(Authentication, CraftedResponse), OAuthError> {
         Ok((Authentication::Authenticated(self.0.clone()), CraftedResponse::Text("".to_string())))
     }
