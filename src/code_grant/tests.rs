@@ -158,7 +158,7 @@ fn authorize_public() {
     let mut accessrequest = CraftedRequest {
         query: None,
         urlbody: None,
-        auth: Some(token),
+        auth: Some("Bearer ".to_string() + &token),
     };
 
     let prepared = AccessFlow::prepare(&mut accessrequest).expect("Failure during access preparation");
@@ -228,7 +228,7 @@ fn authorize_confidential() {
     let mut accessrequest = CraftedRequest {
         query: None,
         urlbody: None,
-        auth: Some(token),
+        auth: Some("Bearer ".to_string() + &token),
     };
 
     let prepared = AccessFlow::prepare(&mut accessrequest).expect("Failure during access preparation");

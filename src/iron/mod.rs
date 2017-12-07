@@ -233,13 +233,10 @@ impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
-        let string = match self.headers.get::<AuthHeader<String>>() {
-            None => return Ok(None),
-            Some(hdr) => hdr,
-        };
-        let position = string.find(' ').ok_or(())?;
-        let (scheme, content) = string.split_at(position);
-        Ok(Some(Cow::Borrowed(&content[1..])))
+        match self.headers.get::<AuthHeader<String>>() {
+            None => Ok(None),
+            Some(hdr) => Ok(Some(Cow::Borrowed(&hdr))),
+        }
     }
 }
 
@@ -248,7 +245,7 @@ impl WebResponse for Response {
 
     fn redirect(url: Url) -> Result<Response, IronError> {
         let real_url = match iron::Url::from_generic_url(url) {
-            Err(p) => return Err(IronError::new(OAuthError::InternalCodeError(),
+            Err(_) => return Err(IronError::new(OAuthError::InternalCodeError(),
                 iron::status::InternalServerError)),
             Ok(v) => v,
         };

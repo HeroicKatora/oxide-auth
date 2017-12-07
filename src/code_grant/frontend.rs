@@ -225,9 +225,10 @@ impl GrantFlow {
     }
 
     fn create_valid_params<'a, W: WebRequest>(req: &'a mut W) -> Option<AccessTokenParameter<'a>> {
-        let authorization = match req.authheader().unwrap() {
-            None => None,
-            Some(ref header) => {
+        let authorization = match req.authheader() {
+            Err(_) => return None,
+            Ok(None) => None,
+            Ok(Some(ref header)) => {
                 if !header.starts_with("Basic ") {
                     return None
                 }
@@ -250,8 +251,10 @@ impl GrantFlow {
             },
         };
 
-        let mut params = req.urlbody()
-            .map(extract_access_token).unwrap();
+        let mut params = match req.urlbody() {
+            Err(_) => return None,
+            Ok(body) => extract_access_token(body),
+        };
 
         params.authorization = authorization;
 
@@ -292,10 +295,28 @@ impl<'l> GuardParameter<'l> {
 }
 
 impl AccessFlow {
+    fn create_valid_params<W: WebRequest>(req: &mut W) -> Option<GuardParameter> {
+        let token = match req.authheader() {
+            Err(_) => return None,
+            Ok(None) => None,
+            Ok(Some(header)) => {
+                if !header.starts_with("Bearer ") {
+                    return None
+                }
+
+                match header {
+                    Cow::Borrowed(v) => Some(Cow::Borrowed(&v[7..])),
+                    Cow::Owned(v) => Some(Cow::Owned(v[7..].to_string())),
+                }
+            }
+        };
+
+        Some(GuardParameter { valid: true, token })
+    }
+
     pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedAccess<W>, W::Error> {
-        let params = req.authheader()
-            .map(|auth| GuardParameter { valid: true, token: auth })
-            .unwrap_or_else(|_| GuardParameter::invalid());
+        let params = AccessFlow::create_valid_params(req)
+            .unwrap_or_else(|| GuardParameter::invalid());
 
         Ok(PreparedAccess { params: params, req: PhantomData })
     }
