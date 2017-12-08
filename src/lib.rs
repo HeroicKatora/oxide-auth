@@ -25,15 +25,11 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
-pub mod code_grant;
+#[warn(missing_docs)]
 pub mod primitives;
+
 #[cfg(feature = "iron-backend")]
+#[warn(missing_docs)]
 pub mod iron;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-
-    }
-}
+pub mod code_grant;
