@@ -50,7 +50,11 @@ struct GuardParameter<'a> {
     token: Option<Cow<'a, str>>,
 }
 
+/// Abstraction of web requests with several different abstractions and constructors needed by this
+/// frontend. It is assumed to originate from an HTTP request, as defined in the scope of the rfc,
+/// but theoretically other requests are possible.
 pub trait WebRequest {
+    /// The error generated from access of malformed or invalid requests.
     type Error: From<OAuthError>;
     type Response: WebResponse<Error=Self::Error>;
     /// Retrieve a parsed version of the url query. An Err return value indicates a malformed query
@@ -65,10 +69,18 @@ pub trait WebRequest {
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>;
 }
 
+/// Response representation into which the Request is transformed by the code_grant types.
 pub trait WebResponse where Self: Sized {
+    /// The error generated when trying to construct an unhandled or invalid response.
     type Error: From<OAuthError>;
+
+    /// A response which will redirect the user-agent to which the response is issued.
     fn redirect(url: Url) -> Result<Self, Self::Error>;
+
+    /// A pure text response with no special media type set.
     fn text(text: &str) -> Result<Self, Self::Error>;
+
+    /// Json repsonse data, with media type `aplication/json.
     fn json(data: &str) -> Result<Self, Self::Error>;
 
     /// Construct a redirect for the error. Here the response may choose to augment the error with

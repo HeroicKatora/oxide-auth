@@ -110,6 +110,8 @@ impl IssuerError {
 }
 
 impl ErrorDescription {
+    /// Convert the error into a json string, viable for being sent over a network with
+    /// `application/json` encoding.
     pub fn to_json(self) -> String {
         use std::iter::IntoIterator;
         use std::collections::HashMap;
@@ -125,6 +127,8 @@ impl ErrorDescription {
 pub struct BearerToken(IssuedToken, String);
 
 impl BearerToken {
+    /// Convert the token into a json string, viable for being sent over a network with
+    /// `application/json` encoding.
     pub fn to_json(self) -> String {
         let remaining = self.0.until.signed_duration_since(Utc::now());
         let kvmap: HashMap<_, _> = vec![
@@ -229,7 +233,6 @@ impl<'u> CodeRef<'u> {
             request,
         })
     }
-
 
     pub fn with(registrar: &'u Registrar, t: &'u mut Authorizer) -> Self {
         CodeRef { registrar, authorizer: t }
@@ -364,6 +367,7 @@ impl<'u> IssuerRef<'u> {
 //                                    Access protected Endpoint                                 //
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Guard is a thin wrapper holding by reference all necessary parameters for guarding a resource.
 pub struct GuardRef<'a> {
     scopes: &'a [Scope],
     issuer: &'a mut Issuer,
@@ -380,6 +384,7 @@ pub trait GuardRequest {
 }
 
 impl<'a> GuardRef<'a> {
+    /// The result will indicate whether the resource access should be allowed or not.
     pub fn protect<'r>(&self, req: &'r GuardRequest)
     -> AccessResult<()> where 'a: 'r {
         if !req.valid() {
