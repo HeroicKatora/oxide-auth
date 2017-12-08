@@ -213,7 +213,7 @@ pub trait GenericOwnerAuthorizer: Send + Sync + 'static {
 ///     Ok(Response::with(iron::status::Ok))
 /// }
 ///
-/// static iron_owner_authorizer: &GenericOwnerAuthorizer = &IronOwnerAuthorizer(iron_handler);
+/// const iron_owner_authorizer: &GenericOwnerAuthorizer = &IronOwnerAuthorizer(iron_handler);
 /// # fn main() {}
 /// ```
 pub struct IronOwnerAuthorizer<A: iron::Handler>(pub A);
