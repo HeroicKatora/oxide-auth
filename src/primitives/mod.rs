@@ -12,15 +12,8 @@ pub mod registrar;
 pub mod scope;
 
 type Time = DateTime<Utc>;
-use self::scope::Scope;
 
-pub struct Request<'a> {
-    pub owner_id: &'a str,
-    pub client_id: &'a str,
-    pub redirect_url: &'a Url,
-    pub scope: &'a Scope,
-}
-
+/// Commonly used primitives for frontends and backends.
 pub mod prelude {
     pub use super::authorizer::{Authorizer, Storage};
     pub use super::issuer::{IssuedToken, Issuer, TokenMap, TokenSigner};

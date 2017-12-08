@@ -159,25 +159,65 @@ impl iron::typemap::Key for PreGrant<'static> { type Value = PreGrant<'static>; 
 
 impl iron::typemap::Key for Authentication { type Value = Authentication; }
 
-pub trait GenericOwnerAuthorizer {
+/// An owner authorizer for iron requests specifically.
+///
+/// This bridges between the owner authorizer of the general frontend, whose lifetime is limited to
+/// the lifetime of the request, and the configured iron frontend, whose owner authorizer needs
+/// to be valid for multiple request lifetimes and `Send` + `Sync` `'static`.
+///
+/// Two notable implementations exist, one for general functions with the correct parameters and
+/// one for encapsulating `iron::Handler` implementations.
+pub trait GenericOwnerAuthorizer: Send + Sync + 'static {
+    /// Derive a response to the grant request from the web request and internal state.
     fn get_owner_authorization(&self, &mut iron::Request, &PreGrant) -> IronResult<(Authentication, iron::Response)>;
 }
 
-/// Wraps an iron::Handler for use as an OwnerAuthorizer.
+/// Wraps an `iron::Handler` for use as an `GenericOwnerAuthorizer`.
 ///
 /// This allows interoperability with other iron libraries. On top of that, one can use the standard
 /// middleware facilities to quickly stick together other handlers.
-pub struct IronOwnerAuthorizer<A: iron::Handler>(pub A);
-
-/// Use an iron request as an owner authorizer.
 ///
 /// The extension system on requests and responses is used to insert and extract the query and
 /// response which makes it possible to leverage irons' builtin wrapper system to build safer
 /// and more intuitive implementations (e.g. by reusing existing authorization handlers to
 /// enforce user login).
+///
 /// ```rust
-/// // TODO: example needed for this seemingly more complex but common use case
+/// # extern crate oxide_auth;
+/// # extern crate urlencoded;
+/// # extern crate iron;
+/// #
+/// # use iron::{IronError, IronResult, Plugin, Request, Response};
+/// # use urlencoded::UrlEncodedQuery;
+/// # use oxide_auth::code_grant::frontend::Authentication;
+/// use oxide_auth::iron::IronOwnerAuthorizer;
+/// use oxide_auth::iron::GenericOwnerAuthorizer;
+///
+/// fn iron_handler(req: &mut Request) -> IronResult<Response> {
+///     let query = req.get::<UrlEncodedQuery>()
+///         .map_err(|ue| IronError::new(ue, iron::status::BadRequest))?;
+///     if query.contains_key("deny") {
+///         req.extensions.insert::<Authentication>(Authentication::Failed);
+///
+///     // Obviously should be replaced with real user authentication, signed cookies or macroons
+///     } else if let Some(user) = query.get("user_id") {
+///         if user.len() == 1 {
+///             req.extensions.insert::<Authentication>(
+///                 Authentication::Authenticated(user[1].clone()));
+///         } else {
+///             req.extensions.insert::<Authentication>(Authentication::Failed);
+///         }
+///     } else {
+///         req.extensions.insert::<Authentication>(Authentication::Failed);
+///     }
+///     Ok(Response::with(iron::status::Ok))
+/// }
+///
+/// static iron_owner_authorizer: &GenericOwnerAuthorizer = &IronOwnerAuthorizer(iron_handler);
+/// # fn main() {}
 /// ```
+pub struct IronOwnerAuthorizer<A: iron::Handler>(pub A);
+
 impl GenericOwnerAuthorizer for iron::Handler {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: &PreGrant)
     -> IronResult<(Authentication, Response)> {
@@ -285,6 +325,7 @@ impl<R, A, I> IronGranter<R, A, I> where
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
 {
+    /// Construct from all internally used primites.
     pub fn new(registrar: R, data: A, issuer: I) -> IronGranter<R, A, I> {
         IronGranter {
             registrar: Arc::new(Mutex::new(registrar)),

@@ -27,6 +27,7 @@ impl Scope {
     }
 }
 
+/// Error returned from parsing a scope as encoded in an authorization token request.
 #[derive(Debug)]
 pub struct ParseScopeErr;
 

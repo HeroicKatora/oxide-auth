@@ -1,13 +1,14 @@
 //! Generates bearer tokens and refresh tokens.
 //!
 //! Internally similar to the authorization module, tokens generated here live longer and can be
-//! renewed [WIP].
+//! renewed. There exist two fundamental implementation as well, one utilizing in memory hash maps
+//! while the other uses cryptographic signing.
 use std::collections::HashMap;
 use std::clone::Clone;
 use std::borrow::Cow;
 use chrono::{Utc, Duration};
-use super::{Request, Time};
-use super::grant::{Grant, GrantRef};
+use super::Time;
+use super::grant::{Grant, GrantRef, GrantRequest};
 use super::generator::{TokenGenerator, Assertion};
 use ring::digest::SHA256;
 use ring::hmac::SigningKey;
@@ -20,20 +21,35 @@ use ring::hmac::SigningKey;
 /// they do not intend to offer a statefull refresh api).
 pub trait Issuer {
     /// Create a token authorizing the request parameters
-    fn issue(&mut self, Request) -> IssuedToken;
+    fn issue(&mut self, GrantRequest) -> IssuedToken;
+
     /// Get the values corresponding to a bearer token
     fn recover_token<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
+
     /// Get the values corresponding to a refresh token
     fn recover_refresh<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
 }
 
+/// Token parameters returned to a client.
 #[derive(Clone, Debug)]
 pub struct IssuedToken {
+    /// The bearer token
     pub token: String,
+
+    /// The refresh token
     pub refresh: String,
+
+    /// Expiration timestamp (Utc).
+    ///
+    /// Technically, a time to live is expected in the response but this will be transformed later.
+    /// In a direct backend access situation, this enables high precision timestamps.
     pub until: Time,
 }
 
+/// Keeps track of access and refresh tokens by a hash-map.
+///
+/// The generator is itself trait based and can be chosen during construction. It is assumed to not
+/// be possible for two different grants to generate the same token in the issuer.
 pub struct TokenMap<G: TokenGenerator> {
     generator: G,
     access: HashMap<String, Grant>,
@@ -41,6 +57,7 @@ pub struct TokenMap<G: TokenGenerator> {
 }
 
 impl<G: TokenGenerator> TokenMap<G> {
+    /// Construct a `TokenMap` from the given generator.
     pub fn new(generator: G) -> Self {
         Self {
             generator: generator,
@@ -51,7 +68,7 @@ impl<G: TokenGenerator> TokenMap<G> {
 }
 
 impl<G: TokenGenerator> Issuer for TokenMap<G> {
-    fn issue(&mut self, req: Request) -> IssuedToken {
+    fn issue(&mut self, req: GrantRequest) -> IssuedToken {
         let grant = Grant {
             owner_id: req.owner_id.to_string(),
             client_id: req.client_id.to_string(),
@@ -80,15 +97,23 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
     }
 }
 
+/// Signs grants instead of storing them.
+///
+/// Although this token instance allows preservation of memory, it also implies that tokens, once
+/// issued, are harder to revoke.
 pub struct TokenSigner {
     signer: Assertion,
 }
 
 impl TokenSigner {
+    /// Construct a signing instance from a private signing key.
     pub fn new(key: SigningKey) -> TokenSigner {
         TokenSigner { signer: Assertion::new(key) }
     }
 
+    /// Construct a signing instance from a passphrase, deriving a signing key in the process. This
+    /// should generally be regarded as inferior to a properly generated signing key and NO safety
+    /// guarantee is given by the author.
     pub fn new_from_passphrase(passwd: &str) -> TokenSigner {
         let key = SigningKey::new(&SHA256, passwd.as_bytes());
         TokenSigner { signer: Assertion::new(key) }
@@ -96,7 +121,7 @@ impl TokenSigner {
 }
 
 impl Issuer for TokenSigner {
-    fn issue(&mut self, req: Request) -> IssuedToken {
+    fn issue(&mut self, req: GrantRequest) -> IssuedToken {
         let grant = GrantRef {
             owner_id: req.owner_id.into(),
             client_id: req.client_id.into(),
@@ -125,7 +150,7 @@ mod tests {
     fn token_signer_roundtrip() {
         let passwd = "Some secret password";
         let mut issuer = TokenSigner::new_from_passphrase(passwd);
-        let request = Request {
+        let request = GrantRequest {
             client_id: "Client".into(),
             owner_id: "Owner".into(),
             redirect_url: &"https://example.com".parse().unwrap(),

@@ -11,7 +11,7 @@
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 use primitives::authorizer::Authorizer;
 use primitives::registrar::{PreGrant, NegotiationParameter, Registrar, RegistrarError};
-use primitives::Request;
+use primitives::grant::GrantRequest;
 use primitives::issuer::{IssuedToken, Issuer};
 use super::{Scope};
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
@@ -251,7 +251,7 @@ impl<'a> AuthorizationRequest<'a> {
     /// Inform the backend about consent from a resource owner. Use negotiated parameters to
     /// authorize a client for an owner.
     pub fn authorize(self, owner_id: Cow<'a, str>) -> CodeResult<Url> {
-       let grant = self.code.authorizer.authorize(Request{
+       let grant = self.code.authorizer.authorize(GrantRequest{
            owner_id: &owner_id,
            client_id: &self.pre_grant.client_id,
            redirect_url: &self.pre_grant.redirect_url,
@@ -349,7 +349,7 @@ impl<'u> IssuerRef<'u> {
             return Err(IssuerError::invalid((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
         }
 
-        let token = self.issuer.issue(Request{
+        let token = self.issuer.issue(GrantRequest{
             client_id: &saved_params.client_id,
             owner_id: &saved_params.owner_id,
             redirect_url: &saved_params.redirect_url,

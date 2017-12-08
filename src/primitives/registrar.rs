@@ -27,9 +27,15 @@ pub trait Registrar {
     fn client(&self, client_id: &str) -> Option<&Client>;
 }
 
+/// Input parameters provided by the client in its authorization request.
 pub struct NegotiationParameter<'a> {
+    /// The id as given by the client.
     pub client_id: Cow<'a, str>,
+
+    /// The purposed redirection target url of the client.
     pub redirect_url: Cow<'a, Url>,
+
+    /// The scope the client wants to obtain or None to obtain the default scope.
     pub scope: Option<Cow<'a, Scope>>,
 }
 
@@ -38,17 +44,36 @@ pub struct NegotiationParameter<'a> {
 /// grant of some sort. In the case of the authorization code grant flow, it will be an
 /// authorization code at first, which can be traded for an access code by the client acknowledged.
 pub struct PreGrant<'a> {
+    /// The registered client id.
     pub client_id: Cow<'a, str>,
+
+    /// The redirection url associated with the above client.
     pub redirect_url: Cow<'a, Url>,
+
+    /// A scope admissible for the above client.
     pub scope: Cow<'a, Scope>,
 }
 
+/// Handled responses from a registrar.
 pub enum RegistrarError {
+    /// Indicates an entirely unknown client.
     Unregistered,
+
+    /// The redirection url was not the registered one.
+    ///
+    /// It is generally advisable to perform an exact match on the url, to prevent injection of
+    /// bad query parameters for example but not strictly required.
     MismatchedRedirect,
+
+    /// The client is not authorized.
     UnauthorizedClient,
 }
 
+/// Clients are registered users of authorization tokens.
+///
+/// There are two types of clients, public and confidential. Public clients operate without proof
+/// of identity while confidential clients are granted additional assertions on their communication
+/// with the servers. They might be allowed more freedom as they are harder to impersonate.
 pub struct Client {
     client_id: String,
     redirect_url: Url,
@@ -145,6 +170,7 @@ impl PasswordPolicy for SHA256Policy {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl ClientMap {
+    /// Create an empty map without any clients in it.
     pub fn new() -> ClientMap {
         ClientMap { clients: HashMap::new() }
     }

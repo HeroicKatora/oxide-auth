@@ -1,21 +1,50 @@
+//! Encapsulates various shared mechanisms for handlings different grants.
+
 use super::{Url, Time};
 use super::scope::Scope;
 use std::borrow::Cow;
 
+/// Owning copy of a grant.
+///
+/// This can be stored in a database without worrying about lifetimes or shared across thread
+/// boundaries. A reference to this can be converted to a purely referential `GrantRef`.
 #[derive(Clone)]
 pub struct Grant {
+    /// Identifies the owner of the resource.
     pub owner_id: String,
+
+    /// Identifies the client to which the grant was issued.
     pub client_id: String,
+
+    /// The scope granted to the client.
     pub scope: Scope,
+
+    /// The redirection url under which the client resides.
     pub redirect_url: Url,
+
+    /// Expiration date of the grant (Utc).
     pub until: Time
 }
 
+/// An optionally owning version of a grant.
+///
+/// Often used as an input or output type, this version enables zero-copy algorithms for several
+/// primitives such as scope rewriting by a registrar or token generation. It can be converted to
+/// a `Grant` if ownership is desired and necessary.
 pub struct GrantRef<'a> {
+    /// Identifies the owner of the resource.
     pub owner_id: Cow<'a, str>,
+
+    /// Identifies the client to which the grant was issued.
     pub client_id: Cow<'a, str>,
-    pub redirect_url: Cow<'a, Url>,
+
+    /// The scope granted to the client.
     pub scope: Cow<'a, Scope>,
+
+    /// The redirection url under which the client resides.
+    pub redirect_url: Cow<'a, Url>,
+
+    /// Expiration date of the grant (Utc).
     pub until: Cow<'a, Time>,
 }
 
@@ -53,4 +82,19 @@ impl<'a> Into<Grant> for GrantRef<'a> {
             until: self.until.into_owned()
         }
     }
+}
+
+/// A non-owning grant request which does not yet have an expiration date attached.
+pub struct GrantRequest<'a> {
+    /// Identifies the owner of the resource.
+    pub owner_id: &'a str,
+
+    /// Identifies the client to which the grant should be issued.
+    pub client_id: &'a str,
+
+    /// The scope to be granted to the client.
+    pub scope: &'a Scope,
+
+    /// The redirection url under which the client resides.
+    pub redirect_url: &'a Url,
 }

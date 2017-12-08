@@ -27,11 +27,15 @@ pub trait TokenGenerator {
     fn generate(&self, &GrantRef) -> String;
 }
 
+/// Generates tokens from random bytes.
+///
+/// Each byte is chosen randomly from the basic `rand::thread_rng`.
 pub struct RandomGenerator {
     len: usize
 }
 
 impl RandomGenerator {
+    /// Generates tokens with a specific byte length.
     pub fn new(length: usize) -> RandomGenerator {
         RandomGenerator {len: length}
     }
@@ -44,22 +48,30 @@ impl TokenGenerator for RandomGenerator {
     }
 }
 
+/// Generates tokens by signing its specifics with a private key.
+///
+/// The actual generator is given by a `TaggedAssertion` from `Assertion::tag` which enables
+/// signing the same grant for different uses, i.e. separating authorization from bearer grants and
+/// refresh tokens.
 pub struct Assertion {
     secret: ring::hmac::SigningKey,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct InternalAssertionGrant<'a>(&'a str, &'a str, &'a str, &'a str, (i64, u32), &'a str);
+struct InternalAssertionGrant<'a>(&'a str, &'a str, &'a str, &'a str, (i64, u32), &'a str);
 #[derive(Serialize, Deserialize)]
-pub struct AssertGrant(Vec<u8>, Vec<u8>);
+struct AssertGrant(Vec<u8>, Vec<u8>);
 
+/// Binds a tag to the data. The signature will be unique for data as well as the tag.
 pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
 impl Assertion {
+    /// Construct an Assertion generator from a secret, private signing key.
     pub fn new(key: ring::hmac::SigningKey) -> Assertion {
         Assertion { secret: key}
     }
 
+    /// Get a reference to generator for the given tag.
     pub fn tag<'a>(&'a self, tag: &'a str) -> TaggedAssertion<'a> {
         TaggedAssertion(self, tag)
     }
@@ -98,6 +110,10 @@ impl Assertion {
 }
 
 impl<'a> TaggedAssertion<'a> {
+    /// Inverse operation of generate, retrieve the underlying token.
+    ///
+    /// Result in an Err if either the signature is invalid or if the tag does not match the
+    /// expected tag given to this assertion.
     pub fn extract<'b>(&self, token: &'b str) -> Result<GrantRef<'b>, ()> {
         self.0.extract(token).and_then(|(token, tag)| {
             if tag == self.1 {
