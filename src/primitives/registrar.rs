@@ -3,8 +3,6 @@
 //! It will govern their redirect urls and allowed scopes to request tokens for. When an oauth
 //! request turns up, it is the registrars duty to verify the requested scope and redirect url for
 //! consistency in the permissions granted and urls registered.
-//!
-//! For confidential clients [WIP], it is also responsible for authentication verification.
 use super::scope::Scope;
 use std::borrow::Cow;
 use std::collections::HashMap;
