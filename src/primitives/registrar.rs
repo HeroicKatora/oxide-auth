@@ -199,3 +199,27 @@ impl Registrar for ClientMap {
         self.clients.get(client_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_client() {
+        let client = Client::public("ClientId", "https://example.com".parse().unwrap(),
+            "default".parse().unwrap());
+        assert!(client.check_authentication(None).is_ok());
+        assert!(client.check_authentication(Some(b"")).is_err());
+    }
+
+    #[test]
+    fn confidential_client() {
+        let pass = b"AB3fAj6GJpdxmEVeNCyPoA==";
+        let client = Client::confidential("ClientId", "https://example.com".parse().unwrap(),
+            "default".parse().unwrap(), pass);
+        assert!(client.check_authentication(None).is_err());
+        assert!(client.check_authentication(Some(pass)).is_ok());
+        assert!(client.check_authentication(Some(b"not the passphrase")).is_err());
+        assert!(client.check_authentication(Some(b"")).is_err());
+    }
+}
