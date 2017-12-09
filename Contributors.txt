@@ -1,0 +1,4 @@
+# A list of people who have contributed to this project, with optional metadata
+# The list is sorted chronologically, excluding the current maintainer who should always be listed first
+# Format: Foo Bar <optional mail address> (comment e.g. company affiliation)
+HeroicKatora <andreas.molzer@gmx.de> (initial author)
