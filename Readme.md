@@ -21,4 +21,4 @@ More information about [contributing][CONTRIBUTING].
 [iron]: https://github.com/iron/iron
 [example folder]: examples/
 [interactive example]: examples/authorization_code.rs
-[CONTRIBUTING]: doc/CONTRIBUTING.md
+[CONTRIBUTING]: docs/CONTRIBUTING.md
