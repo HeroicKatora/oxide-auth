@@ -88,12 +88,82 @@ impl TokenGenerator for TestGenerator {
 }
 
 struct Allow(String);
+struct Deny;
 
 impl OwnerAuthorizer for Allow {
     type Request = CraftedRequest;
     fn get_owner_authorization(&self, _: &mut CraftedRequest, _: &PreGrant)
     -> Result<(Authentication, CraftedResponse), OAuthError> {
         Ok((Authentication::Authenticated(self.0.clone()), CraftedResponse::Text("".to_string())))
+    }
+}
+
+impl OwnerAuthorizer for Deny {
+    type Request = CraftedRequest;
+    fn get_owner_authorization(&self, _: &mut CraftedRequest, _: &PreGrant)
+    -> Result<(Authentication, CraftedResponse), OAuthError> {
+        Ok((Authentication::Failed, CraftedResponse::Text("".to_string())))
+    }
+}
+
+trait ToSingleValueQuery {
+    fn as_single_value_query(self) -> HashMap<String, Vec<String>>;
+}
+
+impl<'r, I, K, V> ToSingleValueQuery for I where
+    I: Iterator<Item=&'r (K, V)>,
+    K: AsRef<str> + 'r,
+    V: AsRef<str> + 'r {
+    fn as_single_value_query(self) -> HashMap<String, Vec<String>> {
+        self.map(|&(ref k, ref v)| (k.as_ref().to_string(), vec![v.as_ref().to_string()])).collect()
+    }
+}
+
+struct SimpleConfidentialSetup {
+    registrar: ClientMap,
+    authorizer: Storage<TestGenerator>,
+}
+
+const EXAMPLE_CLIENT_ID: &str = "ClientId";
+const EXAMPLE_OWNER_ID: &str = "Owner";
+const EXAMPLE_REDIRECT_URL: &str = "https://client.example/endpoint";
+const EXAMPLE_PASSPHRASE: &str = "VGhpcyBpcyBhIHZlcnkgc2VjdXJlIHBhc3NwaHJhc2UK";
+
+impl SimpleConfidentialSetup {
+    fn new() -> SimpleConfidentialSetup {
+        let mut registrar = ClientMap::new();
+        let authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+
+        let client = Client::confidential(EXAMPLE_CLIENT_ID,
+            Url::parse(EXAMPLE_REDIRECT_URL).unwrap(), "default".parse().unwrap(),
+            EXAMPLE_PASSPHRASE.as_bytes());
+        registrar.register_client(client);
+        SimpleConfidentialSetup {
+            registrar,
+            authorizer,
+        }
+    }
+
+    fn test_silent_error(&mut self, mut request: CraftedRequest) {
+        let prepared = AuthorizationFlow::prepare(&mut request).expect("Failure during authorization preparation");
+        let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
+        match AuthorizationFlow::handle(CodeRef::with(&mut self.registrar, &mut self.authorizer), prepared, &pagehandler) {
+            Ok(CraftedResponse::Redirect(url))
+                => panic!("Redirection without client id {:?}", url),
+            Ok(resp) => panic!("Response without client id {:?}", resp),
+            Err(_) => (),
+        };
+    }
+
+    fn test_error_redirect (&mut self, mut request: CraftedRequest, pagehandler: &OwnerAuthorizer<Request=CraftedRequest>) {
+        let prepared = AuthorizationFlow::prepare(&mut request).expect("Failure during authorization preparation");
+        match AuthorizationFlow::handle(CodeRef::with(&mut self.registrar, &mut self.authorizer), prepared, pagehandler) {
+            Ok(CraftedResponse::RedirectFromError(ref url))
+            if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some()
+                => (),
+            resp
+                => panic!("Expected redirect with error set: {:?}", resp),
+        };
     }
 }
 
@@ -114,8 +184,7 @@ fn authorize_public() {
         query: Some(vec![("client_id", client_id),
                          ("redirect_url", redirect_url),
                          ("response_type", "code")]
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()),
+            .iter().as_single_value_query()),
         urlbody: Some(HashMap::new()),
         auth: None,
     };
@@ -135,8 +204,7 @@ fn authorize_public() {
                            ("redirect_url", redirect_url),
                            ("code", "AuthToken"),
                            ("grant_type", "authorization_code")]
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()),
+            .iter().as_single_value_query()),
         auth: None,
     };
 
@@ -185,8 +253,7 @@ fn authorize_confidential() {
         query: Some(vec![("client_id", client_id),
                          ("redirect_url", redirect_url),
                          ("response_type", "code")]
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()),
+            .iter().as_single_value_query()),
         urlbody: Some(HashMap::new()),
         auth: None,
     };
@@ -205,8 +272,7 @@ fn authorize_confidential() {
         urlbody: Some(vec![("redirect_url", redirect_url),
                            ("code", "AuthToken"),
                            ("grant_type", "authorization_code")]
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()),
+            .iter().as_single_value_query()),
         auth: Some("Basic ".to_string() + client_id + ":" + &base64::encode(passphrase)),
     };
 
@@ -234,4 +300,122 @@ fn authorize_confidential() {
     let prepared = AccessFlow::prepare(&mut accessrequest).expect("Failure during access preparation");
     let scope: [Scope; 1] = [scope.parse().unwrap()];
     AccessFlow::handle(GuardRef::with(&mut issuer, &scope), prepared).expect("Failed to authorize");
+}
+
+#[test]
+fn access_request_silent_missing_client() {
+    let missing_client = CraftedRequest {
+        query: Some(vec![("response_type", "code")].iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    SimpleConfidentialSetup::new().test_silent_error(missing_client);
+}
+
+#[test]
+fn access_request_silent_unknown_client() {
+    // The client_id is not registered
+    let unknown_client = CraftedRequest {
+        query: Some(vec![("response_type", "code"),
+                         ("client_id", "SomeOtherClient"),
+                         ("redirect_url", "https://wrong.client.example/endpoint")]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    SimpleConfidentialSetup::new().test_silent_error(unknown_client);
+}
+
+#[test]
+fn access_request_silent_missing_redirect() {
+    // The redirect_url is missing
+    let missing_redirect = CraftedRequest {
+        query: Some(vec![("response_type", "code"),
+                         ("client_id", EXAMPLE_CLIENT_ID)]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    SimpleConfidentialSetup::new().test_silent_error(missing_redirect);
+}
+
+#[test]
+fn access_request_silent_mismatching_redirect() {
+    // The redirect_url does not match
+    let mismatching_redirect = CraftedRequest {
+        query: Some(vec![("response_type", "code"),
+                         ("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_url", "https://wrong.client.example/endpoint")]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    SimpleConfidentialSetup::new().test_silent_error(mismatching_redirect);
+}
+
+#[test]
+fn access_request_silent_invalid_redirect() {
+    // The redirect_url is not an url
+    let invalid_redirect = CraftedRequest {
+        query: Some(vec![("response_type", "code"),
+                         ("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_url", "notanurl\x0Abogus\\")]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    SimpleConfidentialSetup::new().test_silent_error(invalid_redirect);
+}
+
+#[test]
+fn access_request_error_denied() {
+    // Used in conjunction with a denying authorization handler below
+    let denied_request = CraftedRequest {
+        query: Some(vec![("response_type", "code"),
+                         ("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    SimpleConfidentialSetup::new().test_error_redirect(denied_request, &Deny);
+}
+
+#[test]
+fn access_request_error_unsupported_method() {
+    // Requesting an authorization token for a method other than code
+    let unsupported_method = CraftedRequest {
+        query: Some(vec![("response_type", "other_method"),
+                         ("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    SimpleConfidentialSetup::new().test_error_redirect(unsupported_method,
+        &Allow(EXAMPLE_OWNER_ID.to_string()));
+}
+
+#[test]
+fn access_request_error_malformed_scope() {
+    // A scope with malformed formatting
+    let malformed_scope = CraftedRequest {
+        query: Some(vec![("response_type", "code"),
+                         ("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL),
+                         ("scope", "\"no quotes (0x22) allowed\"")]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    SimpleConfidentialSetup::new().test_error_redirect(malformed_scope,
+        &Allow(EXAMPLE_OWNER_ID.to_string()));
 }

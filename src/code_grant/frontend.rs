@@ -152,10 +152,9 @@ impl AuthorizationFlow {
         Ok(PreparedAuthorization{request: incoming, urldecoded})
     }
 
-    pub fn handle<'c, Req, Auth>(granter: CodeRef<'c>, prepared: PreparedAuthorization<'c, Req>, page_handler: &Auth)
+    pub fn handle<'c, Req>(granter: CodeRef<'c>, prepared: PreparedAuthorization<'c, Req>, page_handler: &OwnerAuthorizer<Request=Req>)
     -> Result<Req::Response, Req::Error> where
         Req: WebRequest,
-        Auth: OwnerAuthorizer<Request=Req>
     {
         let PreparedAuthorization { request: req, urldecoded } = prepared;
         let negotiated = match granter.negotiate(&urldecoded) {
