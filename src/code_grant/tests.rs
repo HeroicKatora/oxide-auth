@@ -329,20 +329,6 @@ fn access_request_silent_unknown_client() {
 }
 
 #[test]
-fn access_request_silent_missing_redirect() {
-    // The redirect_url is missing
-    let missing_redirect = CraftedRequest {
-        query: Some(vec![("response_type", "code"),
-                         ("client_id", EXAMPLE_CLIENT_ID)]
-            .iter().as_single_value_query()),
-        urlbody: None,
-        auth: None,
-    };
-
-    SimpleConfidentialSetup::new().test_silent_error(missing_redirect);
-}
-
-#[test]
 fn access_request_silent_mismatching_redirect() {
     // The redirect_url does not match
     let mismatching_redirect = CraftedRequest {

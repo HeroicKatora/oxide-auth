@@ -188,7 +188,7 @@ impl Registrar for ClientMap {
         // Perform exact matching as motivated in the rfc
         match bound.redirect_url {
             None => (),
-            Some(ref url) if *url.as_ref() == client.redirect_url => (),
+            Some(ref url) if url.as_ref().as_str() == client.redirect_url.as_str() => (),
             _ => return Err(RegistrarError::MismatchedRedirect),
         }
 
