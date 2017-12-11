@@ -22,6 +22,7 @@ use base64;
 /// Holds the decode query fragments from the url
 struct AuthorizationParameter<'a> {
     valid: bool,
+    method: Option<Cow<'a, str>>,
     client_id: Option<Cow<'a, str>>,
     scope: Option<Cow<'a, str>>,
     redirect_url: Option<Cow<'a, str>>,
@@ -120,6 +121,7 @@ fn extract_parameters(params: HashMap<String, Vec<String>>) -> AuthorizationPara
 
     AuthorizationParameter{
         valid: true,
+        method: map.get("response_type").map(|method| method.to_string().into()),
         client_id: map.get("client_id").map(|client| client.to_string().into()),
         scope: map.get("scope").map(|scope| scope.to_string().into()),
         redirect_url: map.get("redirect_url").map(|url| url.to_string().into()),
@@ -133,11 +135,12 @@ impl<'s> CodeRequest for AuthorizationParameter<'s> {
     fn scope(&self) -> Option<Cow<str>> { self.scope.as_ref().map(|c| c.as_ref().into()) }
     fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.as_ref().map(|c| c.as_ref().into()) }
     fn state(&self) -> Option<Cow<str>> { self.state.as_ref().map(|c| c.as_ref().into()) }
+    fn method(&self) -> Option<Cow<str>> { self.method.as_ref().map(|c| c.as_ref().into()) }
 }
 
 impl<'s> AuthorizationParameter<'s> {
     fn invalid() -> Self {
-        AuthorizationParameter { valid: false, client_id: None, scope: None,
+        AuthorizationParameter { valid: false, method: None, client_id: None, scope: None,
             redirect_url: None, state: None }
     }
 }

@@ -19,22 +19,21 @@ pub trait Registrar {
     /// Determine the allowed scope and redirection url for the client. The registrar may override
     /// the scope entirely or simply substitute a default scope in case none is given. Redirection
     /// urls should be matched verbatim, not partially.
-    fn negotiate<'a>(&self, NegotiationParameter<'a>) -> Result<PreGrant<'a>, RegistrarError>;
+    fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
 
     /// Look up a client id.
     fn client(&self, client_id: &str) -> Option<&Client>;
 }
 
-/// Input parameters provided by the client in its authorization request.
-pub struct NegotiationParameter<'a> {
-    /// The id as given by the client.
+pub struct ClientUrl<'a> {
     pub client_id: Cow<'a, str>,
+    pub redirect_url: Option<Cow<'a, Url>>,
+}
 
-    /// The purposed redirection target url of the client.
+pub struct BoundClient<'a> {
+    pub client_id: Cow<'a, str>,
     pub redirect_url: Cow<'a, Url>,
-
-    /// The scope the client wants to obtain or None to obtain the default scope.
-    pub scope: Option<Cow<'a, Scope>>,
+    pub client: &'a Client,
 }
 
 /// These are the parameters presented to the resource owner when confirming or denying a grant
@@ -92,12 +91,12 @@ pub struct ClientMap {
     clients: HashMap<String, Client>,
 }
 
-impl<'a> NegotiationParameter<'a> {
-    fn set_scope(self, scope: Scope) -> PreGrant<'a> {
+impl<'a> BoundClient<'a> {
+    pub fn negotiate(self, scope: Option<Scope>) -> PreGrant<'a> {
         PreGrant {
             client_id: self.client_id,
             redirect_url: self.redirect_url,
-            scope: Cow::Owned(scope),
+            scope: Cow::Owned(self.client.default_scope.clone()),
         }
     }
 }
@@ -180,17 +179,24 @@ impl ClientMap {
 }
 
 impl Registrar for ClientMap {
-    fn negotiate<'a>(&self, params: NegotiationParameter<'a>) -> Result<PreGrant<'a>, RegistrarError> {
-        let client = match self.clients.get(params.client_id.as_ref()) {
+    fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        let client = match self.clients.get(bound.client_id.as_ref()) {
             None => return Err(RegistrarError::Unregistered),
             Some(stored) => stored
         };
+
         // Perform exact matching as motivated in the rfc
-        if *params.redirect_url.as_ref() != client.redirect_url {
-            return Err(RegistrarError::MismatchedRedirect);
+        match bound.redirect_url {
+            None => (),
+            Some(ref url) if *url.as_ref() == client.redirect_url => (),
+            _ => return Err(RegistrarError::MismatchedRedirect),
         }
-        // Don't allow any scope deviation from the default
-        Ok(params.set_scope(client.default_scope.clone()))
+
+        Ok(BoundClient{
+            client_id: bound.client_id,
+            redirect_url: bound.redirect_url.unwrap_or_else(
+                || Cow::Owned(client.redirect_url.clone())),
+            client: client})
     }
 
     fn client(&self, client_id: &str) -> Option<&Client> {

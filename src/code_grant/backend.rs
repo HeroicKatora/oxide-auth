@@ -10,7 +10,7 @@
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 use primitives::authorizer::Authorizer;
-use primitives::registrar::{PreGrant, NegotiationParameter, Registrar, RegistrarError};
+use primitives::registrar::{PreGrant, ClientUrl, Registrar, RegistrarError};
 use primitives::grant::GrantRequest;
 use primitives::issuer::{IssuedToken, Issuer};
 use super::{Scope};
@@ -160,6 +160,8 @@ pub trait CodeRequest {
     fn redirect_url(&self) -> Option<Cow<str>>;
     /// Optional parameter the client can use to identify the redirected user-agent.
     fn state(&self) -> Option<Cow<str>>;
+    /// The method requested, MUST be `code`
+    fn method(&self) -> Option<Cow<str>>;
 }
 
 /// CodeRef is a thin wrapper around necessary types to execute an authorization code grant.
@@ -194,41 +196,52 @@ impl<'u> CodeRef<'u> {
 
         // Check preconditions
         let client_id = request.client_id().ok_or(CodeError::Ignore)?;
-        let redirect_url = request.redirect_url().ok_or(CodeError::Ignore)?;
-        let redirect_url = Url::parse(redirect_url.as_ref()).map_err(|_| CodeError::Ignore)?;
-        let redirect_url: Cow<Url> = Cow::Owned(redirect_url);
-        let state = request.state();
-
-        // Setup an error with url and state, makes the code flow afterwards easier
-        let error_url = redirect_url.clone().into_owned();
-        let prepared_error = ErrorUrl::new(error_url.clone(), state,
-            AuthorizationError::with(()));
-
-        // Extract additional parameters
-        let scope = request.scope();
-        let scope = match scope.map(|scope| scope.as_ref().parse()) {
+        let redirect_url = match request.redirect_url() {
             None => None,
-            Some(Err(_)) =>
-                return Err(CodeError::Redirect(prepared_error.with(AuthorizationErrorType::InvalidScope))),
-            Some(Ok(scope)) => Some(Cow::Owned(scope)),
+            Some(ref url) => {
+                let parsed = Url::parse(&url).map_err(|_| CodeError::Ignore)?;
+                Some(Cow::Owned(parsed))
+            },
         };
 
-        // Call the underlying registrar
-        let parameter = NegotiationParameter {
-            client_id: client_id,
-            scope: scope,
-            redirect_url: redirect_url,
+        let client_url = ClientUrl {
+            client_id,
+            redirect_url,
         };
 
-        let pre_grant = match self.registrar.negotiate(parameter) {
+        let bound_client = match self.registrar.bound_redirect(client_url) {
             Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
             Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
             Err(RegistrarError::UnauthorizedClient) => return Err(CodeError::Ignore),
             Ok(pre_grant) => pre_grant,
         };
 
+        let state = request.state();
+
+        // Setup an error with url and state, makes the code flow afterwards easier
+        let error_url = bound_client.redirect_url.clone().into_owned();
+        let prepared_error = ErrorUrl::new(error_url.clone(), state,
+            AuthorizationError::with(()));
+
+        match request.method() {
+            Some(ref method) if method.as_ref() == "code"
+                => (),
+            _ => return Err(CodeError::Redirect(prepared_error.with(
+                    AuthorizationErrorType::UnsupportedResponseType))),
+        }
+
+        // Extract additional parameters
+        let scope = request.scope();
+        let scope = match scope.map(|scope| scope.as_ref().parse()) {
+            None => None,
+            Some(Err(_)) =>
+                return Err(CodeError::Redirect(prepared_error.with(
+                    AuthorizationErrorType::InvalidScope))),
+            Some(Ok(scope)) => Some(scope),
+        };
+
         Ok(AuthorizationRequest {
-            pre_grant,
+            pre_grant: bound_client.negotiate(scope),
             code: CodeRef { registrar: self.registrar, authorizer: self.authorizer },
             request,
         })

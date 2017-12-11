@@ -18,6 +18,6 @@ pub mod prelude {
     pub use super::authorizer::{Authorizer, Storage};
     pub use super::issuer::{IssuedToken, Issuer, TokenMap, TokenSigner};
     pub use super::generator::{TokenGenerator, RandomGenerator};
-    pub use super::registrar::{Registrar, Client, ClientMap, PreGrant};
+    pub use super::registrar::{Registrar, Client, ClientUrl, ClientMap, PreGrant};
     pub use super::scope::Scope;
 }
