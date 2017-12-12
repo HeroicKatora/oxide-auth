@@ -25,14 +25,34 @@ pub trait Registrar {
     fn client(&self, client_id: &str) -> Option<&Client>;
 }
 
+/// A pair of `client_id` and an optional `redirect_url`.
+///
+/// Such a pair is received in an Authorization Code Request. A registrar which allows multiple
+/// urls per client can use the optional parameter to choose the correct url. A prominent example
+/// is a native client which uses opens a local port to receive the redirect. Since it can not
+/// necessarily predict the port, the open port needs to be communicated to the server (Note: this
+/// mechanism is not provided by the simple `ClientMap` implementation).
 pub struct ClientUrl<'a> {
+    /// The identifier indicated
     pub client_id: Cow<'a, str>,
+
+    /// The parsed url, if any.
     pub redirect_url: Option<Cow<'a, Url>>,
 }
 
+/// A client and its chosen redirection endpoint.
+///
+/// This instance can be used to complete parameter negotiation with the registrar. In the simplest
+/// case this only includes agreeing on a scope allowed for the client.
 pub struct BoundClient<'a> {
+    /// The identifier of the client, moved from the request.
     pub client_id: Cow<'a, str>,
+
+    /// The chosen redirection endpoint url, moved from the request of overwritten.
     pub redirect_url: Cow<'a, Url>,
+
+    /// A reference to the client instance, for authentication and to retrieve additional
+    /// information.
     pub client: &'a Client,
 }
 
@@ -92,7 +112,16 @@ pub struct ClientMap {
 }
 
 impl<'a> BoundClient<'a> {
-    pub fn negotiate(self, scope: Option<Scope>) -> PreGrant<'a> {
+    /// Finish the negotiations with the registrar.
+    ///
+    /// The registrar is responsible for choosing the appropriate scope for the client. In the most
+    /// simple case, it will always choose some default scope for the client, regardless of its
+    /// wish. The standard permits this but requires the client to be notified of the resulting
+    /// scope of the token in such a case, when it retrieves its token via the access token
+    /// request.
+    ///
+    /// Currently, this scope agreement algorithm is the only supported method.
+    pub fn negotiate(self, _scope: Option<Scope>) -> PreGrant<'a> {
         PreGrant {
             client_id: self.client_id,
             redirect_url: self.redirect_url,
