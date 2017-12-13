@@ -5,7 +5,7 @@ use primitives::generator::TokenGenerator;
 use primitives::issuer::TokenMap;
 use primitives::registrar::{Client, ClientMap, PreGrant};
 use primitives::scope::Scope;
-use primitives::grant::GrantRef;
+use primitives::grant::{GrantRef, GrantRequest};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -119,26 +119,28 @@ impl<'r, I, K, V> ToSingleValueQuery for I where
     }
 }
 
-struct SimpleConfidentialSetup {
+struct AuthorizationSetup {
     registrar: ClientMap,
     authorizer: Storage<TestGenerator>,
 }
 
 const EXAMPLE_CLIENT_ID: &str = "ClientId";
 const EXAMPLE_OWNER_ID: &str = "Owner";
-const EXAMPLE_REDIRECT_URL: &str = "https://client.example/endpoint";
 const EXAMPLE_PASSPHRASE: &str = "VGhpcyBpcyBhIHZlcnkgc2VjdXJlIHBhc3NwaHJhc2UK";
+const EXAMPLE_REDIRECT_URL: &str = "https://client.example/endpoint";
+const EXAMPLE_SCOPE: &str = "example default";
 
-impl SimpleConfidentialSetup {
-    fn new() -> SimpleConfidentialSetup {
+impl AuthorizationSetup {
+    fn new() -> AuthorizationSetup {
         let mut registrar = ClientMap::new();
         let authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
-            Url::parse(EXAMPLE_REDIRECT_URL).unwrap(), "default".parse().unwrap(),
+            EXAMPLE_REDIRECT_URL.parse().unwrap(),
+            EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
         registrar.register_client(client);
-        SimpleConfidentialSetup {
+        AuthorizationSetup {
             registrar,
             authorizer,
         }
@@ -273,7 +275,7 @@ fn authorize_confidential() {
                            ("code", "AuthToken"),
                            ("grant_type", "authorization_code")]
             .iter().as_single_value_query()),
-        auth: Some("Basic ".to_string() + client_id + ":" + &base64::encode(passphrase)),
+        auth: Some("Basic ".to_string() + &base64::encode(&(client_id.to_string() + ":" + passphrase))),
     };
 
     let prepared = GrantFlow::prepare(&mut tokenrequest).expect("Failure during access token preparation");
@@ -303,18 +305,18 @@ fn authorize_confidential() {
 }
 
 #[test]
-fn access_request_silent_missing_client() {
+fn auth_request_silent_missing_client() {
     let missing_client = CraftedRequest {
         query: Some(vec![("response_type", "code")].iter().as_single_value_query()),
         urlbody: None,
         auth: None,
     };
 
-    SimpleConfidentialSetup::new().test_silent_error(missing_client);
+    AuthorizationSetup::new().test_silent_error(missing_client);
 }
 
 #[test]
-fn access_request_silent_unknown_client() {
+fn auth_request_silent_unknown_client() {
     // The client_id is not registered
     let unknown_client = CraftedRequest {
         query: Some(vec![("response_type", "code"),
@@ -325,11 +327,11 @@ fn access_request_silent_unknown_client() {
         auth: None,
     };
 
-    SimpleConfidentialSetup::new().test_silent_error(unknown_client);
+    AuthorizationSetup::new().test_silent_error(unknown_client);
 }
 
 #[test]
-fn access_request_silent_mismatching_redirect() {
+fn auth_request_silent_mismatching_redirect() {
     // The redirect_url does not match
     let mismatching_redirect = CraftedRequest {
         query: Some(vec![("response_type", "code"),
@@ -340,11 +342,11 @@ fn access_request_silent_mismatching_redirect() {
         auth: None,
     };
 
-    SimpleConfidentialSetup::new().test_silent_error(mismatching_redirect);
+    AuthorizationSetup::new().test_silent_error(mismatching_redirect);
 }
 
 #[test]
-fn access_request_silent_invalid_redirect() {
+fn auth_request_silent_invalid_redirect() {
     // The redirect_url is not an url
     let invalid_redirect = CraftedRequest {
         query: Some(vec![("response_type", "code"),
@@ -355,11 +357,11 @@ fn access_request_silent_invalid_redirect() {
         auth: None,
     };
 
-    SimpleConfidentialSetup::new().test_silent_error(invalid_redirect);
+    AuthorizationSetup::new().test_silent_error(invalid_redirect);
 }
 
 #[test]
-fn access_request_error_denied() {
+fn auth_request_error_denied() {
     // Used in conjunction with a denying authorization handler below
     let denied_request = CraftedRequest {
         query: Some(vec![("response_type", "code"),
@@ -370,11 +372,11 @@ fn access_request_error_denied() {
         auth: None,
     };
 
-    SimpleConfidentialSetup::new().test_error_redirect(denied_request, &Deny);
+    AuthorizationSetup::new().test_error_redirect(denied_request, &Deny);
 }
 
 #[test]
-fn access_request_error_unsupported_method() {
+fn auth_request_error_unsupported_method() {
     // Requesting an authorization token for a method other than code
     let unsupported_method = CraftedRequest {
         query: Some(vec![("response_type", "other_method"),
@@ -385,12 +387,12 @@ fn access_request_error_unsupported_method() {
         auth: None,
     };
 
-    SimpleConfidentialSetup::new().test_error_redirect(unsupported_method,
+    AuthorizationSetup::new().test_error_redirect(unsupported_method,
         &Allow(EXAMPLE_OWNER_ID.to_string()));
 }
 
 #[test]
-fn access_request_error_malformed_scope() {
+fn auth_request_error_malformed_scope() {
     // A scope with malformed formatting
     let malformed_scope = CraftedRequest {
         query: Some(vec![("response_type", "code"),
@@ -402,6 +404,138 @@ fn access_request_error_malformed_scope() {
         auth: None,
     };
 
-    SimpleConfidentialSetup::new().test_error_redirect(malformed_scope,
+    AuthorizationSetup::new().test_error_redirect(malformed_scope,
         &Allow(EXAMPLE_OWNER_ID.to_string()));
+}
+
+struct AccessTokenSetup {
+    registrar: ClientMap,
+    authorizer: Storage<TestGenerator>,
+    issuer: TokenMap<TestGenerator>,
+    authtoken: String,
+    basic_authorization: String,
+}
+
+impl AccessTokenSetup {
+    fn new() -> Self {
+        use primitives::authorizer::Authorizer;
+        let mut registrar = ClientMap::new();
+        let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+        let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
+
+        let client = Client::confidential(EXAMPLE_CLIENT_ID,
+            EXAMPLE_REDIRECT_URL.parse().unwrap(),
+            EXAMPLE_SCOPE.parse().unwrap(),
+            EXAMPLE_PASSPHRASE.as_bytes());
+
+        let authrequest = GrantRequest {
+            client_id: EXAMPLE_CLIENT_ID,
+            owner_id: EXAMPLE_OWNER_ID,
+            redirect_url: &EXAMPLE_REDIRECT_URL.parse().unwrap(),
+            scope: &EXAMPLE_SCOPE.parse().unwrap(),
+        };
+
+        let authtoken = authorizer.authorize(authrequest);
+        registrar.register_client(client);
+
+        let basic_authorization = base64::encode(&format!("{}:{}",
+            EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+
+        AccessTokenSetup {
+            registrar,
+            authorizer,
+            issuer,
+            authtoken,
+            basic_authorization,
+        }
+    }
+
+    fn assert_json_error_set(response: &CraftedResponse) {
+        match response {
+            &CraftedResponse::Json(ref json) => {
+                let content: HashMap<String, String> = serde_json::from_str(json).unwrap();
+                assert!(content.get("error").is_some(), "Error not set in json response");
+            },
+            &CraftedResponse::Unauthorized(ref inner) => Self::assert_json_error_set(inner),
+            &CraftedResponse::Authorization(ref inner, _) => Self::assert_json_error_set(inner),
+            &CraftedResponse::ClientError(ref inner) => Self::assert_json_error_set(inner),
+            _ => panic!("Expected json encoded body, got {:?}", response),
+        }
+    }
+
+    fn test_simple_error(&mut self, mut req: CraftedRequest) {
+        let prepared = GrantFlow::prepare(&mut req).expect("Failed during access request preparation");
+        match GrantFlow::handle(IssuerRef::with(&self.registrar, &mut self.authorizer, &mut self.issuer), prepared) {
+            Ok(ref response) =>
+                Self::assert_json_error_set(response),
+            resp => panic!("Expected non-error reponse, got {:?}", resp),
+        }
+    }
+}
+
+#[test]
+fn access_request_unknown_client() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to autenticate as some unknown client with the passphrase
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}",
+            "SomeOtherClient", EXAMPLE_PASSPHRASE))),
+    };
+
+    setup.test_simple_error(unknown_client);
+}
+
+#[test]
+fn access_request_wrong_authentication() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to autenticate with an unsupported method (instead of Basic)
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("NotBasic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(unknown_client);
+}
+
+#[test]
+fn access_request_wrong_password() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to autenticate with the wrong password
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}",
+            EXAMPLE_CLIENT_ID, "NotTheRightPassphrase"))),
+    };
+
+    setup.test_simple_error(unknown_client);
+}
+
+#[test]
+fn access_request_empty_password() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to autenticate with the wrong password
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}",
+            EXAMPLE_CLIENT_ID, ""))),
+    };
+
+    setup.test_simple_error(unknown_client);
 }
