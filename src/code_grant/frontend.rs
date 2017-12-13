@@ -10,9 +10,11 @@
 //! the frontend pluggable which could improve testing.
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::fmt;
 use std::error;
+use std::fmt;
+use std::marker::PhantomData;
+use std::str::from_utf8;
+
 use primitives::registrar::PreGrant;
 use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerError, IssuerRef};
 use super::backend::{AccessError, GuardRequest, GuardRef};
@@ -247,21 +249,27 @@ impl GrantFlow {
                     return None
                 }
 
-                let mut split =  header[6..].splitn(2, ':');
-                let client = match split.next() {
-                    None => return None,
-                    Some(client) => client,
-                };
-                let passwd64 = match split.next() {
-                    None => return None,
-                    Some(passwd64) => passwd64,
-                };
-                let passwd = match base64::decode(&passwd64) {
+                let combined = match base64::decode(&header[6..]) {
                     Err(_) => return None,
                     Ok(vec) => vec,
                 };
 
-                Some((client.to_string(), passwd))
+                let mut split = combined.splitn(2, |&c| c == b':');
+                let client_bin = match split.next() {
+                    None => return None,
+                    Some(client) => client,
+                };
+                let passwd = match split.next() {
+                    None => return None,
+                    Some(passwd64) => passwd64,
+                };
+
+                let client = match from_utf8(client_bin) {
+                    Err(_) => return None,
+                    Ok(client) => client,
+                };
+
+                Some((client.to_string(), passwd.to_vec()))
             },
         };
 
