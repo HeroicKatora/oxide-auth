@@ -417,7 +417,7 @@ struct AccessTokenSetup {
 }
 
 impl AccessTokenSetup {
-    fn new() -> Self {
+    fn private_client() -> Self {
         use primitives::authorizer::Authorizer;
         let mut registrar = ClientMap::new();
         let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
@@ -427,6 +427,38 @@ impl AccessTokenSetup {
             EXAMPLE_REDIRECT_URL.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
+
+        let authrequest = GrantRequest {
+            client_id: EXAMPLE_CLIENT_ID,
+            owner_id: EXAMPLE_OWNER_ID,
+            redirect_url: &EXAMPLE_REDIRECT_URL.parse().unwrap(),
+            scope: &EXAMPLE_SCOPE.parse().unwrap(),
+        };
+
+        let authtoken = authorizer.authorize(authrequest);
+        registrar.register_client(client);
+
+        let basic_authorization = base64::encode(&format!("{}:{}",
+            EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+
+        AccessTokenSetup {
+            registrar,
+            authorizer,
+            issuer,
+            authtoken,
+            basic_authorization,
+        }
+    }
+
+    fn public_client() -> Self {
+        use primitives::authorizer::Authorizer;
+        let mut registrar = ClientMap::new();
+        let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+        let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
+
+        let client = Client::public(EXAMPLE_CLIENT_ID,
+            EXAMPLE_REDIRECT_URL.parse().unwrap(),
+            EXAMPLE_SCOPE.parse().unwrap());
 
         let authrequest = GrantRequest {
             client_id: EXAMPLE_CLIENT_ID,
@@ -475,7 +507,7 @@ impl AccessTokenSetup {
 
 #[test]
 fn access_request_unknown_client() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to autenticate as some unknown client with the passphrase
     let unknown_client = CraftedRequest {
         query: None,
@@ -492,7 +524,7 @@ fn access_request_unknown_client() {
 
 #[test]
 fn access_request_wrong_authentication() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to autenticate with an unsupported method (instead of Basic)
     let wrong_authentication = CraftedRequest {
         query: None,
@@ -508,7 +540,7 @@ fn access_request_wrong_authentication() {
 
 #[test]
 fn access_request_wrong_password() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to autenticate with the wrong password
     let wrong_password = CraftedRequest {
         query: None,
@@ -525,7 +557,7 @@ fn access_request_wrong_password() {
 
 #[test]
 fn access_request_empty_password() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to autenticate with an empty password
     let empty_password = CraftedRequest {
         query: None,
@@ -542,7 +574,7 @@ fn access_request_empty_password() {
 
 #[test]
 fn access_request_multiple_client_indications() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to autenticate with an unsupported method (instead of Basic)
     let multiple_client_indications = CraftedRequest {
         query: None,
@@ -558,8 +590,41 @@ fn access_request_multiple_client_indications() {
 }
 
 #[test]
+fn access_request_public_authorization() {
+    let mut setup = AccessTokenSetup::public_client();
+    // Trying to autenticate a public client
+    let public_authorization = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(public_authorization);
+}
+
+#[test]
+fn access_request_public_missing_client() {
+    let mut setup = AccessTokenSetup::public_client();
+    // Trying to autenticate with an unsupported method (instead of Basic)
+    let public_missing_client = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: None,
+    };
+
+    setup.test_simple_error(public_missing_client);
+}
+
+
+#[test]
 fn access_request_invalid_basic() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to autenticate with an invalid basic authentication header
     let invalid_basic = CraftedRequest {
         query: None,
@@ -575,7 +640,7 @@ fn access_request_invalid_basic() {
 
 #[test]
 fn access_request_wrong_redirection() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to get an access token with an incorrect redirection url
     let wrong_redirection = CraftedRequest {
         query: None,
@@ -591,7 +656,7 @@ fn access_request_wrong_redirection() {
 
 #[test]
 fn access_request_invalid_redirection() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to get an access token with a redirection url which is not an url
     let invalid_redirection = CraftedRequest {
         query: None,
@@ -607,7 +672,7 @@ fn access_request_invalid_redirection() {
 
 #[test]
 fn access_request_no_code() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to get an access token without a code
     let no_code = CraftedRequest {
         query: None,
@@ -622,7 +687,7 @@ fn access_request_no_code() {
 
 #[test]
 fn access_request_multiple_codes() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     let mut urlbody = vec![
             ("grant_type", "authorization_code"),
             ("code", &setup.authtoken),
@@ -641,7 +706,7 @@ fn access_request_multiple_codes() {
 
 #[test]
 fn access_request_wrong_grant_type() {
-    let mut setup = AccessTokenSetup::new();
+    let mut setup = AccessTokenSetup::private_client();
     // Trying to get an access token without a code
     let wrong_grant_type = CraftedRequest {
         query: None,
