@@ -1,7 +1,7 @@
 use super::frontend::*;
 use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
 use primitives::authorizer::Storage;
-use primitives::generator::TokenGenerator;
+use primitives::generator::{TokenGenerator, RandomGenerator};
 use primitives::issuer::TokenMap;
 use primitives::registrar::{Client, ClientMap, PreGrant};
 use primitives::scope::Scope;
@@ -718,4 +718,121 @@ fn access_request_wrong_grant_type() {
     };
 
     setup.test_simple_error(wrong_grant_type);
+}
+
+struct ResourceSetup {
+    issuer: TokenMap<RandomGenerator>,
+    authtoken: String,
+    wrong_scope_token: String,
+    small_scope_token: String,
+    resource_scope: [Scope; 1],
+}
+
+impl ResourceSetup {
+    fn new() -> ResourceSetup {
+        use primitives::issuer::Issuer;
+
+        // Ensure that valid tokens are 16 bytes long, so we can craft an invalid one
+        let mut issuer = TokenMap::new(RandomGenerator::new(16));
+
+        let authtoken = issuer.issue(GrantRequest {
+            client_id: EXAMPLE_CLIENT_ID,
+            owner_id: EXAMPLE_OWNER_ID,
+            redirect_url: &EXAMPLE_REDIRECT_URL.parse().unwrap(),
+            scope: &"legit needed andmore".parse().unwrap(),
+        });
+
+        let wrong_scope_token = issuer.issue(GrantRequest {
+            client_id: EXAMPLE_CLIENT_ID,
+            owner_id: EXAMPLE_OWNER_ID,
+            redirect_url: &EXAMPLE_REDIRECT_URL.parse().unwrap(),
+            scope: &"wrong needed".parse().unwrap(),
+        });
+
+        let small_scope_token = issuer.issue(GrantRequest {
+            client_id: EXAMPLE_CLIENT_ID,
+            owner_id: EXAMPLE_OWNER_ID,
+            redirect_url: &EXAMPLE_REDIRECT_URL.parse().unwrap(),
+            scope: &"legit".parse().unwrap(),
+        });
+
+        ResourceSetup {
+            issuer,
+            authtoken: authtoken.token,
+            wrong_scope_token: wrong_scope_token.token,
+            small_scope_token: small_scope_token.token,
+            resource_scope: ["needed legit".parse().unwrap()],
+        }
+    }
+
+    fn test_access_error(&mut self, mut req: CraftedRequest) {
+        let prepared = AccessFlow::prepare(&mut req).expect("Failed access preparation");
+        match AccessFlow::handle(GuardRef::with(&mut self.issuer, &self.resource_scope), prepared) {
+            Ok(resp) => panic!("Expected an error instead of {:?}", resp),
+            Err(_) => (),
+        }
+    }
+}
+
+#[test]
+fn resource_no_authorization() {
+    // Does not have any authorization
+    let no_authorization = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: None
+    };
+
+    ResourceSetup::new().test_access_error(no_authorization);
+}
+
+#[test]
+fn resource_invalid_token() {
+    // Does not have any authorization
+    let invalid_token = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some("Bearer ThisisnotavalidtokenTooLong".to_string())
+    };
+
+    ResourceSetup::new().test_access_error(invalid_token);
+}
+
+#[test]
+fn resource_wrong_method() {
+    let mut setup = ResourceSetup::new();
+    // Not indicating the `Bearer` authorization method
+    let wrong_method = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some("NotBearer ".to_string() + &setup.authtoken),
+    };
+
+    setup.test_access_error(wrong_method);
+}
+
+#[test]
+fn resource_scope_too_small() {
+    let mut setup = ResourceSetup::new();
+    // Scope of used token is too small for access
+    let scope_too_small = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some("Bearer ".to_string() + &setup.small_scope_token),
+    };
+
+    setup.test_access_error(scope_too_small);
+}
+
+#[test]
+fn resource_wrong_scope() {
+    let mut setup = ResourceSetup::new();
+    // Scope of used token does not match the access
+    let wrong_scope = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some("Bearer ".to_string() + &setup.wrong_scope_token),
+    };
+
+    setup.test_access_error(wrong_scope);
 }
