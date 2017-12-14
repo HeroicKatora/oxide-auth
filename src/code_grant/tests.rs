@@ -494,7 +494,7 @@ fn access_request_unknown_client() {
 fn access_request_wrong_authentication() {
     let mut setup = AccessTokenSetup::new();
     // Trying to autenticate with an unsupported method (instead of Basic)
-    let unknown_client = CraftedRequest {
+    let wrong_authentication = CraftedRequest {
         query: None,
         urlbody: Some(vec![("grant_type", "authorization_code"),
                          ("code", &setup.authtoken),
@@ -503,14 +503,14 @@ fn access_request_wrong_authentication() {
         auth: Some("NotBasic ".to_string() + &setup.basic_authorization),
     };
 
-    setup.test_simple_error(unknown_client);
+    setup.test_simple_error(wrong_authentication);
 }
 
 #[test]
 fn access_request_wrong_password() {
     let mut setup = AccessTokenSetup::new();
     // Trying to autenticate with the wrong password
-    let unknown_client = CraftedRequest {
+    let wrong_password = CraftedRequest {
         query: None,
         urlbody: Some(vec![("grant_type", "authorization_code"),
                          ("code", &setup.authtoken),
@@ -520,14 +520,14 @@ fn access_request_wrong_password() {
             EXAMPLE_CLIENT_ID, "NotTheRightPassphrase"))),
     };
 
-    setup.test_simple_error(unknown_client);
+    setup.test_simple_error(wrong_password);
 }
 
 #[test]
 fn access_request_empty_password() {
     let mut setup = AccessTokenSetup::new();
-    // Trying to autenticate with the wrong password
-    let unknown_client = CraftedRequest {
+    // Trying to autenticate with an empty password
+    let empty_password = CraftedRequest {
         query: None,
         urlbody: Some(vec![("grant_type", "authorization_code"),
                          ("code", &setup.authtoken),
@@ -537,5 +537,120 @@ fn access_request_empty_password() {
             EXAMPLE_CLIENT_ID, ""))),
     };
 
-    setup.test_simple_error(unknown_client);
+    setup.test_simple_error(empty_password);
+}
+
+#[test]
+fn access_request_multiple_client_indications() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to autenticate with an unsupported method (instead of Basic)
+    let multiple_client_indications = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("client_id", EXAMPLE_CLIENT_ID),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(multiple_client_indications);
+}
+
+#[test]
+fn access_request_invalid_basic() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to autenticate with an invalid basic authentication header
+    let invalid_basic = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ;;;#Non-base64".to_string()),
+    };
+
+    setup.test_simple_error(invalid_basic);
+}
+
+#[test]
+fn access_request_wrong_redirection() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to get an access token with an incorrect redirection url
+    let wrong_redirection = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", "https://wrong.client.example/endpoint")]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(wrong_redirection);
+}
+
+#[test]
+fn access_request_invalid_redirection() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to get an access token with a redirection url which is not an url
+    let invalid_redirection = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", "notanurl\x0Abogus\\")]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(invalid_redirection);
+}
+
+#[test]
+fn access_request_no_code() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to get an access token without a code
+    let no_code = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(no_code);
+}
+
+#[test]
+fn access_request_multiple_codes() {
+    let mut setup = AccessTokenSetup::new();
+    let mut urlbody = vec![
+            ("grant_type", "authorization_code"),
+            ("code", &setup.authtoken),
+            ("redirect_url", EXAMPLE_REDIRECT_URL)]
+        .iter().as_single_value_query();
+    urlbody.get_mut("code").unwrap().push("AnotherAuthToken".to_string());
+    // Trying to get an access token with mutiple codes, even if one is correct
+    let multiple_codes = CraftedRequest {
+        query: None,
+        urlbody: Some(urlbody),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(multiple_codes);
+}
+
+#[test]
+fn access_request_wrong_grant_type() {
+    let mut setup = AccessTokenSetup::new();
+    // Trying to get an access token without a code
+    let wrong_grant_type = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "another_grant_type"),
+                         ("code", &setup.authtoken),
+                         ("redirect_url", EXAMPLE_REDIRECT_URL)]
+            .iter().as_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(wrong_grant_type);
 }
