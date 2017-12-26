@@ -73,7 +73,7 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
             owner_id: req.owner_id.to_string(),
             client_id: req.client_id.to_string(),
             scope: req.scope.clone(),
-            redirect_url: req.redirect_url.clone(),
+            redirect_uri: req.redirect_uri.clone(),
             until: Utc::now() + Duration::hours(1),
         };
         let (token, refresh) = {
@@ -126,7 +126,7 @@ impl Issuer for TokenSigner {
             owner_id: req.owner_id.into(),
             client_id: req.client_id.into(),
             scope: Cow::Borrowed(req.scope),
-            redirect_url: Cow::Borrowed(req.redirect_url),
+            redirect_uri: Cow::Borrowed(req.redirect_uri),
             until: Cow::Owned(Utc::now() + Duration::hours(1)),
         };
         let token = self.signer.tag("token").generate(&grant);
@@ -153,7 +153,7 @@ mod tests {
         let request = GrantRequest {
             client_id: "Client".into(),
             owner_id: "Owner".into(),
-            redirect_url: &"https://example.com".parse().unwrap(),
+            redirect_uri: &"https://example.com".parse().unwrap(),
             scope: &"default".parse().unwrap(),
         };
 

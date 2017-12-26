@@ -25,7 +25,7 @@ pub trait Registrar {
     fn client(&self, client_id: &str) -> Option<&Client>;
 }
 
-/// A pair of `client_id` and an optional `redirect_url`.
+/// A pair of `client_id` and an optional `redirect_uri`.
 ///
 /// Such a pair is received in an Authorization Code Request. A registrar which allows multiple
 /// urls per client can use the optional parameter to choose the correct url. A prominent example
@@ -37,7 +37,7 @@ pub struct ClientUrl<'a> {
     pub client_id: Cow<'a, str>,
 
     /// The parsed url, if any.
-    pub redirect_url: Option<Cow<'a, Url>>,
+    pub redirect_uri: Option<Cow<'a, Url>>,
 }
 
 /// A client and its chosen redirection endpoint.
@@ -49,7 +49,7 @@ pub struct BoundClient<'a> {
     pub client_id: Cow<'a, str>,
 
     /// The chosen redirection endpoint url, moved from the request of overwritten.
-    pub redirect_url: Cow<'a, Url>,
+    pub redirect_uri: Cow<'a, Url>,
 
     /// A reference to the client instance, for authentication and to retrieve additional
     /// information.
@@ -65,7 +65,7 @@ pub struct PreGrant<'a> {
     pub client_id: Cow<'a, str>,
 
     /// The redirection url associated with the above client.
-    pub redirect_url: Cow<'a, Url>,
+    pub redirect_uri: Cow<'a, Url>,
 
     /// A scope admissible for the above client.
     pub scope: Cow<'a, Scope>,
@@ -93,7 +93,7 @@ pub enum RegistrarError {
 /// with the servers. They might be allowed more freedom as they are harder to impersonate.
 pub struct Client {
     client_id: String,
-    redirect_url: Url,
+    redirect_uri: Url,
     default_scope: Scope,
     client_type: ClientType,
 }
@@ -124,7 +124,7 @@ impl<'a> BoundClient<'a> {
     pub fn negotiate(self, _scope: Option<Scope>) -> PreGrant<'a> {
         PreGrant {
             client_id: self.client_id,
-            redirect_url: self.redirect_url,
+            redirect_uri: self.redirect_uri,
             scope: Cow::Owned(self.client.default_scope.clone()),
         }
     }
@@ -132,16 +132,16 @@ impl<'a> BoundClient<'a> {
 
 impl Client {
     /// Create a public client
-    pub fn public(client_id: &str, redirect_url: Url, default_scope: Scope) -> Client {
-        Client { client_id: client_id.to_string(), redirect_url, default_scope, client_type: ClientType::Public }
+    pub fn public(client_id: &str, redirect_uri: Url, default_scope: Scope) -> Client {
+        Client { client_id: client_id.to_string(), redirect_uri, default_scope, client_type: ClientType::Public }
     }
 
     /// Create a confidential client
-    pub fn confidential(client_id: &str, redirect_url: Url, default_scope: Scope, passphrase: &[u8]) -> Client {
+    pub fn confidential(client_id: &str, redirect_uri: Url, default_scope: Scope, passphrase: &[u8]) -> Client {
         let passdata = SHA256Policy.store(client_id, passphrase);
         Client {
             client_id: client_id.to_string(),
-            redirect_url,
+            redirect_uri,
             default_scope,
             client_type: ClientType::Confidential { passdata },
         }
@@ -215,16 +215,16 @@ impl Registrar for ClientMap {
         };
 
         // Perform exact matching as motivated in the rfc
-        match bound.redirect_url {
+        match bound.redirect_uri {
             None => (),
-            Some(ref url) if url.as_ref().as_str() == client.redirect_url.as_str() => (),
+            Some(ref url) if url.as_ref().as_str() == client.redirect_uri.as_str() => (),
             _ => return Err(RegistrarError::MismatchedRedirect),
         }
 
         Ok(BoundClient{
             client_id: bound.client_id,
-            redirect_url: bound.redirect_url.unwrap_or_else(
-                || Cow::Owned(client.redirect_url.clone())),
+            redirect_uri: bound.redirect_uri.unwrap_or_else(
+                || Cow::Owned(client.redirect_uri.clone())),
             client: client})
     }
 

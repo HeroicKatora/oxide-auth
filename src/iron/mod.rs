@@ -223,7 +223,7 @@ impl GenericOwnerAuthorizer for iron::Handler {
     -> IronResult<(Authentication, Response)> {
         let owned_auth = PreGrant::<'static> {
             client_id: Cow::Owned(auth.client_id.as_ref().to_string()),
-            redirect_url: Cow::Owned(auth.redirect_url.as_ref().clone()),
+            redirect_uri: Cow::Owned(auth.redirect_uri.as_ref().clone()),
             scope: Cow::Owned(auth.scope.as_ref().clone()),
         };
         req.extensions.insert::<PreGrant>(owned_auth);

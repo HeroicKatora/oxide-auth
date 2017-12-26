@@ -19,9 +19,9 @@ pub struct Grant {
     /// The scope granted to the client.
     pub scope: Scope,
 
-    /// The redirection url under which the client resides.
-    /// TODO: Establish if generic URIs should be allowed here.
-    pub redirect_url: Url,
+    /// The redirection uri under which the client resides. The url package does indeed seem to
+    /// parse valid URIs as well.
+    pub redirect_uri: Url,
 
     /// Expiration date of the grant (Utc).
     pub until: Time
@@ -43,7 +43,7 @@ pub struct GrantRef<'a> {
     pub scope: Cow<'a, Scope>,
 
     /// The redirection url under which the client resides.
-    pub redirect_url: Cow<'a, Url>,
+    pub redirect_uri: Cow<'a, Url>,
 
     /// Expiration date of the grant (Utc).
     pub until: Cow<'a, Time>,
@@ -55,7 +55,7 @@ impl<'a> Into<GrantRef<'a>> for Grant {
             owner_id: Cow::Owned(self.owner_id),
             client_id: Cow::Owned(self.client_id),
             scope: Cow::Owned(self.scope),
-            redirect_url: Cow::Owned(self.redirect_url),
+            redirect_uri: Cow::Owned(self.redirect_uri),
             until: Cow::Owned(self.until),
         }
     }
@@ -67,7 +67,7 @@ impl<'a> Into<GrantRef<'a>> for &'a Grant {
             owner_id: Cow::Borrowed(&self.owner_id),
             client_id: Cow::Borrowed(&self.client_id),
             scope: Cow::Borrowed(&self.scope),
-            redirect_url: Cow::Borrowed(&self.redirect_url),
+            redirect_uri: Cow::Borrowed(&self.redirect_uri),
             until: Cow::Borrowed(&self.until),
         }
     }
@@ -79,7 +79,7 @@ impl<'a> Into<Grant> for GrantRef<'a> {
             owner_id: self.owner_id.into_owned(),
             client_id: self.client_id.into_owned(),
             scope: self.scope.into_owned(),
-            redirect_url: self.redirect_url.into_owned(),
+            redirect_uri: self.redirect_uri.into_owned(),
             until: self.until.into_owned()
         }
     }
@@ -97,5 +97,5 @@ pub struct GrantRequest<'a> {
     pub scope: &'a Scope,
 
     /// The redirection url under which the client resides.
-    pub redirect_url: &'a Url,
+    pub redirect_uri: &'a Url,
 }

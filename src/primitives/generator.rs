@@ -1,6 +1,6 @@
 //! Generators produce string code grant and bearer tokens for a determined grant.
 //!
-//! In short, a code grant needs to encapsulate information about the owner, client, redirect_url,
+//! In short, a code grant needs to encapsulate information about the owner, client, redirect_uri,
 //! scope, and lifetime of a grant. This information needs to be uniquely recoverable.
 //!
 //! Two major implementation exists:
@@ -84,13 +84,13 @@ impl Assertion {
         let InternalAssertionGrant(owner_id, client_id, redirectbytes, scope, (ts, tsnanos), tag) =
             rmp_serde::from_slice(&message).map_err(|_| ())?;
 
-        let redirect_url = Url::parse(redirectbytes).map_err(|_| ())?;
+        let redirect_uri = Url::parse(redirectbytes).map_err(|_| ())?;
         let scope = scope.parse().map_err(|_| ())?;
         let until = Utc::timestamp(&Utc, ts, tsnanos);
         Ok((GrantRef {
             owner_id: Cow::Owned(owner_id.to_string()),
             client_id: Cow::Owned(client_id.to_string()),
-            redirect_url: Cow::Owned(redirect_url),
+            redirect_uri: Cow::Owned(redirect_uri),
             scope: Cow::Owned(scope),
             until: Cow::Owned(until),
         }, tag.to_string()))
@@ -100,7 +100,7 @@ impl Assertion {
         let tosign = rmp_serde::to_vec(&InternalAssertionGrant(
             &grant.owner_id,
             &grant.client_id,
-            grant.redirect_url.as_str(),
+            grant.redirect_uri.as_str(),
             &grant.scope.to_string(),
             (grant.until.timestamp(), grant.until.timestamp_subsec_nanos()),
             tag)).unwrap();

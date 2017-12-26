@@ -47,9 +47,9 @@ impl<I: TokenGenerator> Authorizer for Storage<I> {
         let owner_id = req.owner_id.to_string();
         let client_id = req.client_id.to_string();
         let scope = req.scope.clone();
-        let redirect_url = req.redirect_url.clone();
+        let redirect_uri = req.redirect_uri.clone();
         let until = Utc::now() + Duration::minutes(10);
-        let grant = Grant {owner_id, client_id, scope, redirect_url, until };
+        let grant = Grant {owner_id, client_id, scope, redirect_uri, until };
 
         let token = self.issuer.generate(&(&grant).into());
         self.tokens.insert(token.clone(), grant);

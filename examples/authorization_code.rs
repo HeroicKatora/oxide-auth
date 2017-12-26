@@ -75,7 +75,7 @@ mod main {
             <form action=\"authorize?response_type=code&client_id={}&deny=1\" method=\"post\">
                 <input type=\"submit\" value=\"Deny\">
             </form>
-            </html>", grant.client_id, grant.redirect_url, grant.scope, grant.client_id, grant.client_id);
+            </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
         let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
         Ok((Authentication::InProgress, response))
     }

@@ -31,12 +31,12 @@ pub enum CodeError {
     Redirect(ErrorUrl) /* Redirect to the given url */,
 }
 
-/// Encapsulates a redirect to a valid redirect_url with an error response. The implementation
+/// Encapsulates a redirect to a valid redirect_uri with an error response. The implementation
 /// makes it possible to alter the contained error, for example to provide additional optional
 /// information. The error type should not be altered by the frontend but the specificalities
 /// of this should be enforced by the frontend instead.
 pub struct ErrorUrl {
-    base_url: Url,
+    base_uri: Url,
     error: AuthorizationError,
 }
 
@@ -69,7 +69,7 @@ impl ErrorUrl {
     fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl where S: AsRef<str> {
         url.query_pairs_mut()
             .extend_pairs(state.as_ref().map(|st| ("state", st.as_ref())));
-        ErrorUrl{ base_url: url, error: error }
+        ErrorUrl{ base_uri: url, error: error }
     }
 
     /// Modify the contained error.
@@ -84,9 +84,9 @@ impl ErrorUrl {
 }
 
 impl Into<Url> for ErrorUrl {
-    /// Finalize the error url by saving its parameters in the query part of the redirect_url
+    /// Finalize the error url by saving its parameters in the query part of the redirect_uri
     fn into(self) -> Url {
-        let mut url = self.base_url;
+        let mut url = self.base_uri;
         url.query_pairs_mut()
             .extend_pairs(self.error.into_iter());
         url
@@ -196,7 +196,7 @@ impl<'u> CodeRef<'u> {
 
         // Check preconditions
         let client_id = request.client_id().ok_or(CodeError::Ignore)?;
-        let redirect_url = match request.redirect_uri() {
+        let redirect_uri = match request.redirect_uri() {
             None => None,
             Some(ref uri) => {
                 let parsed = Url::parse(&uri).map_err(|_| CodeError::Ignore)?;
@@ -206,7 +206,7 @@ impl<'u> CodeRef<'u> {
 
         let client_url = ClientUrl {
             client_id,
-            redirect_url,
+            redirect_uri,
         };
 
         let bound_client = match self.registrar.bound_redirect(client_url) {
@@ -219,8 +219,8 @@ impl<'u> CodeRef<'u> {
         let state = request.state();
 
         // Setup an error with url and state, makes the code flow afterwards easier
-        let error_url = bound_client.redirect_url.clone().into_owned();
-        let prepared_error = ErrorUrl::new(error_url.clone(), state,
+        let error_uri = bound_client.redirect_uri.clone().into_owned();
+        let prepared_error = ErrorUrl::new(error_uri.clone(), state,
             AuthorizationError::with(()));
 
         match request.method() {
@@ -255,7 +255,7 @@ impl<'u> CodeRef<'u> {
 impl<'a> AuthorizationRequest<'a> {
     /// Denies the request, which redirects to the client for which the request originated.
     pub fn deny(self) -> CodeResult<Url> {
-        let url = self.pre_grant.redirect_url.into_owned();
+        let url = self.pre_grant.redirect_uri.into_owned();
         let error = AuthorizationError::with(AuthorizationErrorType::AccessDenied);
         let error = ErrorUrl::new(url, self.request.state(), error);
         Err(CodeError::Redirect(error))
@@ -267,9 +267,9 @@ impl<'a> AuthorizationRequest<'a> {
        let grant = self.code.authorizer.authorize(GrantRequest{
            owner_id: &owner_id,
            client_id: &self.pre_grant.client_id,
-           redirect_url: &self.pre_grant.redirect_url,
+           redirect_uri: &self.pre_grant.redirect_uri,
            scope: &self.pre_grant.scope});
-       let mut url = self.pre_grant.redirect_url.into_owned();
+       let mut url = self.pre_grant.redirect_uri.into_owned();
        url.query_pairs_mut()
            .append_pair("code", grant.as_str())
            .extend_pairs(self.request.state().map(|v| ("state", v)))
@@ -354,7 +354,7 @@ impl<'u> IssuerRef<'u> {
             .ok_or(IssuerError::invalid(()))?;
         let redirect_uri = redirect_uri.as_ref();
 
-        if (saved_params.client_id.as_ref(), saved_params.redirect_url.as_str()) != (client_id, redirect_uri) {
+        if (saved_params.client_id.as_ref(), saved_params.redirect_uri.as_str()) != (client_id, redirect_uri) {
             return Err(IssuerError::invalid(AccessTokenErrorType::InvalidGrant))
         }
 
@@ -365,7 +365,7 @@ impl<'u> IssuerRef<'u> {
         let token = self.issuer.issue(GrantRequest{
             client_id: &saved_params.client_id,
             owner_id: &saved_params.owner_id,
-            redirect_url: &saved_params.redirect_url,
+            redirect_uri: &saved_params.redirect_uri,
             scope: &saved_params.scope,
         });
         Ok(BearerToken{0: token, 1: saved_params.scope.as_ref().to_string()})
