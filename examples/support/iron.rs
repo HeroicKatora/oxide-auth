@@ -30,7 +30,7 @@ pub fn dummy_client(req: &mut Request) -> IronResult<Response> {
     params.insert("grant_type", "authorization_code");
     params.insert("client_id", "LocalClient");
     params.insert("code", &code);
-    params.insert("redirect_url", "http://localhost:8021/endpoint");
+    params.insert("redirect_uri", "http://localhost:8021/endpoint");
     let access_token_request = client
         .post("http://localhost:8020/token")
         .form(&params).build().unwrap();

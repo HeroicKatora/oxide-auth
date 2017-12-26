@@ -20,6 +20,7 @@ pub struct Grant {
     pub scope: Scope,
 
     /// The redirection url under which the client resides.
+    /// TODO: Establish if generic URIs should be allowed here.
     pub redirect_url: Url,
 
     /// Expiration date of the grant (Utc).

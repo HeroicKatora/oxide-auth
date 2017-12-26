@@ -69,10 +69,10 @@ mod main {
     fn handle_get(_: &mut Request, grant: &PreGrant) -> Result<(Authentication, Response), OAuthError> {
         let text = format!(
             "<html>'{}' (at {}) is requesting permission for '{}'
-            <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint\" method=\"post\">
+            <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
                 <input type=\"submit\" value=\"Accept\">
             </form>
-            <form action=\"authorize?response_type=code&client_id={}&redirect_url=http://localhost:8021/endpoint&deny=1\" method=\"post\">
+            <form action=\"authorize?response_type=code&client_id={}&deny=1\" method=\"post\">
                 <input type=\"submit\" value=\"Deny\">
             </form>
             </html>", grant.client_id, grant.redirect_url, grant.scope, grant.client_id, grant.client_id);
@@ -105,7 +105,7 @@ mod main {
             let text =
                 "<html>
                 This page should be accessed via an oauth token from the client in the example. Click
-                <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient&redirect_url=http://localhost:8021/endpoint\">
+                <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
                 here</a> to begin the authorization process.
                 </html>";
             text.modify(&mut response);

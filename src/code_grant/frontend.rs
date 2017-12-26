@@ -28,7 +28,7 @@ struct AuthorizationParameter {
     method: Option<String>,
     client_id: Option<String>,
     scope: Option<String>,
-    redirect_url: Option<String>,
+    redirect_uri: Option<String>,
     state: Option<String>,
 }
 
@@ -43,7 +43,7 @@ pub enum Authentication {
 struct AccessTokenParameter<'a> {
     valid: bool,
     client_id: Option<Cow<'a, str>>,
-    redirect_url: Option<Cow<'a, str>>,
+    redirect_uri: Option<Cow<'a, str>>,
     grant_type: Option<Cow<'a, str>>,
     code: Option<Cow<'a, str>>,
     authorization: Option<(String, Vec<u8>)>,
@@ -141,7 +141,7 @@ impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AuthorizationParameter {
             valid: true,
             client_id: val.remove("client_id").map(|v| v.into_owned()),
             scope: val.remove("scope").map(|v| v.into_owned()),
-            redirect_url: val.remove("redirect_uri").map(|v| v.into_owned()),
+            redirect_uri: val.remove("redirect_uri").map(|v| v.into_owned()),
             state: val.remove("state").map(|v| v.into_owned()),
             method: val.remove("response_type").map(|v| v.into_owned()),
         }
@@ -152,7 +152,7 @@ impl CodeRequest for AuthorizationParameter {
     fn valid(&self) -> bool { self.valid }
     fn client_id(&self) -> Option<Cow<str>> { self.client_id.as_ref().map(|c| c.as_str().into()) }
     fn scope(&self) -> Option<Cow<str>> { self.scope.as_ref().map(|c| c.as_str().into()) }
-    fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.as_ref().map(|c| c.as_str().into()) }
+    fn redirect_uri(&self) -> Option<Cow<str>> { self.redirect_uri.as_ref().map(|c| c.as_str().into()) }
     fn state(&self) -> Option<Cow<str>> { self.state.as_ref().map(|c| c.as_str().into()) }
     fn method(&self) -> Option<Cow<str>> { self.method.as_ref().map(|c| c.as_str().into()) }
 }
@@ -160,7 +160,7 @@ impl CodeRequest for AuthorizationParameter {
 impl AuthorizationParameter {
     fn invalid() -> Self {
         AuthorizationParameter { valid: false, method: None, client_id: None, scope: None,
-            redirect_url: None, state: None }
+            redirect_uri: None, state: None }
     }
 }
 
@@ -219,7 +219,7 @@ impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> 
             valid: true,
             client_id: map.remove("client_id"),
             code: map.remove("code"),
-            redirect_url: map.remove("redirect_uri"),
+            redirect_uri: map.remove("redirect_uri"),
             grant_type: map.remove("grant_type"),
             authorization: None,
         }
@@ -230,7 +230,7 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
     fn valid(&self) -> bool { self.valid }
     fn code(&self) -> Option<Cow<str>> { self.code.clone() }
     fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
-    fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.clone() }
+    fn redirect_uri(&self) -> Option<Cow<str>> { self.redirect_uri.clone() }
     fn grant_type(&self) -> Option<Cow<str>> { self.grant_type.clone() }
     fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
         match self.authorization {
@@ -243,7 +243,7 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
 
 impl<'l> AccessTokenParameter<'l> {
     fn invalid() -> Self {
-        AccessTokenParameter { valid: false, code: None, client_id: None, redirect_url: None,
+        AccessTokenParameter { valid: false, code: None, client_id: None, redirect_uri: None,
             grant_type: None, authorization: None }
     }
 }

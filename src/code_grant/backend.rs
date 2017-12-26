@@ -157,7 +157,7 @@ pub trait CodeRequest {
     /// Optionally specifies the requested scope
     fn scope(&self) -> Option<Cow<str>>;
     /// Valid request have (one of) the registered redirect urls for this client.
-    fn redirect_url(&self) -> Option<Cow<str>>;
+    fn redirect_uri(&self) -> Option<Cow<str>>;
     /// Optional parameter the client can use to identify the redirected user-agent.
     fn state(&self) -> Option<Cow<str>>;
     /// The method requested, MUST be `code`
@@ -196,10 +196,10 @@ impl<'u> CodeRef<'u> {
 
         // Check preconditions
         let client_id = request.client_id().ok_or(CodeError::Ignore)?;
-        let redirect_url = match request.redirect_url() {
+        let redirect_url = match request.redirect_uri() {
             None => None,
-            Some(ref url) => {
-                let parsed = Url::parse(&url).map_err(|_| CodeError::Ignore)?;
+            Some(ref uri) => {
+                let parsed = Url::parse(&uri).map_err(|_| CodeError::Ignore)?;
                 Some(Cow::Owned(parsed))
             },
         };
@@ -309,7 +309,7 @@ pub trait AccessTokenRequest {
     /// The client_id, optional parameter for public clients.
     fn client_id(&self) -> Option<Cow<str>>;
     /// Valid request have the redirect url used to request the authorization code grant.
-    fn redirect_url(&self) -> Option<Cow<str>>;
+    fn redirect_uri(&self) -> Option<Cow<str>>;
     /// Valid requests have this set to "authorization_code"
     fn grant_type(&self) -> Option<Cow<str>>;
 }
@@ -350,11 +350,11 @@ impl<'u> IssuerRef<'u> {
             Some(v) => v,
         };
 
-        let redirect_url = request.redirect_url()
+        let redirect_uri = request.redirect_uri()
             .ok_or(IssuerError::invalid(()))?;
-        let redirect_url = redirect_url.as_ref();
+        let redirect_uri = redirect_uri.as_ref();
 
-        if (saved_params.client_id.as_ref(), saved_params.redirect_url.as_str()) != (client_id, redirect_url) {
+        if (saved_params.client_id.as_ref(), saved_params.redirect_url.as_str()) != (client_id, redirect_uri) {
             return Err(IssuerError::invalid(AccessTokenErrorType::InvalidGrant))
         }
 
