@@ -264,12 +264,18 @@ impl<'a, 'b> WebRequest for iron::Request<'a, 'b> {
     type Response = Response;
     type Error = IronError;
 
-    fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()> {
-        self.get::<UrlEncodedQuery>().map_err(|_| ())
+    fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
+        match self.get_ref::<UrlEncodedQuery>() {
+            Ok(query) => Ok(Cow::Borrowed(query)),
+            Err(_) => Err(()),
+        }
     }
 
-    fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()> {
-        self.get_ref::<UrlEncodedBody>().map_err(|_| ())
+    fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
+        match self.get_ref::<UrlEncodedBody>() {
+            Ok(query) => Ok(Cow::Borrowed(query)),
+            Err(_) => Err(()),
+        }
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {

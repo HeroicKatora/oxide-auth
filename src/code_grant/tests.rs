@@ -35,12 +35,12 @@ impl WebRequest for CraftedRequest {
     type Response = CraftedResponse;
     type Error = OAuthError;
 
-    fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()> {
-        self.query.clone().ok_or(())
+    fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
+        self.query.as_ref().map(Cow::Borrowed).ok_or(())
     }
 
-    fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()> {
-        self.urlbody.as_ref().ok_or(())
+    fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
+        self.urlbody.as_ref().map(Cow::Borrowed).ok_or(())
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {

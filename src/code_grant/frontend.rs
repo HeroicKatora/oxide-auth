@@ -21,14 +21,15 @@ use super::backend::{AccessError, GuardRequest, GuardRef};
 use url::Url;
 use base64;
 
-/// Holds the decode query fragments from the url
-struct AuthorizationParameter<'a> {
+/// Holds the decode query fragments from the url. This does not hold the excess parameters with a
+/// Cow, as we need to have a mutable reference to it for the authorization handler.
+struct AuthorizationParameter {
     valid: bool,
-    method: Option<Cow<'a, str>>,
-    client_id: Option<Cow<'a, str>>,
-    scope: Option<Cow<'a, str>>,
-    redirect_url: Option<Cow<'a, str>>,
-    state: Option<Cow<'a, str>>,
+    method: Option<String>,
+    client_id: Option<String>,
+    scope: Option<String>,
+    redirect_url: Option<String>,
+    state: Option<String>,
 }
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
@@ -63,10 +64,10 @@ pub trait WebRequest {
     /// Retrieve a parsed version of the url query. An Err return value indicates a malformed query
     /// or an otherwise malformed WebRequest. Note that an empty query should result in
     /// `Ok(HashMap::new())` instead of an Err.
-    fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()>;
+    fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()>;
     /// Retriev the parsed `application/x-form-urlencoded` body of the request. An Err value
     /// indicates a malformed body or a different Content-Type.
-    fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()>;
+    fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()>;
     /// Contents of the authorization header or none if none exists. An Err value indicates a
     /// malformed header or request.
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>;
@@ -112,35 +113,51 @@ pub struct PreparedAuthorization<'l, Req> where
     Req: WebRequest + 'l,
 {
     request: &'l mut Req,
-    urldecoded: AuthorizationParameter<'l>,
+    urldecoded: AuthorizationParameter,
 }
 
-fn extract_parameters(params: HashMap<String, Vec<String>>) -> AuthorizationParameter<'static> {
-    let map = params.iter()
-        .filter(|&(_, v)| v.len() == 1)
-        .map(|(k, v)| (k.as_str(), v[0].as_str()))
-        .collect::<HashMap<&str, &str>>();
-
-    AuthorizationParameter{
-        valid: true,
-        method: map.get("response_type").map(|method| method.to_string().into()),
-        client_id: map.get("client_id").map(|client| client.to_string().into()),
-        scope: map.get("scope").map(|scope| scope.to_string().into()),
-        redirect_url: map.get("redirect_url").map(|url| url.to_string().into()),
-        state: map.get("state").map(|state| state.to_string().into()),
+fn extract_single_parameters<'l>(params: Cow<'l, HashMap<String, Vec<String>>>)
+ -> HashMap<Cow<'l, str>, Cow<'l, str>> {
+    match params {
+        Cow::Owned(map) => map.into_iter()
+            .filter_map(|(k, mut v)|
+                if v.len() < 2 {
+                    v.pop().map(|v| (k, v))
+                } else { None })
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect::<HashMap<_, _>>(),
+        Cow::Borrowed(map) => map.iter()
+           .filter_map(|(ref k, ref v)|
+                if v.len() == 1 {
+                    Some((k.as_str().into(), v[0].as_str().into()))
+                } else { None })
+           .collect::<HashMap<_, _>>(),
     }
 }
 
-impl<'s> CodeRequest for AuthorizationParameter<'s> {
-    fn valid(&self) -> bool { self.valid }
-    fn client_id(&self) -> Option<Cow<str>> { self.client_id.as_ref().map(|c| c.as_ref().into()) }
-    fn scope(&self) -> Option<Cow<str>> { self.scope.as_ref().map(|c| c.as_ref().into()) }
-    fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.as_ref().map(|c| c.as_ref().into()) }
-    fn state(&self) -> Option<Cow<str>> { self.state.as_ref().map(|c| c.as_ref().into()) }
-    fn method(&self) -> Option<Cow<str>> { self.method.as_ref().map(|c| c.as_ref().into()) }
+impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AuthorizationParameter {
+    fn from(mut val: HashMap<Cow<'l, str>, Cow<'l, str>>) -> Self {
+        AuthorizationParameter {
+            valid: true,
+            client_id: val.remove("client_id").map(|v| v.into_owned()),
+            scope: val.remove("scope").map(|v| v.into_owned()),
+            redirect_url: val.remove("redirect_uri").map(|v| v.into_owned()),
+            state: val.remove("state").map(|v| v.into_owned()),
+            method: val.remove("response_type").map(|v| v.into_owned()),
+        }
+    }
 }
 
-impl<'s> AuthorizationParameter<'s> {
+impl CodeRequest for AuthorizationParameter {
+    fn valid(&self) -> bool { self.valid }
+    fn client_id(&self) -> Option<Cow<str>> { self.client_id.as_ref().map(|c| c.as_str().into()) }
+    fn scope(&self) -> Option<Cow<str>> { self.scope.as_ref().map(|c| c.as_str().into()) }
+    fn redirect_url(&self) -> Option<Cow<str>> { self.redirect_url.as_ref().map(|c| c.as_str().into()) }
+    fn state(&self) -> Option<Cow<str>> { self.state.as_ref().map(|c| c.as_str().into()) }
+    fn method(&self) -> Option<Cow<str>> { self.method.as_ref().map(|c| c.as_str().into()) }
+}
+
+impl AuthorizationParameter {
     fn invalid() -> Self {
         AuthorizationParameter { valid: false, method: None, client_id: None, scope: None,
             redirect_url: None, state: None }
@@ -151,7 +168,8 @@ impl AuthorizationFlow {
     /// Idempotent data processing, checks formats.
     pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, W::Error> {
         let urldecoded = incoming.query()
-            .map(extract_parameters)
+            .map(extract_single_parameters)
+            .map(|map| map.into())
             .unwrap_or_else(|_| AuthorizationParameter::invalid());
 
         Ok(PreparedAuthorization{request: incoming, urldecoded})
@@ -195,19 +213,16 @@ pub struct PreparedGrant<'l, Req> where
     req: PhantomData<Req>,
 }
 
-fn extract_access_token<'l>(params: &'l HashMap<String, Vec<String>>) -> AccessTokenParameter<'l> {
-    let map = params.iter()
-        .filter(|&(_, v)| v.len() == 1)
-        .map(|(k, v)| (k.as_str(), v[0].as_str()))
-        .collect::<HashMap<_, _>>();
-
-    AccessTokenParameter {
-        valid: true,
-        client_id: map.get("client_id").map(|v| (*v).into()),
-        code: map.get("code").map(|v| (*v).into()),
-        redirect_url: map.get("redirect_url").map(|v| (*v).into()),
-        grant_type: map.get("grant_type").map(|v| (*v).into()),
-        authorization: None,
+impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> {
+    fn from(mut map: HashMap<Cow<'l, str>, Cow<'l, str>>) -> AccessTokenParameter<'l> {
+        AccessTokenParameter {
+            valid: true,
+            client_id: map.remove("client_id"),
+            code: map.remove("code"),
+            redirect_url: map.remove("redirect_uri"),
+            grant_type: map.remove("grant_type"),
+            authorization: None,
+        }
     }
 }
 
@@ -273,9 +288,9 @@ impl GrantFlow {
             },
         };
 
-        let mut params = match req.urlbody() {
+        let mut params: AccessTokenParameter<'a> = match req.urlbody() {
             Err(_) => return None,
-            Ok(body) => extract_access_token(body),
+            Ok(body) => extract_single_parameters(body).into(),
         };
 
         params.authorization = authorization;
