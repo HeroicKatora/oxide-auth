@@ -13,7 +13,7 @@ use primitives::authorizer::Authorizer;
 use primitives::registrar::{PreGrant, ClientUrl, Registrar, RegistrarError};
 use primitives::grant::GrantRequest;
 use primitives::issuer::{IssuedToken, Issuer};
-use super::{Scope};
+use primitives::scope::Scope;
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
 use std::borrow::Cow;

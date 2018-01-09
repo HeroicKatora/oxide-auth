@@ -39,8 +39,8 @@
 //!     type Error = OAuthError; /* Custom type permitted but this is easier */
 //!     type Response = MyResponse;
 //!     /* Implementation of the traits' methods */
-//! # fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()> { Err(()) }
-//! # fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()> { Err(()) }
+//! # fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> { Err(()) }
+//! # fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> { Err(()) }
 //! # fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> { Err(()) }
 //! }
 //!

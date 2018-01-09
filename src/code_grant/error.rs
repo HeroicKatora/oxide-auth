@@ -1,3 +1,7 @@
+//! Errors defined in [rfc6749].
+//!
+//! [rfc6749]: https://tools.ietf.org/html/rfc6749#section-6
+
 use std::fmt;
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
