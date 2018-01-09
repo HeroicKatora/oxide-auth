@@ -8,6 +8,76 @@
 //! flow of incoming packets is specified here instead of the frontend implementations.
 //! Instead, traits are offered to make this compatible with other frontends. In theory, this makes
 //! the frontend pluggable which could improve testing.
+//!
+//! Custom frontend
+//! ---------------
+//! In order to not place restrictions on the web server library in use, it is possible to
+//! implement a frontend completely with user defined types.
+//!
+//! This requires custom, related implementations of [`WebRequest`] and [`WebResponse`].
+//! _WARNING_: Custom frontends MUST ensure a secure communication layer with confidential clients.
+//! This means using TLS for communication over http (although there are currently discussions to
+//! consider communication to `localhost` as always occuring in a secure context).
+//!
+//! After receiving an authorization grant, access token or access request, initiate the respective
+//! flow by collecting the [`Authorizer`], [`Issuer`], and [`Registrar`] instances. For example:
+//!
+//! ```no_run
+//! extern crate oxide_auth;
+//! # extern crate url;
+//! # use std::borrow::Cow;
+//! # use std::collections::HashMap;
+//! # use std::vec::Vec;
+//! use oxide_auth::code_grant::frontend::{WebRequest, WebResponse, OAuthError};
+//! use oxide_auth::code_grant::frontend::{IssuerRef, GrantFlow};
+//! use oxide_auth::primitives::prelude::*;
+//! use url::Url;
+//! struct MyRequest { /* user defined */ }
+//! struct MyResponse { /* user defined */ }
+//!
+//! impl WebRequest for MyRequest {
+//!     type Error = OAuthError; /* Custom type permitted but this is easier */
+//!     type Response = MyResponse;
+//!     /* Implementation of the traits' methods */
+//! # fn query(&mut self) -> Result<HashMap<String, Vec<String>>, ()> { Err(()) }
+//! # fn urlbody(&mut self) -> Result<&HashMap<String, Vec<String>>, ()> { Err(()) }
+//! # fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> { Err(()) }
+//! }
+//!
+//! impl WebResponse for MyResponse {
+//!     type Error = OAuthError;
+//!     /* Implementation of the traits' methods */
+//! # fn redirect(url: Url) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
+//! # fn text(text: &str) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
+//! # fn json(data: &str) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
+//! # fn as_client_error(self) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
+//! # fn as_unauthorized(self) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
+//! # fn with_authorization(self, kind: &str) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
+//! }
+//!
+//! struct State<'a> {
+//!     registrar: &'a mut Registrar,
+//!     authorizer: &'a mut Authorizer,
+//!     issuer: &'a mut Issuer,
+//! }
+//!
+//! fn handle(state: State, req: &mut MyRequest) -> Result<MyResponse, OAuthError> {
+//!     let prepared = GrantFlow::prepare(req)?;
+//!     let issuer = IssuerRef::with(
+//!         state.registrar,
+//!         state.authorizer,
+//!         state.issuer);
+//!     GrantFlow::handle(issuer, prepared)
+//! }
+//! # pub fn main() { }
+//! ```
+//!
+//! [`WebRequest`]: trait.WebRequest.html
+//! [`WebResponse`]: trait.WebResponse.html
+//! [`Authorizer`]: ../../primitives/authorizer/trait.Authorizer.html
+//! [`Issuer`]: ../../primitives/issuer/trait.Issuer.html
+//! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error;
@@ -16,8 +86,9 @@ use std::marker::PhantomData;
 use std::str::from_utf8;
 
 use primitives::registrar::PreGrant;
-use super::backend::{AccessTokenRequest, CodeRef, CodeRequest, CodeError, ErrorUrl, IssuerError, IssuerRef};
-use super::backend::{AccessError, GuardRequest, GuardRef};
+use super::backend::{AccessTokenRequest, CodeRequest, CodeError, ErrorUrl, IssuerError};
+use super::backend::{AccessError, GuardRequest};
+pub use super::backend::{CodeRef, IssuerRef, GuardRef};
 use url::Url;
 use base64;
 

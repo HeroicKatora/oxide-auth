@@ -10,9 +10,23 @@
 //! adaptor is provided with the default configuration. Through an interface designed with traits,
 //! the frontend is as easily pluggable as the backend.
 //!
-//! By default, the `iron` backend is included in a module of the same name while testing is done
-//! internally without any network connections. The interface those two methods use is exactly the
-//! same, guaranteeing responses to be the same in both cases.
+//! By default, the `iron` frontend is included in a module of the same name while testing is done
+//! internally with an offline frontend. The interface those two methods use is exactly the same,
+//! guaranteeing responses to be the same in both cases.
+//!
+//! Custom Frontends
+//! -------
+//! A key feature is the ability to add your own frontend without jeopardizing safety requirements.
+//! This requires custom, related implementations of [`WebRequest`] and [`WebResponse`].
+//! _WARNING_: Custom frontends MUST ensure a secure communication layer with confidential clients.
+//! This means using TLS for communication over http (although there are currently discussions to
+//! consider communication to `localhost` as always occuring in a secure context).
+//!
+//! For more information, see the documentation of [`frontend`]
+//!
+//! [`WebRequest`]: code_grant/frontend/trait.WebRequest.html
+//! [`WebResponse`]: code_grant/frontend/trait.WebResponse.html
+//! [`frontend`]: code_grant/frontend/index.html
 
 extern crate base64;
 extern crate chrono;
