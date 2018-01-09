@@ -17,7 +17,7 @@ chrono = "^0.4"
 rand = "^0.3"
 base64 = "^0.6"
 url = "^1.5"
-ring = "^0.12"
+ring = "0.13.0-alpha"
 iron = { version = "^0.5", optional = true }
 urlencoded = { version = "^0.5", optional = true }
 serde = "^1.0"
