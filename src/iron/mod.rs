@@ -154,7 +154,7 @@ pub struct IronGuard<I> where
     issuer: Arc<Mutex<I>>,
 }
 
-impl iron::typemap::Key for PreGrant<'static> { type Value = PreGrant<'static>; }
+impl iron::typemap::Key for PreGrant { type Value = PreGrant; }
 
 impl iron::typemap::Key for Authentication { type Value = Authentication; }
 
@@ -220,12 +220,7 @@ pub struct IronOwnerAuthorizer<A: iron::Handler>(pub A);
 impl GenericOwnerAuthorizer for iron::Handler {
     fn get_owner_authorization(&self, req: &mut iron::Request, auth: &PreGrant)
     -> IronResult<(Authentication, Response)> {
-        let owned_auth = PreGrant::<'static> {
-            client_id: Cow::Owned(auth.client_id.as_ref().to_string()),
-            redirect_uri: Cow::Owned(auth.redirect_uri.as_ref().clone()),
-            scope: Cow::Owned(auth.scope.as_ref().clone()),
-        };
-        req.extensions.insert::<PreGrant>(owned_auth);
+        req.extensions.insert::<PreGrant>(auth.clone());
         let response = self.handle(req)?;
         match req.extensions.get::<Authentication>() {
             None => return Ok((Authentication::Failed, Response::with((iron::status::InternalServerError, "No authentication response")))),
@@ -387,14 +382,12 @@ impl<PH, R, A> iron::Handler for IronAuthorizer<PH, R, A> where
     A: Authorizer + Send + 'static
 {
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        let prepared = AuthorizationFlow::prepare(req)?;
-
         let mut locked_registrar = self.registrar.lock().unwrap();
         let mut locked_authorizer = self.authorizer.lock().unwrap();
         let code = CodeRef::with(locked_registrar.deref_mut(), locked_authorizer.deref_mut());
 
         let handler = SpecificOwnerAuthorizer(self.page_handler.as_ref(), PhantomData);
-        AuthorizationFlow::handle(code, prepared, &handler)
+        AuthorizationFlow::handle(code, req, &handler)
     }
 }
 

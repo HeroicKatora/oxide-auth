@@ -89,18 +89,19 @@ use primitives::registrar::PreGrant;
 use super::backend::{AccessTokenRequest, CodeRequest, CodeError, ErrorUrl, IssuerError};
 use super::backend::{AccessError, GuardRequest};
 pub use super::backend::{CodeRef, IssuerRef, GuardRef};
+
 use url::Url;
 use base64;
 
 /// Holds the decode query fragments from the url. This does not hold the excess parameters with a
 /// Cow, as we need to have a mutable reference to it for the authorization handler.
-struct AuthorizationParameter {
+struct AuthorizationParameter<'l> {
     valid: bool,
-    method: Option<String>,
-    client_id: Option<String>,
-    scope: Option<String>,
-    redirect_uri: Option<String>,
-    state: Option<String>,
+    method: Option<Cow<'l, str>>,
+    client_id: Option<Cow<'l, str>>,
+    scope: Option<Cow<'l, str>>,
+    redirect_uri: Option<Cow<'l, str>>,
+    state: Option<Cow<'l, str>>,
 }
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
@@ -179,14 +180,6 @@ pub trait OwnerAuthorizer {
       -> Result<(Authentication, <Self::Request as WebRequest>::Response), <Self::Request as WebRequest>::Error>;
 }
 
-pub struct AuthorizationFlow;
-pub struct PreparedAuthorization<'l, Req> where
-    Req: WebRequest + 'l,
-{
-    request: &'l mut Req,
-    urldecoded: AuthorizationParameter,
-}
-
 fn extract_single_parameters<'l>(params: Cow<'l, HashMap<String, Vec<String>>>)
  -> HashMap<Cow<'l, str>, Cow<'l, str>> {
     match params {
@@ -206,58 +199,58 @@ fn extract_single_parameters<'l>(params: Cow<'l, HashMap<String, Vec<String>>>)
     }
 }
 
-impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AuthorizationParameter {
-    fn from(mut val: HashMap<Cow<'l, str>, Cow<'l, str>>) -> Self {
+impl<'l, 'c: 'l, W: WebRequest> From<&'l mut &'c mut W> for AuthorizationParameter<'l> {
+    fn from(val: &'l mut &'c mut W) -> Self {
+        let mut params = match val.query() {
+            Err(()) => return Self::invalid(),
+            Ok(query) => extract_single_parameters(query),
+        };
+
         AuthorizationParameter {
             valid: true,
-            client_id: val.remove("client_id").map(|v| v.into_owned()),
-            scope: val.remove("scope").map(|v| v.into_owned()),
-            redirect_uri: val.remove("redirect_uri").map(|v| v.into_owned()),
-            state: val.remove("state").map(|v| v.into_owned()),
-            method: val.remove("response_type").map(|v| v.into_owned()),
+            client_id: params.remove("client_id"),
+            scope: params.remove("scope"),
+            redirect_uri: params.remove("redirect_uri"),
+            state: params.remove("state"),
+            method: params.remove("response_type"),
         }
     }
 }
 
-impl CodeRequest for AuthorizationParameter {
+impl<'l> CodeRequest for AuthorizationParameter<'l> {
     fn valid(&self) -> bool { self.valid }
-    fn client_id(&self) -> Option<Cow<str>> { self.client_id.as_ref().map(|c| c.as_str().into()) }
-    fn scope(&self) -> Option<Cow<str>> { self.scope.as_ref().map(|c| c.as_str().into()) }
-    fn redirect_uri(&self) -> Option<Cow<str>> { self.redirect_uri.as_ref().map(|c| c.as_str().into()) }
-    fn state(&self) -> Option<Cow<str>> { self.state.as_ref().map(|c| c.as_str().into()) }
-    fn method(&self) -> Option<Cow<str>> { self.method.as_ref().map(|c| c.as_str().into()) }
+    fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
+    fn scope(&self) -> Option<Cow<str>> { self.scope.clone() }
+    fn redirect_uri(&self) -> Option<Cow<str>> { self.redirect_uri.clone() }
+    fn state(&self) -> Option<Cow<str>> { self.state.clone() }
+    fn method(&self) -> Option<Cow<str>> { self.method.clone() }
 }
 
-impl AuthorizationParameter {
+impl<'l> AuthorizationParameter<'l> {
     fn invalid() -> Self {
         AuthorizationParameter { valid: false, method: None, client_id: None, scope: None,
             redirect_uri: None, state: None }
     }
 }
 
+pub struct AuthorizationFlow;
 impl AuthorizationFlow {
-    /// Idempotent data processing, checks formats.
-    pub fn prepare<W: WebRequest>(incoming: &mut W) -> Result<PreparedAuthorization<W>, W::Error> {
-        let urldecoded = incoming.query()
-            .map(extract_single_parameters)
-            .map(|map| map.into())
-            .unwrap_or_else(|_| AuthorizationParameter::invalid());
-
-        Ok(PreparedAuthorization{request: incoming, urldecoded})
-    }
-
-    pub fn handle<'c, Req>(granter: CodeRef<'c>, prepared: PreparedAuthorization<'c, Req>, page_handler: &OwnerAuthorizer<Request=Req>)
+    pub fn handle<'c, Req>(granter: CodeRef<'c>, mut request: &'c mut Req, page_handler: &OwnerAuthorizer<Request=Req>)
     -> Result<Req::Response, Req::Error> where
         Req: WebRequest,
     {
-        let PreparedAuthorization { request: req, urldecoded } = prepared;
-        let negotiated = match granter.negotiate(&urldecoded) {
-            Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
-            Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
-            Ok(v) => v,
+        let negotiated = {
+            let urldecoded = AuthorizationParameter::from(&mut request);
+            let negotiated = match granter.negotiate(&urldecoded) {
+                Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
+                Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
+                Ok(v) => v,
+            };
+
+            negotiated
         };
 
-        let authorization = match page_handler.get_owner_authorization(req, negotiated.pre_grant())? {
+        let authorization = match page_handler.get_owner_authorization(request, negotiated.pre_grant())? {
             (Authentication::Failed, _)
                 => negotiated.deny(),
             (Authentication::InProgress, response)

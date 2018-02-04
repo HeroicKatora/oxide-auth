@@ -147,9 +147,8 @@ impl AuthorizationSetup {
     }
 
     fn test_silent_error(&mut self, mut request: CraftedRequest) {
-        let prepared = AuthorizationFlow::prepare(&mut request).expect("Failure during authorization preparation");
         let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
-        match AuthorizationFlow::handle(CodeRef::with(&mut self.registrar, &mut self.authorizer), prepared, &pagehandler) {
+        match AuthorizationFlow::handle(CodeRef::with(&mut self.registrar, &mut self.authorizer), &mut request, &pagehandler) {
             Ok(CraftedResponse::Redirect(url))
                 => panic!("Redirection without client id {:?}", url),
             Ok(resp) => panic!("Response without client id {:?}", resp),
@@ -158,8 +157,7 @@ impl AuthorizationSetup {
     }
 
     fn test_error_redirect (&mut self, mut request: CraftedRequest, pagehandler: &OwnerAuthorizer<Request=CraftedRequest>) {
-        let prepared = AuthorizationFlow::prepare(&mut request).expect("Failure during authorization preparation");
-        match AuthorizationFlow::handle(CodeRef::with(&mut self.registrar, &mut self.authorizer), prepared, pagehandler) {
+        match AuthorizationFlow::handle(CodeRef::with(&mut self.registrar, &mut self.authorizer), &mut request, pagehandler) {
             Ok(CraftedResponse::RedirectFromError(ref url))
             if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some()
                 => (),
@@ -191,9 +189,8 @@ fn authorize_public() {
         auth: None,
     };
 
-    let prepared = AuthorizationFlow::prepare(&mut authrequest).expect("Failure during authorization preparation");
     let pagehandler = Allow(owner_id.to_string());
-    match AuthorizationFlow::handle(CodeRef::with(&mut registrar, &mut authorizer), prepared, &pagehandler)
+    match AuthorizationFlow::handle(CodeRef::with(&mut registrar, &mut authorizer), &mut authrequest, &pagehandler)
           .expect("Failure during authorization handling") {
         CraftedResponse::Redirect(ref url) if url.as_str() == "https://client.example/endpoint?code=AuthToken"
             => (),
@@ -260,9 +257,8 @@ fn authorize_confidential() {
         auth: None,
     };
 
-    let prepared = AuthorizationFlow::prepare(&mut authrequest).expect("Failure during authorization preparation");
     let pagehandler = Allow(owner_id.to_string());
-    match AuthorizationFlow::handle(CodeRef::with(&mut registrar, &mut authorizer), prepared, &pagehandler)
+    match AuthorizationFlow::handle(CodeRef::with(&mut registrar, &mut authorizer), &mut authrequest, &pagehandler)
           .expect("Failure during authorization handling") {
         CraftedResponse::Redirect(ref url) if url.as_str() == "https://client.example/endpoint?code=AuthToken"
             => (),

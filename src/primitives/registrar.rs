@@ -60,15 +60,16 @@ pub struct BoundClient<'a> {
 /// request. Together with the owner_id and a computed expiration time stamp, this will form a
 /// grant of some sort. In the case of the authorization code grant flow, it will be an
 /// authorization code at first, which can be traded for an access code by the client acknowledged.
-pub struct PreGrant<'a> {
+#[derive(Clone)]
+pub struct PreGrant {
     /// The registered client id.
-    pub client_id: Cow<'a, str>,
+    pub client_id: String,
 
     /// The redirection url associated with the above client.
-    pub redirect_uri: Cow<'a, Url>,
+    pub redirect_uri: Url,
 
     /// A scope admissible for the above client.
-    pub scope: Cow<'a, Scope>,
+    pub scope: Scope,
 }
 
 /// Handled responses from a registrar.
@@ -121,11 +122,11 @@ impl<'a> BoundClient<'a> {
     /// request.
     ///
     /// Currently, this scope agreement algorithm is the only supported method.
-    pub fn negotiate(self, _scope: Option<Scope>) -> PreGrant<'a> {
+    pub fn negotiate(self, _scope: Option<Scope>) -> PreGrant {
         PreGrant {
-            client_id: self.client_id,
-            redirect_uri: self.redirect_uri,
-            scope: Cow::Owned(self.client.default_scope.clone()),
+            client_id: self.client_id.into_owned(),
+            redirect_uri: self.redirect_uri.into_owned(),
+            scope: self.client.default_scope.clone(),
         }
     }
 }

@@ -173,9 +173,18 @@ pub struct CodeRef<'a> {
 /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
 /// can signal a reponse using this object.
 pub struct AuthorizationRequest<'a> {
-    pre_grant: PreGrant<'a>,
+    pre_grant: PreGrant,
     code: CodeRef<'a>,
-    request: &'a CodeRequest,
+    state: Option<String>,
+}
+
+impl<'l> CodeRequest for &'l CodeRequest {
+    fn valid(&self) -> bool { (*self).valid() }
+    fn client_id(&self) -> Option<Cow<str>> { (*self).client_id() }
+    fn scope(&self) -> Option<Cow<str>> { (*self).scope() }
+    fn redirect_uri(&self) -> Option<Cow<str>> { (*self).redirect_uri() }
+    fn state(&self) -> Option<Cow<str>> { (*self).state() }
+    fn method(&self) -> Option<Cow<str>> { (*self).method() }
 }
 
 impl<'u> CodeRef<'u> {
@@ -188,8 +197,8 @@ impl<'u> CodeRef<'u> {
     /// If the client is not registered, the request will otherwise be ignored, if the request has
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
-    pub fn negotiate<'r>(self, request: &'r CodeRequest)
-    -> CodeResult<AuthorizationRequest<'r>> where 'u: 'r {
+    pub fn negotiate(self, request: &CodeRequest)
+    -> CodeResult<AuthorizationRequest<'u>> {
         if !request.valid() {
             return Err(CodeError::Ignore)
         }
@@ -243,7 +252,7 @@ impl<'u> CodeRef<'u> {
         Ok(AuthorizationRequest {
             pre_grant: bound_client.negotiate(scope),
             code: CodeRef { registrar: self.registrar, authorizer: self.authorizer },
-            request,
+            state: request.state().map(|cow| cow.into_owned()),
         })
     }
 
@@ -255,9 +264,9 @@ impl<'u> CodeRef<'u> {
 impl<'a> AuthorizationRequest<'a> {
     /// Denies the request, which redirects to the client for which the request originated.
     pub fn deny(self) -> CodeResult<Url> {
-        let url = self.pre_grant.redirect_uri.into_owned();
+        let url = self.pre_grant.redirect_uri;
         let error = AuthorizationError::with(AuthorizationErrorType::AccessDenied);
-        let error = ErrorUrl::new(url, self.request.state(), error);
+        let error = ErrorUrl::new(url, self.state, error);
         Err(CodeError::Redirect(error))
     }
 
@@ -269,17 +278,17 @@ impl<'a> AuthorizationRequest<'a> {
            client_id: &self.pre_grant.client_id,
            redirect_uri: &self.pre_grant.redirect_uri,
            scope: &self.pre_grant.scope});
-       let mut url = self.pre_grant.redirect_uri.into_owned();
+       let mut url = self.pre_grant.redirect_uri;
        url.query_pairs_mut()
            .append_pair("code", grant.as_str())
-           .extend_pairs(self.request.state().map(|v| ("state", v)))
+           .extend_pairs(self.state.map(|v| ("state", v)))
            .finish();
        Ok(url)
     }
 
     /// Retrieve a reference to the negotiated parameters (e.g. scope). These should be displayed
     /// to the resource owner when asking for his authorization.
-    pub fn pre_grant(&self) -> &PreGrant<'a> {
+    pub fn pre_grant(&self) -> &PreGrant {
         &self.pre_grant
     }
 }
