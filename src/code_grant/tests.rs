@@ -207,9 +207,10 @@ fn authorize_public() {
         auth: None,
     };
 
-    let prepared = GrantFlow::prepare(&mut tokenrequest).expect("Failure during access token preparation");
-    let (token, scope) = match GrantFlow::handle(IssuerRef::with(&mut registrar, &mut authorizer, &mut issuer), prepared)
-          .expect("Failure during access token handling") {
+    let (token, scope) = match GrantFlow::handle(
+            IssuerRef::with(&mut registrar, &mut authorizer, &mut issuer),
+            &mut tokenrequest
+        ).expect("Failure during access token handling") {
         CraftedResponse::Json(json)
             => {
                 let parsed: HashMap<String, String> = serde_json::from_str(&json).unwrap();
@@ -228,9 +229,9 @@ fn authorize_public() {
         auth: Some("Bearer ".to_string() + &token),
     };
 
-    let prepared = AccessFlow::prepare(&mut accessrequest).expect("Failure during access preparation");
     let scope: [Scope; 1] = [scope.parse().unwrap()];
-    AccessFlow::handle(GuardRef::with(&mut issuer, &scope), prepared).expect("Failed to authorize");
+    AccessFlow::handle(GuardRef::with(&mut issuer, &scope), &mut accessrequest)
+        .expect("Failed to authorize");
 }
 
 #[test]
@@ -274,9 +275,10 @@ fn authorize_confidential() {
         auth: Some("Basic ".to_string() + &base64::encode(&(client_id.to_string() + ":" + passphrase))),
     };
 
-    let prepared = GrantFlow::prepare(&mut tokenrequest).expect("Failure during access token preparation");
-    let (token, scope) = match GrantFlow::handle(IssuerRef::with(&mut registrar, &mut authorizer, &mut issuer), prepared)
-          .expect("Failure during access token handling") {
+    let (token, scope) = match GrantFlow::handle(
+            IssuerRef::with(&mut registrar, &mut authorizer, &mut issuer),
+            &mut tokenrequest
+        ).expect("Failure during access token handling") {
         CraftedResponse::Json(json)
             => {
                 let parsed: HashMap<String, String> = serde_json::from_str(&json).unwrap();
@@ -295,9 +297,9 @@ fn authorize_confidential() {
         auth: Some("Bearer ".to_string() + &token),
     };
 
-    let prepared = AccessFlow::prepare(&mut accessrequest).expect("Failure during access preparation");
     let scope: [Scope; 1] = [scope.parse().unwrap()];
-    AccessFlow::handle(GuardRef::with(&mut issuer, &scope), prepared).expect("Failed to authorize");
+    AccessFlow::handle(GuardRef::with(&mut issuer, &scope), &mut accessrequest)
+        .expect("Failed to authorize");
 }
 
 #[test]
@@ -491,9 +493,11 @@ impl AccessTokenSetup {
         }
     }
 
-    fn test_simple_error(&mut self, mut req: CraftedRequest) {
-        let prepared = GrantFlow::prepare(&mut req).expect("Failed during access request preparation");
-        match GrantFlow::handle(IssuerRef::with(&self.registrar, &mut self.authorizer, &mut self.issuer), prepared) {
+    fn test_simple_error(&mut self, mut request: CraftedRequest) {
+        match GrantFlow::handle(
+            IssuerRef::with(&self.registrar, &mut self.authorizer, &mut self.issuer),
+            &mut request)
+        {
             Ok(ref response) =>
                 Self::assert_json_error_set(response),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
@@ -761,9 +765,11 @@ impl ResourceSetup {
         }
     }
 
-    fn test_access_error(&mut self, mut req: CraftedRequest) {
-        let prepared = AccessFlow::prepare(&mut req).expect("Failed access preparation");
-        match AccessFlow::handle(GuardRef::with(&mut self.issuer, &self.resource_scope), prepared) {
+    fn test_access_error(&mut self, mut request: CraftedRequest) {
+        match AccessFlow::handle(
+            GuardRef::with(&mut self.issuer, &self.resource_scope),
+            &mut request)
+        {
             Ok(resp) => panic!("Expected an error instead of {:?}", resp),
             Err(_) => (),
         }

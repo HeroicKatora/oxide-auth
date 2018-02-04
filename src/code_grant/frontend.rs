@@ -61,13 +61,12 @@
 //!     issuer: &'a mut Issuer,
 //! }
 //!
-//! fn handle(state: State, req: &mut MyRequest) -> Result<MyResponse, OAuthError> {
-//!     let prepared = GrantFlow::prepare(req)?;
+//! fn handle(state: State, request: &mut MyRequest) -> Result<MyResponse, OAuthError> {
 //!     let issuer = IssuerRef::with(
 //!         state.registrar,
 //!         state.authorizer,
 //!         state.issuer);
-//!     GrantFlow::handle(issuer, prepared)
+//!     GrantFlow::handle(issuer, request)
 //! }
 //! # pub fn main() { }
 //! ```
@@ -82,7 +81,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
-use std::marker::PhantomData;
 use std::str::from_utf8;
 
 use primitives::registrar::PreGrant;
@@ -270,12 +268,6 @@ impl AuthorizationFlow {
 }
 
 pub struct GrantFlow;
-pub struct PreparedGrant<'l, Req> where
-    Req: WebRequest + 'l,
-{
-    params: AccessTokenParameter<'l>,
-    req: PhantomData<Req>,
-}
 
 impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> {
     fn from(mut map: HashMap<Cow<'l, str>, Cow<'l, str>>) -> AccessTokenParameter<'l> {
@@ -313,12 +305,6 @@ impl<'l> AccessTokenParameter<'l> {
 }
 
 impl GrantFlow {
-    pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedGrant<W>, W::Error> {
-        let params = GrantFlow::create_valid_params(req)
-            .unwrap_or(AccessTokenParameter::invalid());
-        Ok(PreparedGrant { params: params, req: PhantomData })
-    }
-
     fn create_valid_params<'a, W: WebRequest>(req: &'a mut W) -> Option<AccessTokenParameter<'a>> {
         let authorization = match req.authheader() {
             Err(_) => return None,
@@ -362,10 +348,12 @@ impl GrantFlow {
         Some(params)
     }
 
-    pub fn handle<Req>(mut issuer: IssuerRef, prepared: PreparedGrant<Req>)
+    pub fn handle<Req>(mut issuer: IssuerRef, request: &mut Req)
     -> Result<Req::Response, Req::Error> where Req: WebRequest
     {
-        let PreparedGrant { params, .. } = prepared;
+        let params = GrantFlow::create_valid_params(request)
+            .unwrap_or(AccessTokenParameter::invalid());
+
         match issuer.use_code(&params) {
             Err(IssuerError::Invalid(json_data))
                 => return Req::Response::json(&json_data.to_json())?.as_client_error(),
@@ -377,12 +365,6 @@ impl GrantFlow {
 }
 
 pub struct AccessFlow;
-pub struct PreparedAccess<'l, Req> where
-    Req: WebRequest + 'l,
-{
-    params: GuardParameter<'l>,
-    req: PhantomData<Req>,
-}
 
 impl<'l> GuardRequest for GuardParameter<'l> {
     fn valid(&self) -> bool { self.valid }
@@ -415,16 +397,12 @@ impl AccessFlow {
         Some(GuardParameter { valid: true, token })
     }
 
-    pub fn prepare<W: WebRequest>(req: &mut W) -> Result<PreparedAccess<W>, W::Error> {
-        let params = AccessFlow::create_valid_params(req)
+    pub fn handle<R>(guard: GuardRef, request: &mut R)
+    -> Result<(), R::Error> where R: WebRequest {
+        let params = AccessFlow::create_valid_params(request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
-        Ok(PreparedAccess { params: params, req: PhantomData })
-    }
-
-    pub fn handle<Req>(guard: GuardRef, prepared: PreparedAccess<Req>)
-    -> Result<(), Req::Error> where Req: WebRequest {
-        guard.protect(&prepared.params).map_err(|err| {
+        guard.protect(&params).map_err(|err| {
             match err {
                 AccessError::InvalidRequest => OAuthError::InternalAccessError(),
                 AccessError::AccessDenied => OAuthError::AccessDenied,

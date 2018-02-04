@@ -397,9 +397,7 @@ impl<R, A, I> iron::Handler for IronTokenRequest<R, A, I> where
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
 {
-    fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
-        let prepared = GrantFlow::prepare(req)?;
-
+    fn handle<'a>(&'a self, request: &mut iron::Request) -> IronResult<Response> {
         let mut locked_registrar = self.registrar.lock().unwrap();
         let mut locked_authorizer = self.authorizer.lock().unwrap();
         let mut locked_issuer = self.issuer.lock().unwrap();
@@ -408,7 +406,7 @@ impl<R, A, I> iron::Handler for IronTokenRequest<R, A, I> where
             locked_authorizer.deref_mut(),
             locked_issuer.deref_mut());
 
-        GrantFlow::handle(issuer, prepared)
+        GrantFlow::handle(issuer, request)
     }
 }
 
@@ -416,13 +414,10 @@ impl<I> iron::BeforeMiddleware for IronGuard<I> where
     I: Issuer + Send + 'static
 {
     fn before(&self, request: &mut Request) -> IronResult<()> {
-        let prepared = AccessFlow::prepare(request)?;
-
         let mut locked_issuer = self.issuer.lock().unwrap();
         let guard = GuardRef::with(locked_issuer.deref_mut(), &self.scopes);
 
-        let ok = AccessFlow::handle(guard, prepared)?;
-        Ok(ok)
+        AccessFlow::handle(guard, request).into()
     }
 }
 

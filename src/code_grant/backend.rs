@@ -325,8 +325,8 @@ pub trait AccessTokenRequest {
 
 impl<'u> IssuerRef<'u> {
     /// Try to redeem an authorization code.
-    pub fn use_code<'r>(&mut self, request: &'r AccessTokenRequest)
-    -> AccessTokenResult<BearerToken> where 'u: 'r {
+    pub fn use_code(&mut self, request: &AccessTokenRequest)
+    -> AccessTokenResult<BearerToken> {
         if !request.valid() {
             return Err(IssuerError::invalid(()))
         }
@@ -407,8 +407,8 @@ pub trait GuardRequest {
 
 impl<'a> GuardRef<'a> {
     /// The result will indicate whether the resource access should be allowed or not.
-    pub fn protect<'r>(&self, req: &'r GuardRequest)
-    -> AccessResult<()> where 'a: 'r {
+    pub fn protect(&self, req: &GuardRequest)
+    -> AccessResult<()> {
         if !req.valid() {
             return Err(AccessError::InvalidRequest)
         }
