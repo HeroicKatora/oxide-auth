@@ -93,13 +93,14 @@ use base64;
 
 /// Holds the decode query fragments from the url. This does not hold the excess parameters with a
 /// Cow, as we need to have a mutable reference to it for the authorization handler.
-struct AuthorizationParameter<'l> {
+struct AuthorizationParameter<'a> {
     valid: bool,
-    method: Option<Cow<'l, str>>,
-    client_id: Option<Cow<'l, str>>,
-    scope: Option<Cow<'l, str>>,
-    redirect_uri: Option<Cow<'l, str>>,
-    state: Option<Cow<'l, str>>,
+    method: Option<Cow<'a, str>>,
+    client_id: Option<Cow<'a, str>>,
+    scope: Option<Cow<'a, str>>,
+    redirect_uri: Option<Cow<'a, str>>,
+    state: Option<Cow<'a, str>>,
+    extensions: HashMap<Cow<'a, str>, Cow<'a, str>>,
 }
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
@@ -117,6 +118,7 @@ struct AccessTokenParameter<'a> {
     grant_type: Option<Cow<'a, str>>,
     code: Option<Cow<'a, str>>,
     authorization: Option<(String, Vec<u8>)>,
+    extensions: HashMap<Cow<'a, str>, Cow<'a, str>>,
 }
 
 struct GuardParameter<'a> {
@@ -211,23 +213,52 @@ impl<'l, 'c: 'l, W: WebRequest> From<&'l mut &'c mut W> for AuthorizationParamet
             redirect_uri: params.remove("redirect_uri"),
             state: params.remove("state"),
             method: params.remove("response_type"),
+            extensions: params,
         }
     }
 }
 
 impl<'l> CodeRequest for AuthorizationParameter<'l> {
-    fn valid(&self) -> bool { self.valid }
-    fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
-    fn scope(&self) -> Option<Cow<str>> { self.scope.clone() }
-    fn redirect_uri(&self) -> Option<Cow<str>> { self.redirect_uri.clone() }
-    fn state(&self) -> Option<Cow<str>> { self.state.clone() }
-    fn method(&self) -> Option<Cow<str>> { self.method.clone() }
+    fn valid(&self) -> bool {
+        self.valid
+    }
+
+    fn client_id(&self) -> Option<Cow<str>> {
+        self.client_id.clone()
+    }
+
+    fn scope(&self) -> Option<Cow<str>> {
+        self.scope.clone()
+    }
+
+    fn redirect_uri(&self) -> Option<Cow<str>> {
+        self.redirect_uri.clone()
+    }
+
+    fn state(&self) -> Option<Cow<str>> {
+        self.state.clone()
+    }
+
+    fn method(&self) -> Option<Cow<str>> {
+        self.method.clone()
+    }
+
+    fn extension(&self, key: &str) -> Option<Cow<str>> {
+        self.extensions.get(key).cloned()
+    }
 }
 
 impl<'l> AuthorizationParameter<'l> {
     fn invalid() -> Self {
-        AuthorizationParameter { valid: false, method: None, client_id: None, scope: None,
-            redirect_uri: None, state: None }
+        AuthorizationParameter {
+            valid: false,
+            method: None,
+            client_id: None,
+            scope: None,
+            redirect_uri: None,
+            state: None,
+            extensions: HashMap::new()
+        }
     }
 }
 
@@ -278,16 +309,32 @@ impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> 
             redirect_uri: map.remove("redirect_uri"),
             grant_type: map.remove("grant_type"),
             authorization: None,
+            extensions: map,
         }
     }
 }
 
 impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
-    fn valid(&self) -> bool { self.valid }
-    fn code(&self) -> Option<Cow<str>> { self.code.clone() }
-    fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
-    fn redirect_uri(&self) -> Option<Cow<str>> { self.redirect_uri.clone() }
-    fn grant_type(&self) -> Option<Cow<str>> { self.grant_type.clone() }
+    fn valid(&self) -> bool {
+        self.valid
+    }
+
+    fn code(&self) -> Option<Cow<str>> {
+        self.code.clone()
+    }
+
+    fn client_id(&self) -> Option<Cow<str>> {
+        self.client_id.clone()
+    }
+
+    fn redirect_uri(&self) -> Option<Cow<str>> {
+        self.redirect_uri.clone()
+    }
+
+    fn grant_type(&self) -> Option<Cow<str>> {
+        self.grant_type.clone()
+    }
+
     fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
         match self.authorization {
             None => None,
@@ -299,8 +346,15 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
 
 impl<'l> AccessTokenParameter<'l> {
     fn invalid() -> Self {
-        AccessTokenParameter { valid: false, code: None, client_id: None, redirect_uri: None,
-            grant_type: None, authorization: None }
+        AccessTokenParameter {
+            valid: false,
+            code: None,
+            client_id: None,
+            redirect_uri: None,
+            grant_type: None,
+            authorization: None,
+            extensions: HashMap::new(),
+        }
     }
 }
 
@@ -367,13 +421,21 @@ impl GrantFlow {
 pub struct AccessFlow;
 
 impl<'l> GuardRequest for GuardParameter<'l> {
-    fn valid(&self) -> bool { self.valid }
-    fn token(&self) -> Option<Cow<str>> { self.token.clone() }
+    fn valid(&self) -> bool {
+        self.valid
+    }
+
+    fn token(&self) -> Option<Cow<str>> {
+        self.token.clone()
+    }
 }
 
 impl<'l> GuardParameter<'l> {
     fn invalid() -> Self {
-        GuardParameter { valid: false, token: None }
+        GuardParameter {
+            valid: false,
+            token: None
+        }
     }
 }
 

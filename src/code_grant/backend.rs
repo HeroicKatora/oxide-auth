@@ -160,8 +160,10 @@ pub trait CodeRequest {
     fn redirect_uri(&self) -> Option<Cow<str>>;
     /// Optional parameter the client can use to identify the redirected user-agent.
     fn state(&self) -> Option<Cow<str>>;
-    /// The method requested, MUST be `code`
+    /// The method requested, valid requests MUST return `code`
     fn method(&self) -> Option<Cow<str>>;
+    /// Retrieve an additional parameter used in an extension
+    fn extension(&self, &str) -> Option<Cow<str>>;
 }
 
 /// CodeRef is a thin wrapper around necessary types to execute an authorization code grant.
@@ -179,12 +181,33 @@ pub struct AuthorizationRequest<'a> {
 }
 
 impl<'l> CodeRequest for &'l CodeRequest {
-    fn valid(&self) -> bool { (*self).valid() }
-    fn client_id(&self) -> Option<Cow<str>> { (*self).client_id() }
-    fn scope(&self) -> Option<Cow<str>> { (*self).scope() }
-    fn redirect_uri(&self) -> Option<Cow<str>> { (*self).redirect_uri() }
-    fn state(&self) -> Option<Cow<str>> { (*self).state() }
-    fn method(&self) -> Option<Cow<str>> { (*self).method() }
+    fn valid(&self) -> bool {
+        (*self).valid()
+    }
+
+    fn client_id(&self) -> Option<Cow<str>> {
+        (*self).client_id()
+    }
+
+    fn scope(&self) -> Option<Cow<str>> {
+        (*self).scope()
+    }
+
+    fn redirect_uri(&self) -> Option<Cow<str>> {
+        (*self).redirect_uri()
+    }
+
+    fn state(&self) -> Option<Cow<str>> {
+        (*self).state()
+    }
+
+    fn method(&self) -> Option<Cow<str>> {
+        (*self).method()
+    }
+
+    fn extension(&self, key: &str) -> Option<Cow<str>> {
+        (*self).extension(key)
+    }
 }
 
 impl<'u> CodeRef<'u> {
