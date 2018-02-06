@@ -131,21 +131,25 @@ impl Issuer for TokenSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use primitives::grant::Extensions;
+    use chrono::{Duration, Utc};
+
     #[test]
     fn token_signer_roundtrip() {
         let passwd = "Some secret password";
         let mut issuer = TokenSigner::new_from_passphrase(passwd);
-        let request = GrantRequest {
-            client_id: "Client".into(),
-            owner_id: "Owner".into(),
-            redirect_uri: &"https://example.com".parse().unwrap(),
-            scope: &"default".parse().unwrap(),
+        let request = Grant {
+            client_id: "Client".to_string(),
+            owner_id: "Owner".to_string(),
+            redirect_uri: "https://example.com".parse().unwrap(),
+            scope: "default".parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
         };
 
         let issued = issuer.issue(request);
-        assert!(Utc::now() < issued.until);
-
         let from_token = issuer.recover_token(&issued.token).unwrap();
+
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");
         assert!(Utc::now() < *from_token.until.as_ref());

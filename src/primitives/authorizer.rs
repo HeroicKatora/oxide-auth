@@ -7,7 +7,7 @@
 //! clients.
 use std::collections::HashMap;
 
-use super::grant::{Grant, GrantRef};
+use super::grant::Grant;
 use super::generator::TokenGenerator;
 
 /// Authorizers create and manage authorization codes.
@@ -20,7 +20,7 @@ pub trait Authorizer {
     /// Retrieve the parameters associated with a token, invalidating the code in the process. In
     /// particular, a code should not be usable twice (there is no stateless implementation of an
     /// authorizer for this reason).
-    fn extract<'a>(&mut self, &'a str) -> Option<GrantRef<'a>>;
+    fn extract(&mut self, &str) -> Option<Grant>;
 }
 
 /// An in-memory hash map.
@@ -48,7 +48,7 @@ impl<I: TokenGenerator> Authorizer for Storage<I> {
         token
     }
 
-    fn extract<'a>(&mut self, grant: &'a str) -> Option<GrantRef<'a>> {
-        self.tokens.remove(grant).map(|v| v.into())
+    fn extract<'a>(&mut self, grant: &'a str) -> Option<Grant> {
+        self.tokens.remove(grant)
     }
 }

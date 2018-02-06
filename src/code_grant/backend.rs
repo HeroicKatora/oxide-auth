@@ -17,7 +17,7 @@ use primitives::scope::Scope;
 
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
-use super::extensions::CodeExtension;
+use super::extensions::{AccessTokenExtension, CodeExtension};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -224,7 +224,7 @@ impl<'u> CodeRef<'u> {
     /// If the client is not registered, the request will otherwise be ignored, if the request has
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
-    pub fn negotiate(self, request: &CodeRequest, code_extensions: &[&CodeExtension])
+    pub fn negotiate(self, request: &CodeRequest, extensions: &[&CodeExtension])
     -> CodeResult<AuthorizationRequest<'u>> {
         if !request.valid() {
             return Err(CodeError::Ignore)
@@ -278,7 +278,7 @@ impl<'u> CodeRef<'u> {
 
         let mut grant_extensions = Extensions::new();
 
-        for extension_instance in code_extensions {
+        for extension_instance in extensions {
             match extension_instance.initialize(request) {
                 Err(_) =>
                     return Err(CodeError::Redirect(prepared_error.with(
@@ -373,7 +373,7 @@ pub trait AccessTokenRequest {
 
 impl<'u> IssuerRef<'u> {
     /// Try to redeem an authorization code.
-    pub fn use_code(&mut self, request: &AccessTokenRequest)
+    pub fn use_code(&mut self, request: &AccessTokenRequest, extensions: &[&AccessTokenExtension])
     -> AccessTokenResult<BearerToken> {
         if !request.valid() {
             return Err(IssuerError::invalid(()))
@@ -415,20 +415,32 @@ impl<'u> IssuerRef<'u> {
             return Err(IssuerError::invalid(AccessTokenErrorType::InvalidGrant))
         }
 
-        if *saved_params.until.as_ref() < Utc::now() {
+        if saved_params.until < Utc::now() {
             return Err(IssuerError::invalid((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
         }
 
+        let mut code_extensions = saved_params.extensions;
+        let mut access_extensions = Extensions::new();
+
+        for extension_instance in extensions {
+            let saved_extension = code_extensions.remove(extension_instance);
+            match extension_instance.initialize(request, saved_extension) {
+                Err(_) =>  return Err(IssuerError::invalid(())),
+                Ok(Some(extension)) => access_extensions.set(extension_instance, extension),
+                Ok(None) => (),
+            }
+        }
+
         let token = self.issuer.issue(Grant {
-            client_id: saved_params.client_id.into_owned(),
-            owner_id: saved_params.owner_id.into_owned(),
-            redirect_uri: saved_params.redirect_uri.into_owned(),
-            scope: saved_params.scope.clone().into_owned(),
+            client_id: saved_params.client_id,
+            owner_id: saved_params.owner_id,
+            redirect_uri: saved_params.redirect_uri,
+            scope: saved_params.scope.clone(),
             until: Utc::now() + Duration::hours(1),
-            extensions: Extensions::new(),
+            extensions: access_extensions,
         });
 
-        Ok(BearerToken{ 0: token, 1: saved_params.scope.as_ref().to_string() })
+        Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
     }
 
     pub fn with(r: &'u Registrar, t: &'u mut Authorizer, i: &'u mut Issuer) -> Self {

@@ -5,11 +5,12 @@ use primitives::generator::{TokenGenerator, RandomGenerator};
 use primitives::issuer::TokenMap;
 use primitives::registrar::{Client, ClientMap, PreGrant};
 use primitives::scope::Scope;
-use primitives::grant::{GrantRef, GrantRequest};
+use primitives::grant::{Extensions, Grant, GrantRef};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use chrono::{Utc, Duration};
 use url::Url;
 use serde_json;
 use base64;
@@ -426,11 +427,13 @@ impl AccessTokenSetup {
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
 
-        let authrequest = GrantRequest {
-            client_id: EXAMPLE_CLIENT_ID,
-            owner_id: EXAMPLE_OWNER_ID,
-            redirect_uri: &EXAMPLE_REDIRECT_URI.parse().unwrap(),
-            scope: &EXAMPLE_SCOPE.parse().unwrap(),
+        let authrequest = Grant {
+            client_id: EXAMPLE_CLIENT_ID.to_string(),
+            owner_id: EXAMPLE_OWNER_ID.to_string(),
+            redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            scope: EXAMPLE_SCOPE.parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
         };
 
         let authtoken = authorizer.authorize(authrequest);
@@ -458,11 +461,13 @@ impl AccessTokenSetup {
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap());
 
-        let authrequest = GrantRequest {
-            client_id: EXAMPLE_CLIENT_ID,
-            owner_id: EXAMPLE_OWNER_ID,
-            redirect_uri: &EXAMPLE_REDIRECT_URI.parse().unwrap(),
-            scope: &EXAMPLE_SCOPE.parse().unwrap(),
+        let authrequest = Grant {
+            client_id: EXAMPLE_CLIENT_ID.to_string(),
+            owner_id: EXAMPLE_OWNER_ID.to_string(),
+            redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            scope: EXAMPLE_SCOPE.parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
         };
 
         let authtoken = authorizer.authorize(authrequest);
@@ -735,25 +740,31 @@ impl ResourceSetup {
         // Ensure that valid tokens are 16 bytes long, so we can craft an invalid one
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
-        let authtoken = issuer.issue(GrantRequest {
-            client_id: EXAMPLE_CLIENT_ID,
-            owner_id: EXAMPLE_OWNER_ID,
-            redirect_uri: &EXAMPLE_REDIRECT_URI.parse().unwrap(),
-            scope: &"legit needed andmore".parse().unwrap(),
+        let authtoken = issuer.issue(Grant {
+            client_id: EXAMPLE_CLIENT_ID.to_string(),
+            owner_id: EXAMPLE_OWNER_ID.to_string(),
+            redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            scope: "legit needed andmore".parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
         });
 
-        let wrong_scope_token = issuer.issue(GrantRequest {
-            client_id: EXAMPLE_CLIENT_ID,
-            owner_id: EXAMPLE_OWNER_ID,
-            redirect_uri: &EXAMPLE_REDIRECT_URI.parse().unwrap(),
-            scope: &"wrong needed".parse().unwrap(),
+        let wrong_scope_token = issuer.issue(Grant {
+            client_id: EXAMPLE_CLIENT_ID.to_string(),
+            owner_id: EXAMPLE_OWNER_ID.to_string(),
+            redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            scope: "wrong needed".parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
         });
 
-        let small_scope_token = issuer.issue(GrantRequest {
-            client_id: EXAMPLE_CLIENT_ID,
-            owner_id: EXAMPLE_OWNER_ID,
-            redirect_uri: &EXAMPLE_REDIRECT_URI.parse().unwrap(),
-            scope: &"legit".parse().unwrap(),
+        let small_scope_token = issuer.issue(Grant {
+            client_id: EXAMPLE_CLIENT_ID.to_string(),
+            owner_id: EXAMPLE_OWNER_ID.to_string(),
+            redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            scope: "legit".parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
         });
 
         ResourceSetup {

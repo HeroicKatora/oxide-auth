@@ -342,7 +342,7 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
                 => Some((id.as_str().into(), pass.as_slice().into())),
         }
     }
-    
+
     fn extension(&self, key: &str) -> Option<Cow<str>> {
         self.extensions.get(key).cloned()
     }
@@ -412,7 +412,7 @@ impl GrantFlow {
         let params = GrantFlow::create_valid_params(request)
             .unwrap_or(AccessTokenParameter::invalid());
 
-        match issuer.use_code(&params) {
+        match issuer.use_code(&params, Vec::new().as_slice()) {
             Err(IssuerError::Invalid(json_data))
                 => return Req::Response::json(&json_data.to_json())?.as_client_error(),
             Err(IssuerError::Unauthorized(json_data, scheme))
