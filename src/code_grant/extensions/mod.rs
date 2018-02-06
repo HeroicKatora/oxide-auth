@@ -2,11 +2,11 @@ use super::backend::{AccessTokenRequest, CodeRequest};
 use primitives::grant::{Extension, GrantExtension};
 
 pub trait CodeExtension: GrantExtension {
-    fn initialize(&self, &CodeRequest) -> Result<Option<Extension>, ()>;
+    fn extend(&self, &CodeRequest) -> Result<Option<Extension>, ()>;
 }
 
 pub trait AccessTokenExtension: GrantExtension {
-    fn initialize(&self, &AccessTokenRequest, Option<Extension>)
+    fn extend(&self, &AccessTokenRequest, Option<Extension>)
         -> Result<Option<Extension>, ()>;
 }
 

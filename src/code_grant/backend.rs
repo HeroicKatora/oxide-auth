@@ -279,7 +279,7 @@ impl<'u> CodeRef<'u> {
         let mut grant_extensions = Extensions::new();
 
         for extension_instance in extensions {
-            match extension_instance.initialize(request) {
+            match extension_instance.extend(request) {
                 Err(_) =>
                     return Err(CodeError::Redirect(prepared_error.with(
                         AuthorizationErrorType::InvalidRequest))),
@@ -424,7 +424,7 @@ impl<'u> IssuerRef<'u> {
 
         for extension_instance in extensions {
             let saved_extension = code_extensions.remove(extension_instance);
-            match extension_instance.initialize(request, saved_extension) {
+            match extension_instance.extend(request, saved_extension) {
                 Err(_) =>  return Err(IssuerError::invalid(())),
                 Ok(Some(extension)) => access_extensions.set(extension_instance, extension),
                 Ok(None) => (),
