@@ -270,7 +270,7 @@ impl AuthorizationFlow {
     {
         let negotiated = {
             let urldecoded = AuthorizationParameter::from(&mut request);
-            let negotiated = match granter.negotiate(&urldecoded) {
+            let negotiated = match granter.negotiate(&urldecoded, Vec::new().as_slice()) {
                 Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
                 Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
                 Ok(v) => v,

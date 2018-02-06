@@ -6,9 +6,8 @@
 //! side request, it will then check the given parameters to determine the authorization of such
 //! clients.
 use std::collections::HashMap;
-use chrono::{Duration, Utc};
 
-use super::grant::{Grant, GrantRef, GrantRequest};
+use super::grant::{Grant, GrantRef};
 use super::generator::TokenGenerator;
 
 /// Authorizers create and manage authorization codes.
@@ -16,7 +15,7 @@ use super::generator::TokenGenerator;
 /// The authorization code can be traded for a bearer token at the token endpoint.
 pub trait Authorizer {
     /// Create a code which allows retrieval of a bearer token at a later time.
-    fn authorize(&mut self, GrantRequest) -> String;
+    fn authorize(&mut self, Grant) -> String;
 
     /// Retrieve the parameters associated with a token, invalidating the code in the process. In
     /// particular, a code should not be usable twice (there is no stateless implementation of an
@@ -43,14 +42,7 @@ impl<I: TokenGenerator> Storage<I> {
 }
 
 impl<I: TokenGenerator> Authorizer for Storage<I> {
-    fn authorize(&mut self, req: GrantRequest) -> String {
-        let owner_id = req.owner_id.to_string();
-        let client_id = req.client_id.to_string();
-        let scope = req.scope.clone();
-        let redirect_uri = req.redirect_uri.clone();
-        let until = Utc::now() + Duration::minutes(10);
-        let grant = Grant {owner_id, client_id, scope, redirect_uri, until };
-
+    fn authorize(&mut self, grant: Grant) -> String {
         let token = self.issuer.generate(&(&grant).into());
         self.tokens.insert(token.clone(), grant);
         token

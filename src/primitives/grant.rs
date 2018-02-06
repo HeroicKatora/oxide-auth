@@ -1,8 +1,32 @@
 //! Encapsulates various shared mechanisms for handlings different grants.
-
 use super::{Url, Time};
 use super::scope::Scope;
+
 use std::borrow::Cow;
+use std::collections::HashMap;
+
+pub trait GrantExtension {
+    /// An unique identifier distinguishing this extension type for parsing and storing.
+    /// Obvious choices are the registered names as administered by IANA or private identifiers.
+    fn identifier(&self) -> &'static str;
+}
+
+#[derive(Clone)]
+pub struct Extension {
+    /// An extension that the token owner is allowed to read and interpret.
+    public_content: String,
+
+    /// Identifies an extenion whose content and/or existance MUST be kept secret.
+    private_content: String,
+
+    /// Content which is not saved on the server but initialized/interpreted from other sources.
+    foreign_content: String,
+}
+
+#[derive(Clone)]
+pub struct Extensions {
+    extensions: HashMap<String, Extension>,
+}
 
 /// Owning copy of a grant.
 ///
@@ -24,7 +48,10 @@ pub struct Grant {
     pub redirect_uri: Url,
 
     /// Expiration date of the grant (Utc).
-    pub until: Time
+    pub until: Time,
+
+    /// Encoded extensions existing on this Grant
+    pub extensions: Extensions,
 }
 
 /// An optionally owning version of a grant.
@@ -80,22 +107,24 @@ impl<'a> Into<Grant> for GrantRef<'a> {
             client_id: self.client_id.into_owned(),
             scope: self.scope.into_owned(),
             redirect_uri: self.redirect_uri.into_owned(),
-            until: self.until.into_owned()
+            until: self.until.into_owned(),
+            extensions: Extensions::new(),
         }
     }
 }
 
-/// A non-owning grant request which does not yet have an expiration date attached.
-pub struct GrantRequest<'a> {
-    /// Identifies the owner of the resource.
-    pub owner_id: &'a str,
+impl Extensions {
+    pub fn new() -> Extensions {
+        Extensions {
+            extensions: HashMap::new(),
+        }
+    }
 
-    /// Identifies the client to which the grant should be issued.
-    pub client_id: &'a str,
+    pub fn set(&mut self, extension: &GrantExtension, content: Extension) {
+        self.extensions.insert(extension.identifier().to_string(), content);
+    }
 
-    /// The scope to be granted to the client.
-    pub scope: &'a Scope,
-
-    /// The redirection url under which the client resides.
-    pub redirect_uri: &'a Url,
+    pub fn remove(&mut self, extension: &GrantExtension) -> Option<Extension> {
+        self.extensions.remove(extension.identifier())
+    }
 }

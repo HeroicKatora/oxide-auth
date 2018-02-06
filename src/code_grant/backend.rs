@@ -11,15 +11,18 @@
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 use primitives::authorizer::Authorizer;
 use primitives::registrar::{PreGrant, ClientUrl, Registrar, RegistrarError};
-use primitives::grant::GrantRequest;
+use primitives::grant::{Extensions, Grant};
 use primitives::issuer::{IssuedToken, Issuer};
 use primitives::scope::Scope;
+
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
+use super::extensions::CodeExtension;
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use serde_json;
 
 /// Defines the correct treatment of the error.
@@ -178,6 +181,7 @@ pub struct AuthorizationRequest<'a> {
     pre_grant: PreGrant,
     code: CodeRef<'a>,
     state: Option<String>,
+    extensions: Extensions,
 }
 
 impl<'l> CodeRequest for &'l CodeRequest {
@@ -220,7 +224,7 @@ impl<'u> CodeRef<'u> {
     /// If the client is not registered, the request will otherwise be ignored, if the request has
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
-    pub fn negotiate(self, request: &CodeRequest)
+    pub fn negotiate(self, request: &CodeRequest, code_extensions: &[&CodeExtension])
     -> CodeResult<AuthorizationRequest<'u>> {
         if !request.valid() {
             return Err(CodeError::Ignore)
@@ -252,7 +256,7 @@ impl<'u> CodeRef<'u> {
 
         // Setup an error with url and state, makes the code flow afterwards easier
         let error_uri = bound_client.redirect_uri.clone().into_owned();
-        let prepared_error = ErrorUrl::new(error_uri.clone(), state,
+        let prepared_error = ErrorUrl::new(error_uri.clone(), state.clone(),
             AuthorizationError::with(()));
 
         match request.method() {
@@ -272,10 +276,24 @@ impl<'u> CodeRef<'u> {
             Some(Ok(scope)) => Some(scope),
         };
 
+        let mut grant_extensions = Extensions::new();
+
+        for extension_instance in code_extensions {
+            match extension_instance.initialize(request) {
+                Err(_) =>
+                    return Err(CodeError::Redirect(prepared_error.with(
+                        AuthorizationErrorType::InvalidRequest))),
+                Ok(Some(extension)) =>
+                    grant_extensions.set(extension_instance, extension),
+                Ok(None) => (),
+            }
+        }
+
         Ok(AuthorizationRequest {
             pre_grant: bound_client.negotiate(scope),
             code: CodeRef { registrar: self.registrar, authorizer: self.authorizer },
-            state: request.state().map(|cow| cow.into_owned()),
+            state: state.map(|cow| cow.into_owned()),
+            extensions: grant_extensions,
         })
     }
 
@@ -296,12 +314,17 @@ impl<'a> AuthorizationRequest<'a> {
     /// Inform the backend about consent from a resource owner. Use negotiated parameters to
     /// authorize a client for an owner.
     pub fn authorize(self, owner_id: Cow<'a, str>) -> CodeResult<Url> {
-       let grant = self.code.authorizer.authorize(GrantRequest{
-           owner_id: &owner_id,
-           client_id: &self.pre_grant.client_id,
-           redirect_uri: &self.pre_grant.redirect_uri,
-           scope: &self.pre_grant.scope});
-       let mut url = self.pre_grant.redirect_uri;
+       let mut url = self.pre_grant.redirect_uri.clone();
+
+       let grant = self.code.authorizer.authorize(Grant {
+           owner_id: owner_id.into_owned(),
+           client_id: self.pre_grant.client_id,
+           redirect_uri: self.pre_grant.redirect_uri,
+           scope: self.pre_grant.scope,
+           until: Utc::now() + Duration::minutes(10),
+           extensions: self.extensions,
+       });
+
        url.query_pairs_mut()
            .append_pair("code", grant.as_str())
            .extend_pairs(self.state.map(|v| ("state", v)))
@@ -394,13 +417,16 @@ impl<'u> IssuerRef<'u> {
             return Err(IssuerError::invalid((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
         }
 
-        let token = self.issuer.issue(GrantRequest{
-            client_id: &saved_params.client_id,
-            owner_id: &saved_params.owner_id,
-            redirect_uri: &saved_params.redirect_uri,
-            scope: &saved_params.scope,
+        let token = self.issuer.issue(Grant {
+            client_id: saved_params.client_id.into_owned(),
+            owner_id: saved_params.owner_id.into_owned(),
+            redirect_uri: saved_params.redirect_uri.into_owned(),
+            scope: saved_params.scope.clone().into_owned(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
         });
-        Ok(BearerToken{0: token, 1: saved_params.scope.as_ref().to_string()})
+
+        Ok(BearerToken{ 0: token, 1: saved_params.scope.as_ref().to_string() })
     }
 
     pub fn with(r: &'u Registrar, t: &'u mut Authorizer, i: &'u mut Issuer) -> Self {

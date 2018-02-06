@@ -5,10 +5,8 @@
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
 use std::clone::Clone;
-use std::borrow::Cow;
-use chrono::{Utc, Duration};
 use super::Time;
-use super::grant::{Grant, GrantRef, GrantRequest};
+use super::grant::{Grant, GrantRef};
 use super::generator::{TokenGenerator, Assertion};
 use ring::digest::SHA256;
 use ring::hmac::SigningKey;
@@ -21,7 +19,7 @@ use ring::hmac::SigningKey;
 /// they do not intend to offer a statefull refresh api).
 pub trait Issuer {
     /// Create a token authorizing the request parameters
-    fn issue(&mut self, GrantRequest) -> IssuedToken;
+    fn issue(&mut self, Grant) -> IssuedToken;
 
     /// Get the values corresponding to a bearer token
     fn recover_token<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
@@ -68,20 +66,14 @@ impl<G: TokenGenerator> TokenMap<G> {
 }
 
 impl<G: TokenGenerator> Issuer for TokenMap<G> {
-    fn issue(&mut self, req: GrantRequest) -> IssuedToken {
-        let grant = Grant {
-            owner_id: req.owner_id.to_string(),
-            client_id: req.client_id.to_string(),
-            scope: req.scope.clone(),
-            redirect_uri: req.redirect_uri.clone(),
-            until: Utc::now() + Duration::hours(1),
-        };
+    fn issue(&mut self, grant: Grant) -> IssuedToken {
         let (token, refresh) = {
             let generator_grant = (&grant).into();
             let token = self.generator.generate(&generator_grant);
             let refresh = self.generator.generate(&generator_grant);
             (token, refresh)
         };
+
         let until = grant.until.clone();
         self.access.insert(token.clone(), grant.clone());
         self.refresh.insert(refresh.clone(), grant);
@@ -121,17 +113,10 @@ impl TokenSigner {
 }
 
 impl Issuer for TokenSigner {
-    fn issue(&mut self, req: GrantRequest) -> IssuedToken {
-        let grant = GrantRef {
-            owner_id: req.owner_id.into(),
-            client_id: req.client_id.into(),
-            scope: Cow::Borrowed(req.scope),
-            redirect_uri: Cow::Borrowed(req.redirect_uri),
-            until: Cow::Owned(Utc::now() + Duration::hours(1)),
-        };
-        let token = self.signer.tag("token").generate(&grant);
-        let refresh = self.signer.tag("refresh").generate(&grant);
-        IssuedToken {token, refresh, until: grant.until.into_owned() }
+    fn issue(&mut self, grant: Grant) -> IssuedToken {
+        let token = self.signer.tag("token").generate(&(&grant).into());
+        let refresh = self.signer.tag("refresh").generate(&(&grant).into());
+        IssuedToken {token, refresh, until: grant.until}
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
