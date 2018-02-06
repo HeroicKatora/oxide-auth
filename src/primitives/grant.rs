@@ -12,15 +12,15 @@ pub trait GrantExtension {
 }
 
 #[derive(Clone)]
-pub struct Extension {
+pub enum Extension {
     /// An extension that the token owner is allowed to read and interpret.
-    public_content: String,
+    Public(Option<String>),
 
     /// Identifies an extenion whose content and/or existance MUST be kept secret.
-    private_content: String,
+    Private(Option<String>),
 
-    /// Content which is not saved on the server but initialized/interpreted from other sources.
-    foreign_content: String,
+    // Content which is not saved on the server but initialized/interpreted from other sources.
+    // foreign_content: String,
 }
 
 #[derive(Clone)]
@@ -109,6 +109,30 @@ impl<'a> Into<Grant> for GrantRef<'a> {
             redirect_uri: self.redirect_uri.into_owned(),
             until: self.until.into_owned(),
             extensions: Extensions::new(),
+        }
+    }
+}
+
+impl Extension {
+    pub fn public(content: Option<String>) -> Extension {
+        Extension::Public(content)
+    }
+
+    pub fn private(content: Option<String>) -> Extension {
+        Extension::Private(content)
+    }
+
+    pub fn as_public(self) -> Result<Option<String>, ()> {
+        match self {
+            Extension::Public(content) => Ok(content),
+            _ => Err(())
+        }
+    }
+
+    pub fn as_private(self) -> Result<Option<String>, ()> {
+        match self {
+            Extension::Private(content) => Ok(content),
+            _ => Err(())
         }
     }
 }

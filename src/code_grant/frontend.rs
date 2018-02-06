@@ -342,6 +342,10 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
                 => Some((id.as_str().into(), pass.as_slice().into())),
         }
     }
+    
+    fn extension(&self, key: &str) -> Option<Cow<str>> {
+        self.extensions.get(key).cloned()
+    }
 }
 
 impl<'l> AccessTokenParameter<'l> {

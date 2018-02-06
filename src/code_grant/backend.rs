@@ -367,6 +367,8 @@ pub trait AccessTokenRequest {
     fn redirect_uri(&self) -> Option<Cow<str>>;
     /// Valid requests have this set to "authorization_code"
     fn grant_type(&self) -> Option<Cow<str>>;
+    /// Retrieve an additional parameter used in an extension
+    fn extension(&self, &str) -> Option<Cow<str>>;
 }
 
 impl<'u> IssuerRef<'u> {

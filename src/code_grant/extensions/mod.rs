@@ -1,12 +1,13 @@
 use super::backend::{AccessTokenRequest, CodeRequest};
-use primitives::grant::{Extension, Grant, GrantExtension};
+use primitives::grant::{Extension, GrantExtension};
 
 pub trait CodeExtension: GrantExtension {
     fn initialize(&self, &CodeRequest) -> Result<Option<Extension>, ()>;
 }
 
 pub trait AccessTokenExtension: GrantExtension {
-    fn initialize(&self, &AccessTokenRequest, &Grant) -> Result<Option<Extension>, ()>;
+    fn initialize(&self, &AccessTokenRequest, Option<Extension>)
+        -> Result<Option<Extension>, ()>;
 }
 
 impl<'a> GrantExtension for &'a CodeExtension {
@@ -20,3 +21,7 @@ impl<'a> GrantExtension for &'a AccessTokenExtension {
         (*self).identifier()
     }
 }
+
+mod pkce;
+
+pub use self::pkce::Pkce;
