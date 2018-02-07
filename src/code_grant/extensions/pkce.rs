@@ -8,13 +8,60 @@ use base64::encode as b64encode;
 use ring::digest::{SHA256, digest};
 use ring::constant_time::verify_slices_are_equal;
 
+/// Proof Key for Code Exchange by OAuth Public Clients
+///
+/// > Auth 2.0 public clients utilizing the Authorization Code Grant are
+/// susceptible to the authorization code interception attack.  This
+/// specification describes the attack as well as a technique to mitigate
+/// against the threat through the use of Proof Key for Code Exchange
+/// (PKCE, pronounced "pixy").
+///
+/// (from the respective [RFC 7636])
+///
+/// In short, public clients share a verifier for a secret token when requesting their initial
+/// authorization code. When they then make a second request to the autorization server, trading
+/// this code for an access token, they can credible assure the server of their identity by
+/// presenting the secret token.
+///
+/// The simple `plain` method only prevents attackers unable to snoop on the connection from
+/// impersonating the client, while the `S256` method, which uses one-way hash functions, makes
+/// any attack short of reading the victim client's memory infeasible.
+///
+/// Support for the `plain` method is OPTIONAL and must be turned on explicitely.
+///
+/// [RFC 7636]: https://tools.ietf.org/html/rfc7636
 pub struct Pkce {
     required: bool,
+    allow_plain: bool,
 }
 
 enum Method {
     Plain(String),
     Sha256(String),
+}
+
+impl Pkce {
+    /// A pkce extensions which requires clients to use it.
+    pub fn required() -> Pkce {
+        Pkce {
+            required: true,
+            allow_plain: false,
+        }
+    }
+
+    /// Pkce extension which will check verifiers if present but not require them.
+    pub fn optional() -> Pkce {
+        Pkce {
+            required: false,
+            allow_plain: false,
+        }
+    }
+
+    /// Allow usage of the less secure `plain` verification method. This method is NOT secure
+    /// an eavesdropping attacker such as rogue processes capturing a devices requests.
+    pub fn allow_plain(&mut self) {
+        self.allow_plain = true;
+    }
 }
 
 impl GrantExtension for Pkce {
@@ -39,6 +86,8 @@ impl CodeExtension for Pkce {
         };
 
         let method = Method::from_parameter(method, challenge)?;
+        let method = method.assert_supported_method(self.allow_plain)?;
+
         Ok(Some(Extension::private(Some(method.encode()))))
     }
 }
@@ -66,6 +115,14 @@ impl Method {
             "Plain" => Ok(Method::Plain(challenge.into_owned())),
             "S256" => Ok(Method::Sha256(challenge.into_owned())),
             _ => Err(()),
+        }
+    }
+
+    fn assert_supported_method(self, allow_plain: bool) -> Result<Self, ()> {
+        match (self, allow_plain) {
+            (this, true) => Ok(this),
+            (Method::Sha256(content), false) => Ok(Method::Sha256(content)),
+            (Method::Plain(_), false) => Err(()),
         }
     }
 
