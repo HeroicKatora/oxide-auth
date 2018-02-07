@@ -8,6 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::vec::IntoIter;
 use url::Url;
 
+/// Error codes returned from an authorization code request.
 #[derive(Debug)]
 pub enum AuthorizationErrorType {
     /// The request is missing a required parameter, includes an invalid parameter value, includes
@@ -63,7 +64,9 @@ impl fmt::Display for AuthorizationErrorType {
     }
 }
 
+/// Provides extensible modifiers for authorization errors, intended for `AuthorizationError::with`.
 pub trait AuthorizationErrorExt {
+    /// Add or set description, uri or the numeric error code.
     fn modify(self, &mut AuthorizationError);
 }
 
@@ -76,6 +79,10 @@ pub struct AuthorizationError {
 }
 
 impl AuthorizationError {
+    /// Construct an `AuthorizationError` using several parameters applied after one another.
+    ///
+    /// Providing no arguments, `()`, will produce a generic `InvalidRequest` error without any
+    /// description or error uri which would provide additional information for the client.
     pub fn with<A: AuthorizationErrorExt>(modifier: A) -> AuthorizationError {
         let mut error = AuthorizationError {
             error: AuthorizationErrorType::InvalidRequest,
@@ -214,7 +221,9 @@ impl fmt::Display for AccessTokenErrorType {
     }
 }
 
+/// Provides extensible modifiers for authorization errors, intended for `AccessTokenError::with`.
 pub trait AccessTokenErrorExt {
+    /// Add or set description, uri or the numeric error code.
     fn modify(self, &mut AccessTokenError);
 }
 
@@ -227,6 +236,10 @@ pub struct AccessTokenError {
 }
 
 impl AccessTokenError {
+    /// Construct an `AccessTokenError` using several parameters applied after one another.
+    ///
+    /// Providing no arguments, `()`, will produce a generic `InvalidRequest` error without any
+    /// description or error uri which would provide additional information for the client.
     pub fn with<A: AccessTokenErrorExt>(modifier: A) -> AccessTokenError {
         let mut error = AccessTokenError {
             error: AccessTokenErrorType::InvalidRequest,

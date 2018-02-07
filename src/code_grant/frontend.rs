@@ -106,8 +106,13 @@ struct AuthorizationParameter<'a> {
 /// Answer from OwnerAuthorizer to indicate the owners choice.
 #[derive(Clone)]
 pub enum Authentication {
+    /// The owner did not authorize the client.
     Failed,
+
+    /// The owner has not yet decided, i.e. the returned page is a form for the user.
     InProgress,
+
+    /// Authorization was granted by the specified user.
     Authenticated(String),
 }
 
@@ -132,14 +137,19 @@ struct GuardParameter<'a> {
 pub trait WebRequest {
     /// The error generated from access of malformed or invalid requests.
     type Error: From<OAuthError>;
+
+    /// The corresponding type of Responses returned from this module.
     type Response: WebResponse<Error=Self::Error>;
+
     /// Retrieve a parsed version of the url query. An Err return value indicates a malformed query
     /// or an otherwise malformed WebRequest. Note that an empty query should result in
     /// `Ok(HashMap::new())` instead of an Err.
     fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()>;
+
     /// Retriev the parsed `application/x-form-urlencoded` body of the request. An Err value
     /// indicates a malformed body or a different Content-Type.
     fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()>;
+
     /// Contents of the authorization header or none if none exists. An Err value indicates a
     /// malformed header or request.
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>;
@@ -174,8 +184,12 @@ pub trait WebResponse where Self: Sized {
     fn with_authorization(self, kind: &str) -> Result<Self, Self::Error>;
 }
 
+/// Some instance which can decide the owners approval based on the request.
 pub trait OwnerAuthorizer {
+    /// The request type handled.
     type Request: WebRequest;
+
+    /// Has the owner granted authorization to the client indicated in the `PreGrant`?
     fn get_owner_authorization(&self, &mut Self::Request, &PreGrant)
       -> Result<(Authentication, <Self::Request as WebRequest>::Response), <Self::Request as WebRequest>::Error>;
 }
@@ -262,8 +276,11 @@ impl<'l> AuthorizationParameter<'l> {
     }
 }
 
+/// All relevant methods for handling authorization code requests.
 pub struct AuthorizationFlow;
+
 impl AuthorizationFlow {
+    /// React to an authorization code request, handling owner approval with a specified handler.
     pub fn handle<'c, Req>(granter: CodeRef<'c>, mut request: &'c mut Req, page_handler: &OwnerAuthorizer<Request=Req>)
     -> Result<Req::Response, Req::Error> where
         Req: WebRequest,
@@ -298,6 +315,7 @@ impl AuthorizationFlow {
     }
 }
 
+/// All relevant methods for granting access token from authorization codes.
 pub struct GrantFlow;
 
 impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> {
@@ -406,6 +424,7 @@ impl GrantFlow {
         Some(params)
     }
 
+    /// Construct a response containing the access token or an error message.
     pub fn handle<Req>(mut issuer: IssuerRef, request: &mut Req)
     -> Result<Req::Response, Req::Error> where Req: WebRequest
     {
@@ -422,6 +441,7 @@ impl GrantFlow {
     }
 }
 
+/// All relevant methods for checking authorization for access to a resource.
 pub struct AccessFlow;
 
 impl<'l> GuardRequest for GuardParameter<'l> {
@@ -463,6 +483,7 @@ impl AccessFlow {
         Some(GuardParameter { valid: true, token })
     }
 
+    /// Indicate if the access is allowed or denied via a result.
     pub fn handle<R>(guard: GuardRef, request: &mut R)
     -> Result<(), R::Error> where R: WebRequest {
         let params = AccessFlow::create_valid_params(request)
@@ -483,8 +504,16 @@ impl AccessFlow {
 /// body, unexpected parameters, or security relevant required parameters.
 #[derive(Debug)]
 pub enum OAuthError {
+    /// Some unexpected, internal error occured-
     InternalCodeError(),
+
+    /// Access should be silently denied, without providing further explanation.
+    ///
+    /// For example, this response is given when an incorrect client has been provided in the
+    /// authorization request in order to avoid potential indirect denial of service vulnerabilities.
     InternalAccessError(),
+
+    /// No authorization has been granted.
     AccessDenied,
 }
 

@@ -30,8 +30,11 @@ use serde_json;
 /// it is integral for security to resolve the error internally instead of redirecting the user
 /// agent to a possibly crafted and malicious target.
 pub enum CodeError {
-    Ignore /* Ignore the request entirely */,
-    Redirect(ErrorUrl) /* Redirect to the given url */,
+    /// Ignore the request entirely
+    Ignore ,
+
+    /// Redirect to the given url
+    Redirect(ErrorUrl) ,
 }
 
 /// Encapsulates a redirect to a valid redirect_uri with an error response. The implementation
@@ -45,7 +48,10 @@ pub struct ErrorUrl {
 
 /// Defines actions for the response to an access token request.
 pub enum IssuerError {
+    /// The token did not represent a valid token.
     Invalid(ErrorDescription),
+
+    /// The client did not properly authorize itself.
     Unauthorized(ErrorDescription, String),
 }
 
@@ -57,7 +63,10 @@ pub struct ErrorDescription {
 
 /// Indicates the reason for access failure.
 pub enum AccessError {
+    /// The request did not have enough authorization data or was otherwise malformed.
     InvalidRequest,
+
+    /// The provided authorization did not grant sufficient priviledges.
     AccessDenied,
 }
 
@@ -80,6 +89,7 @@ impl ErrorUrl {
         modifier.modify(&mut self.error);
     }
 
+    /// Modify the error by moving it.
     pub fn with<M>(mut self, modifier: M) -> Self where M: AuthorizationErrorExt {
         modifier.modify(&mut self.error);
         self
@@ -127,6 +137,7 @@ impl ErrorDescription {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Represents an access token, a refresh token and the associated scope for serialization.
 pub struct BearerToken(IssuedToken, String);
 
 impl BearerToken {
@@ -297,6 +308,7 @@ impl<'u> CodeRef<'u> {
         })
     }
 
+    /// Construct a reference capable of handling authorization code requests.
     pub fn with(registrar: &'u Registrar, t: &'u mut Authorizer) -> Self {
         CodeRef { registrar, authorizer: t }
     }
@@ -350,7 +362,7 @@ pub struct IssuerRef<'a> {
     issuer: &'a mut Issuer,
 }
 
-/// Necessary
+/// Trait based retrieval of parameters necessary for access token request handling.
 pub trait AccessTokenRequest {
     /// Received request might not be encoded correctly. This method gives implementors the chance
     /// to signal that a request was received but its encoding was generally malformed. If this is
@@ -443,6 +455,7 @@ impl<'u> IssuerRef<'u> {
         Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
     }
 
+    /// Construct a reference capable of issuing access token from authorization codes.
     pub fn with(r: &'u Registrar, t: &'u mut Authorizer, i: &'u mut Issuer) -> Self {
         IssuerRef { registrar: r, authorizer: t, issuer: i }
     }
@@ -458,13 +471,18 @@ pub struct GuardRef<'a> {
     issuer: &'a mut Issuer,
 }
 
+/// Required request methods for deciding on the rights to access a protected resource.
 pub trait GuardRequest {
     /// Received request might not be encoded correctly. This method gives implementors the chance
     /// to signal that a request was received but its encoding was generally malformed. If this is
     /// the case, then no other attribute will be queried. This method exists mainly to make
     /// frontends straightforward by not having them handle special cases for malformed requests.
     fn valid(&self) -> bool;
-    /// The bearer token trying to access some resource.
+    /// The authorization used in the request.
+    ///
+    /// Expects the complete `Authorization` HTTP-header, including the qualification as `Bearer`.
+    /// In case the client included multiple forms of authorization, this method MUST return None
+    /// and the request SHOULD be marked as invalid.
     fn token(&self) -> Option<Cow<str>>;
 }
 
