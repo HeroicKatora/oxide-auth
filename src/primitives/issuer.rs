@@ -114,6 +114,9 @@ impl TokenSigner {
 
     /// Construct a signing instance from a passphrase, deriving a signing key in the process.
     ///
+    /// The salting_key SHOULD be changed to a self-generated one where possible instead of
+    /// relying on the default key. However, at that point fully switching to private
+    /// SigningKey instances is possibly a better option.
     pub fn new_from_passphrase(passwd: &str, salting_key: Option<SigningKey>) -> TokenSigner {
         // Default salt if none was provided, generated with `openssl rand 32`
         let salting_key = salting_key.unwrap_or_else(|| {
