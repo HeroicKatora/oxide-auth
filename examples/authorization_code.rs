@@ -27,7 +27,7 @@ mod main {
             // Authorization tokens are 16 byte random keys to a memory hash map.
             Storage::new(RandomGenerator::new(16)),
             // Bearer tokens are signed (but not encrypted) using a passphrase.
-            TokenSigner::new_from_passphrase(passphrase));
+            TokenSigner::new_from_passphrase(passphrase, None));
 
         // Register a dummy client instance
         let client = Client::public("LocalClient", // Client id
