@@ -5,12 +5,22 @@ use super::scope::Scope;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+/// Provides a name registry for extensions.
 pub trait GrantExtension {
     /// An unique identifier distinguishing this extension type for parsing and storing.
     /// Obvious choices are the registered names as administered by IANA or private identifiers.
     fn identifier(&self) -> &'static str;
 }
 
+/// Wraps the data for an extension as a string with access restrictions.
+///
+/// This is a generic way for extensions to store their data in a universal, encoded form. It is
+/// also able to indicate the intended readers for such an extension so that backends can ensure
+/// that private extension data is properly encrypted even when present in a self-encoded access
+/// token.
+///
+/// Some extensions have semantics where the presence alone is the stored data, so storing data
+/// is optional and storing no data is distinct from not attaching any extension instance at all.
 #[derive(Clone)]
 pub enum Extension {
     /// An extension that the token owner is allowed to read and interpret.
@@ -23,6 +33,10 @@ pub enum Extension {
     // foreign_content: String,
 }
 
+/// Links one or several `GrantExtension` instances to their respective data.
+///
+/// This also serves as a clean interface for both frontend and backend to reliably and
+/// conveniently manipulate or query the stored data sets.
 #[derive(Clone)]
 pub struct Extensions {
     extensions: HashMap<String, Extension>,
@@ -114,14 +128,22 @@ impl<'a> Into<Grant> for GrantRef<'a> {
 }
 
 impl Extension {
+    /// Creates an extension whose presence and content can be unveiled by the token holder.
+    ///
+    /// Note that this is
     pub fn public(content: Option<String>) -> Extension {
         Extension::Public(content)
     }
 
+    /// Creates an extension with secret content only visible for the server.
+    ///
+    /// Token issuers should take special care to protect the content and the identifier of such
+    /// an extension from being interpreted or correlated by the token holder.
     pub fn private(content: Option<String>) -> Extension {
         Extension::Private(content)
     }
 
+    /// Ensures that the extension stored was created as public, returns `Err` if it was not.
     pub fn as_public(self) -> Result<Option<String>, ()> {
         match self {
             Extension::Public(content) => Ok(content),
@@ -129,6 +151,7 @@ impl Extension {
         }
     }
 
+    /// Ensures that the extension stored was created as private, returns `Err` if it was not.
     pub fn as_private(self) -> Result<Option<String>, ()> {
         match self {
             Extension::Private(content) => Ok(content),
@@ -138,16 +161,22 @@ impl Extension {
 }
 
 impl Extensions {
+    /// Create a new extension store.
     pub fn new() -> Extensions {
         Extensions {
             extensions: HashMap::new(),
         }
     }
 
+    /// Set the stored content for a `GrantExtension` instance.
     pub fn set(&mut self, extension: &GrantExtension, content: Extension) {
         self.extensions.insert(extension.identifier().to_string(), content);
     }
 
+    /// Retrieve the stored data of an instance.
+    ///
+    /// This removes the data from the store to avoid possible mixups and to allow a copyless
+    /// retrieval of bigger data strings.
     pub fn remove(&mut self, extension: &GrantExtension) -> Option<Extension> {
         self.extensions.remove(extension.identifier())
     }
