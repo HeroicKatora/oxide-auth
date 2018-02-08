@@ -21,7 +21,7 @@ pub trait GrantExtension {
 ///
 /// Some extensions have semantics where the presence alone is the stored data, so storing data
 /// is optional and storing no data is distinct from not attaching any extension instance at all.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Extension {
     /// An extension that the token owner is allowed to read and interpret.
     Public(Option<String>),
@@ -37,7 +37,7 @@ pub enum Extension {
 ///
 /// This also serves as a clean interface for both frontend and backend to reliably and
 /// conveniently manipulate or query the stored data sets.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Extensions {
     extensions: HashMap<String, Extension>,
 }
@@ -46,7 +46,7 @@ pub struct Extensions {
 ///
 /// This can be stored in a database without worrying about lifetimes or shared across thread
 /// boundaries. A reference to this can be converted to a purely referential `GrantRef`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Grant {
     /// Identifies the owner of the resource.
     pub owner_id: String,

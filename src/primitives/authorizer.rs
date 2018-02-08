@@ -52,3 +52,52 @@ impl<I: TokenGenerator> Authorizer for Storage<I> {
         self.tokens.remove(grant)
     }
 }
+
+#[cfg(test)]
+/// Tests for authorizer implementations, including those provided here.
+pub mod tests {
+    use super::*;
+    use chrono::Utc;
+    use primitives::grant::Extensions;
+
+    /// Tests some invariants that should be upheld by all authorizers.
+    ///
+    /// Custom implementations may want to import and use this in their own tests.
+    pub fn simple_test_suite(authorizer: &mut Authorizer) {
+        let grant = Grant {
+            owner_id: "Owner".to_string(),
+            client_id: "Client".to_string(),
+            scope: "One two three scopes".parse().unwrap(),
+            redirect_uri: "https://example.com/redirect_me".parse().unwrap(),
+            until: Utc::now(),
+            extensions: Extensions::new(),
+        };
+
+        let token = authorizer.authorize(grant.clone());
+        let recovered_grant = authorizer.extract(&token)
+            .expect("Could not extract grant for valid token");
+
+        if grant != recovered_grant {
+            panic!("Grant was not stored correctly");
+        }
+
+        if authorizer.extract(&token).is_some() {
+            panic!("Token must only be usable once");
+        }
+    }
+
+    #[test]
+    fn test_storage() {
+        use primitives::generator::{Assertion, RandomGenerator};
+        use ring::hmac::SigningKey;
+        use ring::digest::SHA256;
+
+        let mut storage = Storage::new(RandomGenerator::new(16));
+        simple_test_suite(&mut storage);
+
+        let assertion_token_instance = Assertion::new(
+            SigningKey::new(&SHA256, b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s="));
+        let mut storage = Storage::new(assertion_token_instance.tag("authorizer"));
+        simple_test_suite(&mut storage);
+    }
+}
