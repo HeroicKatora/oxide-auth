@@ -43,7 +43,7 @@ impl<I: TokenGenerator> Storage<I> {
 
 impl<I: TokenGenerator> Authorizer for Storage<I> {
     fn authorize(&mut self, grant: Grant) -> String {
-        let token = self.issuer.generate(&(&grant).into());
+        let token = self.issuer.generate(&grant);
         self.tokens.insert(token.clone(), grant);
         token
     }

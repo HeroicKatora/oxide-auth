@@ -9,7 +9,7 @@
 //!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
 //!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
 //!     is not currently expressed in the type system or with traits.
-use super::grant::GrantRef;
+use super::grant::{Extensions, Grant, GrantRef};
 use chrono::{Utc, TimeZone};
 use std::borrow::Cow;
 use rand::{thread_rng, Rng};
@@ -24,7 +24,7 @@ use base64::{encode, decode};
 pub trait TokenGenerator {
     /// For example sign a grant or generate a random token. The exact guarantees and uses depend
     /// on the specific implementation.
-    fn generate(&self, &GrantRef) -> String;
+    fn generate(&self, &Grant) -> String;
 }
 
 /// Generates tokens from random bytes.
@@ -42,7 +42,7 @@ impl RandomGenerator {
 }
 
 impl TokenGenerator for RandomGenerator {
-    fn generate(&self, _grant: &GrantRef) -> String {
+    fn generate(&self, _grant: &Grant) -> String {
         let result = thread_rng().gen_iter::<u8>().take(self.len).collect::<Vec<u8>>();
         encode(&result)
     }
@@ -93,10 +93,13 @@ impl Assertion {
             redirect_uri: Cow::Owned(redirect_uri),
             scope: Cow::Owned(scope),
             until: Cow::Owned(until),
+
+            // FIXME: save and recover extensions with crypto
+            extensions: Cow::Owned(Extensions::new()),
         }, tag.to_string()))
     }
 
-    fn generate_tagged(&self, grant: &GrantRef, tag: &str) -> String {
+    fn generate_tagged(&self, grant: GrantRef, tag: &str) -> String {
         let tosign = rmp_serde::to_vec(&InternalAssertionGrant(
             &grant.owner_id,
             &grant.client_id,
@@ -126,7 +129,7 @@ impl<'a> TaggedAssertion<'a> {
 }
 
 impl<'a> TokenGenerator for TaggedAssertion<'a> {
-    fn generate(&self, grant: &GrantRef) -> String {
-        self.0.generate_tagged(grant, self.1)
+    fn generate(&self, grant: &Grant) -> String {
+        self.0.generate_tagged(grant.as_grantref(), self.1)
     }
 }

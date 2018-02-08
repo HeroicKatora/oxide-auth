@@ -68,9 +68,8 @@ impl<G: TokenGenerator> TokenMap<G> {
 impl<G: TokenGenerator> Issuer for TokenMap<G> {
     fn issue(&mut self, grant: Grant) -> IssuedToken {
         let (token, refresh) = {
-            let generator_grant = (&grant).into();
-            let token = self.generator.generate(&generator_grant);
-            let refresh = self.generator.generate(&generator_grant);
+            let token = self.generator.generate(&grant);
+            let refresh = self.generator.generate(&grant);
             (token, refresh)
         };
 
@@ -114,8 +113,8 @@ impl TokenSigner {
 
 impl Issuer for TokenSigner {
     fn issue(&mut self, grant: Grant) -> IssuedToken {
-        let token = self.signer.tag("token").generate(&(&grant).into());
-        let refresh = self.signer.tag("refresh").generate(&(&grant).into());
+        let token = self.signer.tag("token").generate(&grant);
+        let refresh = self.signer.tag("refresh").generate(&grant);
         IssuedToken {token, refresh, until: grant.until}
     }
 

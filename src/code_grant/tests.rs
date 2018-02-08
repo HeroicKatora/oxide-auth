@@ -5,7 +5,7 @@ use primitives::generator::{TokenGenerator, RandomGenerator};
 use primitives::issuer::TokenMap;
 use primitives::registrar::{Client, ClientMap, PreGrant};
 use primitives::scope::Scope;
-use primitives::grant::{Extensions, Grant, GrantRef};
+use primitives::grant::{Extensions, Grant};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -83,7 +83,7 @@ impl WebResponse for CraftedResponse {
 struct TestGenerator(String);
 
 impl TokenGenerator for TestGenerator {
-    fn generate(&self, _grant: &GrantRef) -> String {
+    fn generate(&self, _grant: &Grant) -> String {
         self.0.clone()
     }
 }

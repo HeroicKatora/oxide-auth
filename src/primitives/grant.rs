@@ -73,6 +73,10 @@ pub struct Grant {
 /// Often used as an input or output type, this version enables zero-copy algorithms for several
 /// primitives such as scope rewriting by a registrar or token generation. It can be converted to
 /// a `Grant` if ownership is desired and necessary.
+///
+/// Additionally, a `GrantRef` can be assembled from multiple independent inputs instead of
+/// requiring them to be grouped in a single struct already. Should this turn out not to be useful
+/// and simply requiring addtional maintenance, it might get removed in a future release.
 pub struct GrantRef<'a> {
     /// Identifies the owner of the resource.
     pub owner_id: Cow<'a, str>,
@@ -88,6 +92,16 @@ pub struct GrantRef<'a> {
 
     /// Expiration date of the grant (Utc).
     pub until: Cow<'a, Time>,
+
+    /// Encoded extensions existing on this Grant
+    pub extensions: Cow<'a, Extensions>,
+}
+
+impl Grant {
+    /// Create a Copy on Write reference of this grant without any instant copying.
+    pub fn as_grantref(&self) -> GrantRef {
+        self.into()
+    }
 }
 
 impl<'a> Into<GrantRef<'a>> for Grant {
@@ -98,6 +112,7 @@ impl<'a> Into<GrantRef<'a>> for Grant {
             scope: Cow::Owned(self.scope),
             redirect_uri: Cow::Owned(self.redirect_uri),
             until: Cow::Owned(self.until),
+            extensions: Cow::Owned(self.extensions),
         }
     }
 }
@@ -110,6 +125,7 @@ impl<'a> Into<GrantRef<'a>> for &'a Grant {
             scope: Cow::Borrowed(&self.scope),
             redirect_uri: Cow::Borrowed(&self.redirect_uri),
             until: Cow::Borrowed(&self.until),
+            extensions: Cow::Borrowed(&self.extensions),
         }
     }
 }
@@ -122,7 +138,7 @@ impl<'a> Into<Grant> for GrantRef<'a> {
             scope: self.scope.into_owned(),
             redirect_uri: self.redirect_uri.into_owned(),
             until: self.until.into_owned(),
-            extensions: Extensions::new(),
+            extensions: self.extensions.into_owned(),
         }
     }
 }
