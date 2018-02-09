@@ -9,14 +9,14 @@
 //!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
 //!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
 //!     is not currently expressed in the type system or with traits.
-use super::grant::{Extensions, Grant, GrantRef};
+use super::grant::{Extensions, Grant};
+
+use base64::{encode, decode};
 use chrono::{Utc, TimeZone};
-use std::borrow::Cow;
 use rand::{thread_rng, Rng};
 use ring;
 use rmp_serde;
 use url::Url;
-use base64::{encode, decode};
 
 /// Generic token for a specific grant.
 ///
@@ -76,7 +76,7 @@ impl Assertion {
         TaggedAssertion(self, tag)
     }
 
-    fn extract<'a>(&self, token: &'a str) -> Result<(GrantRef<'a>, String), ()> {
+    fn extract<'a>(&self, token: &'a str) -> Result<(Grant, String), ()> {
         let readbytes = decode(token).map_err(|_| ())?;
         let AssertGrant(message, digest) = rmp_serde::from_slice(&readbytes).unwrap();
 
@@ -87,19 +87,18 @@ impl Assertion {
         let redirect_uri = Url::parse(redirectbytes).map_err(|_| ())?;
         let scope = scope.parse().map_err(|_| ())?;
         let until = Utc::timestamp(&Utc, ts, tsnanos);
-        Ok((GrantRef {
-            owner_id: Cow::Owned(owner_id.to_string()),
-            client_id: Cow::Owned(client_id.to_string()),
-            redirect_uri: Cow::Owned(redirect_uri),
-            scope: Cow::Owned(scope),
-            until: Cow::Owned(until),
-
+        Ok((Grant {
+            owner_id: owner_id.to_string(),
+            client_id: client_id.to_string(),
+            redirect_uri: redirect_uri,
+            scope: scope,
+            until: until,
             // FIXME: save and recover extensions with crypto
-            extensions: Cow::Owned(Extensions::new()),
+            extensions: Extensions::new(),
         }, tag.to_string()))
     }
 
-    fn generate_tagged(&self, grant: GrantRef, tag: &str) -> String {
+    fn generate_tagged(&self, grant: &Grant, tag: &str) -> String {
         let tosign = rmp_serde::to_vec(&InternalAssertionGrant(
             &grant.owner_id,
             &grant.client_id,
@@ -117,7 +116,7 @@ impl<'a> TaggedAssertion<'a> {
     ///
     /// Result in an Err if either the signature is invalid or if the tag does not match the
     /// expected tag given to this assertion.
-    pub fn extract<'b>(&self, token: &'b str) -> Result<GrantRef<'b>, ()> {
+    pub fn extract<'b>(&self, token: &'b str) -> Result<Grant, ()> {
         self.0.extract(token).and_then(|(token, tag)| {
             if tag == self.1 {
                 Ok(token)
@@ -130,6 +129,6 @@ impl<'a> TaggedAssertion<'a> {
 
 impl<'a> TokenGenerator for TaggedAssertion<'a> {
     fn generate(&self, grant: &Grant) -> String {
-        self.0.generate_tagged(grant.as_grantref(), self.1)
+        self.0.generate_tagged(grant, self.1)
     }
 }

@@ -499,13 +499,13 @@ impl<'a> GuardRef<'a> {
         let grant = self.issuer.recover_token(&token)
             .ok_or(AccessError::AccessDenied)?;
 
-        if *grant.until.as_ref() < Utc::now() {
+        if grant.until < Utc::now() {
             return Err(AccessError::AccessDenied);
         }
 
         // Test if any of the possible allowed scopes is included in the grant
         if !self.scopes.iter()
-            .any(|needed_option| needed_option <= grant.scope.as_ref()) {
+            .any(|needed_option| needed_option <= &grant.scope) {
             return Err(AccessError::AccessDenied);
         }
 

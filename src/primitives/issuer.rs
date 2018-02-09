@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::clone::Clone;
 use super::Time;
-use super::grant::{Grant, GrantRef};
+use super::grant::Grant;
 use super::generator::{TokenGenerator, Assertion};
 use ring::digest::SHA256;
 use ring::hmac::SigningKey;
@@ -22,10 +22,10 @@ pub trait Issuer {
     fn issue(&mut self, Grant) -> IssuedToken;
 
     /// Get the values corresponding to a bearer token
-    fn recover_token<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
+    fn recover_token<'a>(&'a self, &'a str) -> Option<Grant>;
 
     /// Get the values corresponding to a refresh token
-    fn recover_refresh<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
+    fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant>;
 }
 
 /// Token parameters returned to a client.
@@ -79,12 +79,12 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
         IssuedToken { token, refresh, until }
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
-        self.access.get(token).map(|v| v.into())
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        self.access.get(token).cloned()
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
-        self.refresh.get(token).map(|v| v.into())
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        self.refresh.get(token).cloned()
     }
 }
 
@@ -118,11 +118,11 @@ impl Issuer for TokenSigner {
         IssuedToken {token, refresh, until: grant.until}
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
         self.signer.tag("token").extract(token).ok()
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
         self.signer.tag("refresh").extract(token).ok()
     }
 }
@@ -151,6 +151,6 @@ mod tests {
 
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");
-        assert!(Utc::now() < *from_token.until.as_ref());
+        assert!(Utc::now() < from_token.until);
     }
 }

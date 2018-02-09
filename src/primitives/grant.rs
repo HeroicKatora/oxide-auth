@@ -2,8 +2,8 @@
 use super::{Url, Time};
 use super::scope::Scope;
 
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::collections::hash_map::Iter;
 
 /// Provides a name registry for extensions.
 pub trait GrantExtension {
@@ -68,81 +68,6 @@ pub struct Grant {
     pub extensions: Extensions,
 }
 
-/// An optionally owning version of a grant.
-///
-/// Often used as an input or output type, this version enables zero-copy algorithms for several
-/// primitives such as scope rewriting by a registrar or token generation. It can be converted to
-/// a `Grant` if ownership is desired and necessary.
-///
-/// Additionally, a `GrantRef` can be assembled from multiple independent inputs instead of
-/// requiring them to be grouped in a single struct already. Should this turn out not to be useful
-/// and simply requiring addtional maintenance, it might get removed in a future release.
-pub struct GrantRef<'a> {
-    /// Identifies the owner of the resource.
-    pub owner_id: Cow<'a, str>,
-
-    /// Identifies the client to which the grant was issued.
-    pub client_id: Cow<'a, str>,
-
-    /// The scope granted to the client.
-    pub scope: Cow<'a, Scope>,
-
-    /// The redirection url under which the client resides.
-    pub redirect_uri: Cow<'a, Url>,
-
-    /// Expiration date of the grant (Utc).
-    pub until: Cow<'a, Time>,
-
-    /// Encoded extensions existing on this Grant
-    pub extensions: Cow<'a, Extensions>,
-}
-
-impl Grant {
-    /// Create a Copy on Write reference of this grant without any instant copying.
-    pub fn as_grantref(&self) -> GrantRef {
-        self.into()
-    }
-}
-
-impl<'a> Into<GrantRef<'a>> for Grant {
-    fn into(self) -> GrantRef<'a> {
-        GrantRef {
-            owner_id: Cow::Owned(self.owner_id),
-            client_id: Cow::Owned(self.client_id),
-            scope: Cow::Owned(self.scope),
-            redirect_uri: Cow::Owned(self.redirect_uri),
-            until: Cow::Owned(self.until),
-            extensions: Cow::Owned(self.extensions),
-        }
-    }
-}
-
-impl<'a> Into<GrantRef<'a>> for &'a Grant {
-    fn into(self) -> GrantRef<'a> {
-        GrantRef {
-            owner_id: Cow::Borrowed(&self.owner_id),
-            client_id: Cow::Borrowed(&self.client_id),
-            scope: Cow::Borrowed(&self.scope),
-            redirect_uri: Cow::Borrowed(&self.redirect_uri),
-            until: Cow::Borrowed(&self.until),
-            extensions: Cow::Borrowed(&self.extensions),
-        }
-    }
-}
-
-impl<'a> Into<Grant> for GrantRef<'a> {
-    fn into(self) -> Grant {
-        Grant {
-            owner_id: self.owner_id.into_owned(),
-            client_id: self.client_id.into_owned(),
-            scope: self.scope.into_owned(),
-            redirect_uri: self.redirect_uri.into_owned(),
-            until: self.until.into_owned(),
-            extensions: self.extensions.into_owned(),
-        }
-    }
-}
-
 impl Extension {
     /// Creates an extension whose presence and content can be unveiled by the token holder.
     ///
@@ -195,5 +120,54 @@ impl Extensions {
     /// retrieval of bigger data strings.
     pub fn remove(&mut self, extension: &GrantExtension) -> Option<Extension> {
         self.extensions.remove(extension.identifier())
+    }
+
+    /// Iterate of the public extensions whose presence and content is not secret.
+    pub fn iter_public(&self) -> PublicExtensions {
+        PublicExtensions(self.extensions.iter())
+    }
+
+    /// Iterate of the private extensions whose presence and content must not be revealed.
+    pub fn iter_private(&self) -> PublicExtensions {
+        PublicExtensions(self.extensions.iter())
+    }
+}
+
+/// An iterator over the public extensions of a grant.
+pub struct PublicExtensions<'a>(Iter<'a, String, Extension>);
+
+/// An iterator over the private extensions of a grant.
+///
+/// Implementations which acquire an instance should take special not to leak any secrets to
+/// clients and third parties.
+pub struct PrivateExtensions<'a>(Iter<'a, String, Extension>);
+
+impl<'a> Iterator for PublicExtensions<'a> {
+    type Item = (&'a str, Option<&'a str>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.0.next() {
+                None => return None,
+                Some((key, &Extension::Public(ref content)))
+                    => return Some((key, content.as_ref().map(|st| st.as_str()))),
+                _ => (),
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for PrivateExtensions<'a> {
+    type Item = (&'a str, Option<&'a str>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.0.next() {
+                None => return None,
+                Some((key, &Extension::Private(ref content)))
+                    => return Some((key, content.as_ref().map(|st| st.as_str()))),
+                _ => (),
+            }
+        }
     }
 }
