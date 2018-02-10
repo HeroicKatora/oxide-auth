@@ -62,11 +62,8 @@
 //! }
 //!
 //! fn handle(state: State, request: &mut MyRequest) -> Result<MyResponse, OAuthError> {
-//!     let issuer = IssuerRef::with(
-//!         state.registrar,
-//!         state.authorizer,
-//!         state.issuer);
-//!     GrantFlow::handle(issuer, request)
+//!     GrantFlow::new(state.registrar, state.authorizer, state.issuer)
+//!         .handle(request)
 //! }
 //! # pub fn main() { }
 //! ```
@@ -83,10 +80,15 @@ use std::error;
 use std::fmt;
 use std::str::from_utf8;
 
-use primitives::registrar::PreGrant;
-use super::backend::{AccessTokenRequest, CodeRequest, CodeError, ErrorUrl, IssuerError};
+use primitives::authorizer::Authorizer;
+use primitives::issuer::Issuer;
+use primitives::registrar::{Registrar, PreGrant};
+use primitives::scope::Scope;
+use super::backend::{AccessTokenRequest, CodeRequest, CodeError, IssuerError};
 use super::backend::{AccessError, GuardRequest};
-pub use super::backend::{CodeRef, IssuerRef, GuardRef};
+use super::extensions::{AccessTokenExtension, CodeExtension};
+
+pub use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
 
 use url::Url;
 use base64;
@@ -277,17 +279,34 @@ impl<'l> AuthorizationParameter<'l> {
 }
 
 /// All relevant methods for handling authorization code requests.
-pub struct AuthorizationFlow;
+pub struct AuthorizationFlow<'a> {
+    backend: CodeRef<'a>,
+    extensions: Vec<&'a CodeExtension>,
+}
 
-impl AuthorizationFlow {
+impl<'a> AuthorizationFlow<'a> {
+    /// Initiate an authorization code token flow.
+    pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
+        AuthorizationFlow {
+            backend: CodeRef::with(registrar, authorizer),
+            extensions: Vec::new(),
+        }
+    }
+
+    /// Add an extension to access token handling.
+    pub fn with_extension(mut self, extension: &'a CodeExtension) -> Self {
+        self.extensions.push(extension);
+        self
+    }
+
     /// React to an authorization code request, handling owner approval with a specified handler.
-    pub fn handle<'c, Req>(granter: CodeRef<'c>, mut request: &'c mut Req, page_handler: &OwnerAuthorizer<Request=Req>)
+    pub fn handle<Req>(self, mut request: &mut Req, page_handler: &OwnerAuthorizer<Request=Req>)
     -> Result<Req::Response, Req::Error> where
         Req: WebRequest,
     {
         let negotiated = {
             let urldecoded = AuthorizationParameter::from(&mut request);
-            let negotiated = match granter.negotiate(&urldecoded, Vec::new().as_slice()) {
+            let negotiated = match self.backend.negotiate(&urldecoded, self.extensions.as_slice()) {
                 Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
                 Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
                 Ok(v) => v,
@@ -316,7 +335,10 @@ impl AuthorizationFlow {
 }
 
 /// All relevant methods for granting access token from authorization codes.
-pub struct GrantFlow;
+pub struct GrantFlow<'a> {
+    backend: IssuerRef<'a>,
+    extensions: Vec<&'a AccessTokenExtension>,
+}
 
 impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> {
     fn from(mut map: HashMap<Cow<'l, str>, Cow<'l, str>>) -> AccessTokenParameter<'l> {
@@ -380,8 +402,22 @@ impl<'l> AccessTokenParameter<'l> {
     }
 }
 
-impl GrantFlow {
-    fn create_valid_params<'a, W: WebRequest>(req: &'a mut W) -> Option<AccessTokenParameter<'a>> {
+impl<'a> GrantFlow<'a> {
+    /// Initiate an access token flow.
+    pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer, issuer: &'a mut Issuer) -> Self {
+        GrantFlow {
+            backend: IssuerRef::with(registrar, authorizer, issuer),
+            extensions: Vec::new(),
+        }
+    }
+
+    /// Add an extension to access token handling.
+    pub fn with_extension(mut self, extension: &'a AccessTokenExtension) -> Self {
+        self.extensions.push(extension);
+        self
+    }
+
+    fn create_valid_params<'w, W: WebRequest>(req: &'w mut W) -> Option<AccessTokenParameter<'w>> {
         let authorization = match req.authheader() {
             Err(_) => return None,
             Ok(None) => None,
@@ -414,7 +450,7 @@ impl GrantFlow {
             },
         };
 
-        let mut params: AccessTokenParameter<'a> = match req.urlbody() {
+        let mut params: AccessTokenParameter<'w> = match req.urlbody() {
             Err(_) => return None,
             Ok(body) => extract_single_parameters(body).into(),
         };
@@ -425,13 +461,13 @@ impl GrantFlow {
     }
 
     /// Construct a response containing the access token or an error message.
-    pub fn handle<Req>(mut issuer: IssuerRef, request: &mut Req)
+    pub fn handle<Req>(mut self, request: &mut Req)
     -> Result<Req::Response, Req::Error> where Req: WebRequest
     {
         let params = GrantFlow::create_valid_params(request)
             .unwrap_or(AccessTokenParameter::invalid());
 
-        match issuer.use_code(&params, Vec::new().as_slice()) {
+        match self.backend.use_code(&params, self.extensions.as_slice()) {
             Err(IssuerError::Invalid(json_data))
                 => return Req::Response::json(&json_data.to_json())?.as_client_error(),
             Err(IssuerError::Unauthorized(json_data, scheme))
@@ -442,7 +478,9 @@ impl GrantFlow {
 }
 
 /// All relevant methods for checking authorization for access to a resource.
-pub struct AccessFlow;
+pub struct AccessFlow<'a> {
+    backend: GuardRef<'a>,
+}
 
 impl<'l> GuardRequest for GuardParameter<'l> {
     fn valid(&self) -> bool {
@@ -463,7 +501,14 @@ impl<'l> GuardParameter<'l> {
     }
 }
 
-impl AccessFlow {
+impl<'a> AccessFlow<'a> {
+    /// Initiate an access to a protected resource
+    pub fn new(issuer: &'a mut Issuer, scopes: &'a [Scope]) -> Self {
+        AccessFlow {
+            backend: GuardRef::with(issuer, scopes)
+        }
+    }
+
     fn create_valid_params<W: WebRequest>(req: &mut W) -> Option<GuardParameter> {
         let token = match req.authheader() {
             Err(_) => return None,
@@ -484,12 +529,12 @@ impl AccessFlow {
     }
 
     /// Indicate if the access is allowed or denied via a result.
-    pub fn handle<R>(guard: GuardRef, request: &mut R)
+    pub fn handle<R>(&self, request: &mut R)
     -> Result<(), R::Error> where R: WebRequest {
         let params = AccessFlow::create_valid_params(request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
-        guard.protect(&params).map_err(|err| {
+        self.backend.protect(&params).map_err(|err| {
             match err {
                 AccessError::InvalidRequest => OAuthError::InternalAccessError(),
                 AccessError::AccessDenied => OAuthError::AccessDenied,

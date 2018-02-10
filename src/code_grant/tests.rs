@@ -1,5 +1,4 @@
 use super::frontend::*;
-use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
 use primitives::authorizer::Storage;
 use primitives::generator::{TokenGenerator, RandomGenerator};
 use primitives::issuer::TokenMap;
@@ -149,7 +148,7 @@ impl AuthorizationSetup {
 
     fn test_silent_error(&mut self, mut request: CraftedRequest) {
         let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
-        match AuthorizationFlow::handle(CodeRef::with(&mut self.registrar, &mut self.authorizer), &mut request, &pagehandler) {
+        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer).handle(&mut request, &pagehandler) {
             Ok(CraftedResponse::Redirect(url))
                 => panic!("Redirection without client id {:?}", url),
             Ok(resp) => panic!("Response without client id {:?}", resp),
@@ -158,7 +157,7 @@ impl AuthorizationSetup {
     }
 
     fn test_error_redirect (&mut self, mut request: CraftedRequest, pagehandler: &OwnerAuthorizer<Request=CraftedRequest>) {
-        match AuthorizationFlow::handle(CodeRef::with(&mut self.registrar, &mut self.authorizer), &mut request, pagehandler) {
+        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer).handle(&mut request, pagehandler) {
             Ok(CraftedResponse::RedirectFromError(ref url))
             if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some()
                 => (),
@@ -191,8 +190,9 @@ fn authorize_public() {
     };
 
     let pagehandler = Allow(owner_id.to_string());
-    match AuthorizationFlow::handle(CodeRef::with(&mut registrar, &mut authorizer), &mut authrequest, &pagehandler)
-          .expect("Failure during authorization handling") {
+    match AuthorizationFlow::new(&mut registrar, &mut authorizer)
+            .handle(&mut authrequest, &pagehandler)
+            .expect("Failure during authorization handling") {
         CraftedResponse::Redirect(ref url) if url.as_str() == "https://client.example/endpoint?code=AuthToken"
             => (),
         resp => panic!("{:?}", resp),
@@ -208,10 +208,9 @@ fn authorize_public() {
         auth: None,
     };
 
-    let (token, scope) = match GrantFlow::handle(
-            IssuerRef::with(&mut registrar, &mut authorizer, &mut issuer),
-            &mut tokenrequest
-        ).expect("Failure during access token handling") {
+    let (token, scope) = match GrantFlow::new(&mut registrar, &mut authorizer, &mut issuer)
+            .handle(&mut tokenrequest)
+            .expect("Failure during access token handling") {
         CraftedResponse::Json(json)
             => {
                 let parsed: HashMap<String, String> = serde_json::from_str(&json).unwrap();
@@ -231,7 +230,8 @@ fn authorize_public() {
     };
 
     let scope: [Scope; 1] = [scope.parse().unwrap()];
-    AccessFlow::handle(GuardRef::with(&mut issuer, &scope), &mut accessrequest)
+    AccessFlow::new(&mut issuer, &scope)
+        .handle(&mut accessrequest)
         .expect("Failed to authorize");
 }
 
@@ -260,8 +260,9 @@ fn authorize_confidential() {
     };
 
     let pagehandler = Allow(owner_id.to_string());
-    match AuthorizationFlow::handle(CodeRef::with(&mut registrar, &mut authorizer), &mut authrequest, &pagehandler)
-          .expect("Failure during authorization handling") {
+    match AuthorizationFlow::new(&mut registrar, &mut authorizer)
+            .handle(&mut authrequest, &pagehandler)
+            .expect("Failure during authorization handling") {
         CraftedResponse::Redirect(ref url) if url.as_str() == "https://client.example/endpoint?code=AuthToken"
             => (),
         resp => panic!("{:?}", resp)
@@ -276,10 +277,9 @@ fn authorize_confidential() {
         auth: Some("Basic ".to_string() + &base64::encode(&(client_id.to_string() + ":" + passphrase))),
     };
 
-    let (token, scope) = match GrantFlow::handle(
-            IssuerRef::with(&mut registrar, &mut authorizer, &mut issuer),
-            &mut tokenrequest
-        ).expect("Failure during access token handling") {
+    let (token, scope) = match GrantFlow::new(&mut registrar, &mut authorizer, &mut issuer)
+            .handle(&mut tokenrequest)
+            .expect("Failure during access token handling") {
         CraftedResponse::Json(json)
             => {
                 let parsed: HashMap<String, String> = serde_json::from_str(&json).unwrap();
@@ -299,7 +299,8 @@ fn authorize_confidential() {
     };
 
     let scope: [Scope; 1] = [scope.parse().unwrap()];
-    AccessFlow::handle(GuardRef::with(&mut issuer, &scope), &mut accessrequest)
+    AccessFlow::new(&mut issuer, &scope)
+        .handle(&mut accessrequest)
         .expect("Failed to authorize");
 }
 
@@ -499,9 +500,8 @@ impl AccessTokenSetup {
     }
 
     fn test_simple_error(&mut self, mut request: CraftedRequest) {
-        match GrantFlow::handle(
-            IssuerRef::with(&self.registrar, &mut self.authorizer, &mut self.issuer),
-            &mut request)
+        match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
+            .handle(&mut request)
         {
             Ok(ref response) =>
                 Self::assert_json_error_set(response),
@@ -777,9 +777,8 @@ impl ResourceSetup {
     }
 
     fn test_access_error(&mut self, mut request: CraftedRequest) {
-        match AccessFlow::handle(
-            GuardRef::with(&mut self.issuer, &self.resource_scope),
-            &mut request)
+        match AccessFlow::new(&mut self.issuer, &self.resource_scope)
+            .handle(&mut request)
         {
             Ok(resp) => panic!("Expected an error instead of {:?}", resp),
             Err(_) => (),
@@ -848,4 +847,138 @@ fn resource_wrong_scope() {
     };
 
     setup.test_access_error(wrong_scope);
+}
+
+struct PkceSetup {
+    registrar: ClientMap,
+    authorizer: Storage<TestGenerator>,
+    issuer: TokenMap<RandomGenerator>,
+    auth_token: String,
+    verifier: String,
+    sha256_challenge: String,
+    plain_challenge: String,
+}
+
+impl PkceSetup {
+    fn new() -> PkceSetup {
+        let client = Client::public(EXAMPLE_CLIENT_ID,
+            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            EXAMPLE_SCOPE.parse().unwrap());
+
+        let mut registrar = ClientMap::new();
+        registrar.register_client(client);
+
+        let token = "ExampleAuthorizationToken".to_string();
+        let authorizer = Storage::new(TestGenerator(token.clone()));
+        let issuer = TokenMap::new(RandomGenerator::new(16));
+
+        PkceSetup {
+            registrar: registrar,
+            authorizer: authorizer,
+            issuer: issuer,
+            auth_token: token,
+            // The following are from https://tools.ietf.org/html/rfc7636#page-18
+            sha256_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string(),
+            plain_challenge: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk".to_string(),
+            verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk".to_string(),
+        }
+    }
+
+    fn test_correct_access(&mut self, mut auth_request: CraftedRequest, mut access_request: CraftedRequest) {
+        use code_grant::extensions::Pkce;
+
+        let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
+        let pkce_extension = Pkce::required();
+
+        match AuthorizationFlow::new(&self.registrar, &mut self.authorizer)
+                .with_extension(&pkce_extension)
+                .handle(&mut auth_request, &pagehandler) {
+            Ok(ref _response) => (),
+            resp => panic!("Expected non-error reponse, got {:?}", resp),
+        }
+
+        match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
+                .with_extension(&pkce_extension)
+                .handle(&mut access_request) {
+            Ok(ref _response) => (),
+            resp => panic!("Expected non-error reponse, got {:?}", resp),
+        }
+    }
+
+    fn test_failed_verification(&mut self, mut auth_request: CraftedRequest, mut access_request: CraftedRequest) {
+        use code_grant::extensions::Pkce;
+
+        let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
+        let pkce_extension = Pkce::required();
+
+        match AuthorizationFlow::new(&self.registrar, &mut self.authorizer)
+                .with_extension(&pkce_extension)
+                .handle(&mut auth_request, &pagehandler) {
+            Ok(ref _response) => (),
+            resp => panic!("Expected non-error reponse, got {:?}", resp),
+        }
+
+        match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
+                .with_extension(&pkce_extension)
+                .handle(&mut access_request) {
+            Ok(ref resp) => panic!("Expected error reponse, got {:?}", resp),
+            _ => (),
+        }
+    }
+}
+
+#[test]
+fn pkce_basic_usage() {
+    let mut setup = PkceSetup::new();
+
+    let correct_authorization = CraftedRequest {
+        query: Some(vec![("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                         ("grant_type", "authorization_code"),
+                         ("code_challenge", &setup.sha256_challenge),
+                         ("code_challenge_method", "S256")]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    let correct_access = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                           ("code", &setup.auth_token),
+                           ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                           ("code_verifier", &setup.verifier)]
+            .iter().as_single_value_query()),
+        auth: None,
+    };
+
+    setup.test_correct_access(correct_authorization, correct_access);
+}
+
+#[test]
+fn pkce_failed_verifier() {
+    let mut setup = PkceSetup::new();
+
+    let correct_authorization = CraftedRequest {
+        query: Some(vec![("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                         ("grant_type", "authorization_code"),
+                         ("code_challenge", &setup.sha256_challenge),
+                         ("code_challenge_method", "S256")]
+            .iter().as_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    let correct_access = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![("grant_type", "authorization_code"),
+                           ("code", &setup.auth_token),
+                           ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                           ("code_verifier", "Notthecorrectverifier")]
+            .iter().as_single_value_query()),
+        auth: None,
+    };
+
+    setup.test_failed_verification(correct_authorization, correct_access);
 }
