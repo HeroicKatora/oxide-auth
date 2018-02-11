@@ -921,8 +921,8 @@ impl PkceSetup {
         match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
                 .with_extension(&pkce_extension)
                 .handle(&mut access_request) {
-            Ok(ref resp) => panic!("Expected error reponse, got {:?}", resp),
-            _ => (),
+            Ok(CraftedResponse::ClientError(_)) => (),
+            resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
     }
 }
