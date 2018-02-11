@@ -15,7 +15,7 @@ pub trait CodeExtension: GrantExtension {
     /// encoded form by returning `Ok(extension_data)` while errors can be signaled via `Err(())`.
     /// Extensions can also store their pure existance by initializing the extension struct without
     /// data. Specifically, the data can be used in a corresponding `AccessTokenExtension`.
-    fn extend(&self, &CodeRequest) -> Result<Option<Extension>, ()>;
+    fn extend_code(&self, &CodeRequest) -> Result<Option<Extension>, ()>;
 }
 
 /// An extension reacting to an access token request with a provided access token.
@@ -27,7 +27,7 @@ pub trait AccessTokenExtension: GrantExtension {
     /// parameter.
     ///
     /// Data returned here is currently not processed anywhere [WIP].
-    fn extend(&self, &AccessTokenRequest, Option<Extension>)
+    fn extend_access_token(&self, &AccessTokenRequest, Option<Extension>)
         -> Result<Option<Extension>, ()>;
 }
 

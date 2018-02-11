@@ -71,7 +71,7 @@ impl GrantExtension for Pkce {
 }
 
 impl CodeExtension for Pkce {
-    fn extend(&self, request: &CodeRequest) -> Result<Option<Extension>, ()> {
+    fn extend_code(&self, request: &CodeRequest) -> Result<Option<Extension>, ()> {
         let challenge = request.extension("code_challenge");
         let method = request.extension("code_challenge_method");
 
@@ -93,7 +93,7 @@ impl CodeExtension for Pkce {
 }
 
 impl AccessTokenExtension for Pkce {
-    fn extend(&self, request: &AccessTokenRequest, code_extension: Option<Extension>)
+    fn extend_access_token(&self, request: &AccessTokenRequest, code_extension: Option<Extension>)
         -> Result<Option<Extension>, ()> {
         let encoded = match code_extension {
             None => return Ok(None),

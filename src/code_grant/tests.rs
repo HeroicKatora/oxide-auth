@@ -928,7 +928,7 @@ impl PkceSetup {
 }
 
 #[test]
-fn pkce_basic_usage() {
+fn pkce_correct_verifier() {
     let mut setup = PkceSetup::new();
 
     let correct_authorization = CraftedRequest {
