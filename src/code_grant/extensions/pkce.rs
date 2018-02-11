@@ -74,15 +74,12 @@ impl CodeExtension for Pkce {
     fn extend_code(&self, request: &CodeRequest) -> Result<Option<Extension>, ()> {
         let challenge = request.extension("code_challenge");
         let method = request.extension("code_challenge_method");
+        let method = method.unwrap_or(Cow::Borrowed("plain"));
 
-        let (challenge, method) = match (challenge, method) {
-            (None, None) => if self.required {
-                    return Err(())
-                } else {
-                    return Ok(None)
-                },
-            (Some(challenge), Some(method)) => (challenge, method),
-            _ => return Err(()),
+        let challenge = match challenge {
+            None if self.required => return Err(()),
+            None => return Ok(None),
+            Some(challenge) => challenge,
         };
 
         let method = Method::from_parameter(method, challenge)?;
@@ -112,7 +109,7 @@ impl AccessTokenExtension for Pkce {
 impl Method {
     fn from_parameter(method: Cow<str>, challenge: Cow<str>) -> Result<Self, ()> {
         match &*method {
-            "Plain" => Ok(Method::Plain(challenge.into_owned())),
+            "plain" => Ok(Method::Plain(challenge.into_owned())),
             "S256" => Ok(Method::Sha256(challenge.into_owned())),
             _ => Err(()),
         }
@@ -128,7 +125,7 @@ impl Method {
 
     fn encode(self) -> String {
         match self {
-            Method::Plain(challenge) => challenge + "P",
+            Method::Plain(challenge) => challenge + "p",
             Method::Sha256(challenge) => challenge + "S",
         }
     }
@@ -136,7 +133,7 @@ impl Method {
     fn from_encoded(mut encoded: String) -> Result<Method, ()> {
         match encoded.pop() {
             None => Err(()),
-            Some('P') => Ok(Method::Plain(encoded)),
+            Some('p') => Ok(Method::Plain(encoded)),
             Some('S') => Ok(Method::Sha256(encoded)),
             _ => Err(())
         }
