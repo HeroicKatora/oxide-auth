@@ -856,7 +856,6 @@ struct PkceSetup {
     auth_token: String,
     verifier: String,
     sha256_challenge: String,
-    plain_challenge: String,
 }
 
 impl PkceSetup {
@@ -879,7 +878,6 @@ impl PkceSetup {
             auth_token: token,
             // The following are from https://tools.ietf.org/html/rfc7636#page-18
             sha256_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string(),
-            plain_challenge: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk".to_string(),
             verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk".to_string(),
         }
     }

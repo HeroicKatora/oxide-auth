@@ -9,6 +9,7 @@ use super::Time;
 use super::grant::Grant;
 use super::generator::{TokenGenerator, Assertion};
 use ring::digest::SHA256;
+use ring::pbkdf2::derive as key_derive;
 use ring::hmac::SigningKey;
 
 /// Issuers create bearer tokens.
@@ -102,11 +103,32 @@ impl TokenSigner {
         TokenSigner { signer: Assertion::new(key) }
     }
 
-    /// Construct a signing instance from a passphrase, deriving a signing key in the process. This
-    /// should generally be regarded as inferior to a properly generated signing key and NO safety
-    /// guarantee is given by the author.
-    pub fn new_from_passphrase(passwd: &str) -> TokenSigner {
-        let key = SigningKey::new(&SHA256, passwd.as_bytes());
+    /// Construct a signing instance from a passphrase, deriving a signing key in the process.
+    ///
+    /// The use of this function is DISCOURAGED.
+    ///
+    /// The salt SHOULD be changed to a self-generated one where possible instead of
+    /// relying on the default one which was generated as 32 random bytes with openssl.
+    /// However, at that point fully switching to private SigningKey instances is possibly
+    /// a better option.
+    pub fn new_from_passphrase(passwd: &str, salt: Option<&[u8]>) -> TokenSigner {
+        // Default salt if none was provided, generated with `openssl rand 32`
+        let salt = salt.unwrap_or(
+            b"\xdf\xcf\xddt\n\xd08a*\xc3\x96\xafj<\x8c\xa7\xaa\x15\xce$\x83ND\xb4\xdf\x98%\xcb\xde\x1f\xf0\x9a"
+        );
+
+        let mut out = Vec::new();
+        out.resize(SHA256.block_len, 0);
+
+        key_derive(
+            &SHA256,
+            // ~32000 iterations, not quite the 10^6 of Lastpass but also more than 1ms on an i5
+            2 << 16,
+            salt,
+            passwd.as_bytes(),
+            out.as_mut_slice());
+        let key = SigningKey::new(&SHA256, out.as_slice());
+
         TokenSigner { signer: Assertion::new(key) }
     }
 }
@@ -136,7 +158,7 @@ mod tests {
     #[test]
     fn token_signer_roundtrip() {
         let passwd = "Some secret password";
-        let mut issuer = TokenSigner::new_from_passphrase(passwd);
+        let mut issuer = TokenSigner::new_from_passphrase(passwd, None);
         let request = Grant {
             client_id: "Client".to_string(),
             owner_id: "Owner".to_string(),
