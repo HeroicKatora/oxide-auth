@@ -3,7 +3,45 @@ use std::{cmp, fmt, str};
 
 use std::collections::HashSet;
 
-/// Scope of a bearer token, a set of scope-tokens encoded with separation by spaces
+/// Scope of a given grant or resource, a set of scope-tokens separated by spaces.
+///
+/// Scopes are interpreted as a conjunction of scope tokens, i.e. a scope is fulfilled if all of
+/// its scope tokens are fulfilled.  This induces a partial ordering on scopes where scope `A`
+/// is smaller than scope `B` if all scope tokens of `A` are also found in `B`.  This can be
+/// interpreted as the rule
+/// > A token with scope `B` is allowed to access a resource requiring scope `A` iff `A <= B`
+///
+/// Example
+/// ------
+///
+/// ```
+/// # extern crate oxide_auth;
+/// # use std::cmp;
+/// # use oxide_auth::primitives::scope::Scope;
+/// # pub fn main() {
+/// let grant_scope    = "some_scope other_scope".parse::<Scope>().unwrap();
+/// let resource_scope = "some_scope".parse::<Scope>().unwrap();
+/// let uncomparable   = "some_scope third_scope".parse::<Scope>().unwrap();
+///
+/// // Holding a grant with `grant_scope` allows access to the resource since:
+/// assert!(resource_scope <= grant_scope);
+///
+/// // But holders would not be allowed to access another resource with scope `uncomparable`:
+/// assert!(!(uncomparable <= grant_scope));
+///
+/// // This would also not work the other way around:
+/// assert!(!(grant_scope <= uncomparable));
+/// # }
+/// ```
+///
+/// Scope-tokens are restricted to the following subset of ascii:
+///   - The character '!'
+///   - The character range '\x32' to '\x5b' which includes numbers and upper case letters
+///   - The character range '\x5d' to '\x7e' which includes lower case letters
+/// Individual scope-tokens are separated by spaces.
+///
+/// In particular, the characters '\x22' (`"`) and '\x5c' (`\`)  are not allowed.
+///
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Scope {
     tokens: HashSet<String>,
@@ -30,6 +68,15 @@ impl Scope {
 /// Error returned from parsing a scope as encoded in an authorization token request.
 #[derive(Debug)]
 pub enum ParseScopeErr {
+    /// A character was encountered which is not allowed to appear in scope strings.
+    ///
+    /// Scope-tokens are restricted to the following subset of ascii:
+    ///   - The character '!'
+    ///   - The character range '\x32' to '\x5b' which includes numbers and upper case letters
+    ///   - The character range '\x5d' to '\x7e' which includes lower case letters
+    /// Individual scope-tokens are separated by spaces.
+    ///
+    /// In particular, the characters '\x22' (`"`) and '\x5c' (`\`)  are not allowed.
     InvalidCharacter(char),
 }
 

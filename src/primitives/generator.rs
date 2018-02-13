@@ -9,12 +9,11 @@
 //!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
 //!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
 //!     is not currently expressed in the type system or with traits.
-use super::grant::{Extension, Extensions, GrantExtension, Grant};
+use super::grant::{Extension, Extensions, Grant};
 use super::{Url, Time};
 use super::scope::Scope;
 
 use std::collections::HashMap;
-use std::fmt;
 
 use base64::{encode, decode};
 use rand::{thread_rng, Rng};
