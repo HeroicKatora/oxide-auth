@@ -6,9 +6,8 @@
 //! side request, it will then check the given parameters to determine the authorization of such
 //! clients.
 use std::collections::HashMap;
-use chrono::{Duration, Utc};
 
-use super::grant::{Grant, GrantRef, GrantRequest};
+use super::grant::Grant;
 use super::generator::TokenGenerator;
 
 /// Authorizers create and manage authorization codes.
@@ -16,12 +15,12 @@ use super::generator::TokenGenerator;
 /// The authorization code can be traded for a bearer token at the token endpoint.
 pub trait Authorizer {
     /// Create a code which allows retrieval of a bearer token at a later time.
-    fn authorize(&mut self, GrantRequest) -> String;
+    fn authorize(&mut self, Grant) -> Result<String, ()>;
 
     /// Retrieve the parameters associated with a token, invalidating the code in the process. In
     /// particular, a code should not be usable twice (there is no stateless implementation of an
     /// authorizer for this reason).
-    fn extract<'a>(&mut self, &'a str) -> Option<GrantRef<'a>>;
+    fn extract(&mut self, &str) -> Option<Grant>;
 }
 
 /// An in-memory hash map.
@@ -43,20 +42,63 @@ impl<I: TokenGenerator> Storage<I> {
 }
 
 impl<I: TokenGenerator> Authorizer for Storage<I> {
-    fn authorize(&mut self, req: GrantRequest) -> String {
-        let owner_id = req.owner_id.to_string();
-        let client_id = req.client_id.to_string();
-        let scope = req.scope.clone();
-        let redirect_uri = req.redirect_uri.clone();
-        let until = Utc::now() + Duration::minutes(10);
-        let grant = Grant {owner_id, client_id, scope, redirect_uri, until };
-
-        let token = self.issuer.generate(&(&grant).into());
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        let token = self.issuer.generate(&grant)?;
         self.tokens.insert(token.clone(), grant);
-        token
+        Ok(token)
     }
 
-    fn extract<'a>(&mut self, grant: &'a str) -> Option<GrantRef<'a>> {
-        self.tokens.remove(grant).map(|v| v.into())
+    fn extract<'a>(&mut self, grant: &'a str) -> Option<Grant> {
+        self.tokens.remove(grant)
+    }
+}
+
+#[cfg(test)]
+/// Tests for authorizer implementations, including those provided here.
+pub mod tests {
+    use super::*;
+    use chrono::Utc;
+    use primitives::grant::Extensions;
+
+    /// Tests some invariants that should be upheld by all authorizers.
+    ///
+    /// Custom implementations may want to import and use this in their own tests.
+    pub fn simple_test_suite(authorizer: &mut Authorizer) {
+        let grant = Grant {
+            owner_id: "Owner".to_string(),
+            client_id: "Client".to_string(),
+            scope: "One two three scopes".parse().unwrap(),
+            redirect_uri: "https://example.com/redirect_me".parse().unwrap(),
+            until: Utc::now(),
+            extensions: Extensions::new(),
+        };
+
+        let token = authorizer.authorize(grant.clone())
+            .expect("Authorization should not fail here");
+        let recovered_grant = authorizer.extract(&token)
+            .expect("Could not extract grant for valid token");
+
+        if grant != recovered_grant {
+            panic!("Grant was not stored correctly");
+        }
+
+        if authorizer.extract(&token).is_some() {
+            panic!("Token must only be usable once");
+        }
+    }
+
+    #[test]
+    fn test_storage() {
+        use primitives::generator::{Assertion, RandomGenerator};
+        use ring::hmac::SigningKey;
+        use ring::digest::SHA256;
+
+        let mut storage = Storage::new(RandomGenerator::new(16));
+        simple_test_suite(&mut storage);
+
+        let assertion_token_instance = Assertion::new(
+            SigningKey::new(&SHA256, b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s="));
+        let mut storage = Storage::new(assertion_token_instance.tag("authorizer"));
+        simple_test_suite(&mut storage);
     }
 }

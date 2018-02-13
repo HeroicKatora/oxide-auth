@@ -27,6 +27,7 @@
 //! [`WebRequest`]: code_grant/frontend/trait.WebRequest.html
 //! [`WebResponse`]: code_grant/frontend/trait.WebResponse.html
 //! [`frontend`]: code_grant/frontend/index.html
+#![warn(missing_docs)]
 
 extern crate base64;
 extern crate chrono;
@@ -39,11 +40,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
-#[warn(missing_docs)]
-pub mod primitives;
-
-#[cfg(feature = "iron-backend")]
-#[warn(missing_docs)]
-pub mod iron;
-
 pub mod code_grant;
+#[cfg(feature = "iron-backend")]
+pub mod iron;
+pub mod primitives;

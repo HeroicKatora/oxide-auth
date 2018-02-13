@@ -11,15 +11,18 @@
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 use primitives::authorizer::Authorizer;
 use primitives::registrar::{PreGrant, ClientUrl, Registrar, RegistrarError};
-use primitives::grant::GrantRequest;
+use primitives::grant::{Extensions, Grant};
 use primitives::issuer::{IssuedToken, Issuer};
 use primitives::scope::Scope;
+
 use super::error::{AccessTokenError, AccessTokenErrorExt, AccessTokenErrorType};
 use super::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
+use super::extensions::{AccessTokenExtension, CodeExtension};
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use serde_json;
 
 /// Defines the correct treatment of the error.
@@ -27,8 +30,11 @@ use serde_json;
 /// it is integral for security to resolve the error internally instead of redirecting the user
 /// agent to a possibly crafted and malicious target.
 pub enum CodeError {
-    Ignore /* Ignore the request entirely */,
-    Redirect(ErrorUrl) /* Redirect to the given url */,
+    /// Ignore the request entirely
+    Ignore ,
+
+    /// Redirect to the given url
+    Redirect(ErrorUrl) ,
 }
 
 /// Encapsulates a redirect to a valid redirect_uri with an error response. The implementation
@@ -42,7 +48,10 @@ pub struct ErrorUrl {
 
 /// Defines actions for the response to an access token request.
 pub enum IssuerError {
+    /// The token did not represent a valid token.
     Invalid(ErrorDescription),
+
+    /// The client did not properly authorize itself.
     Unauthorized(ErrorDescription, String),
 }
 
@@ -54,7 +63,10 @@ pub struct ErrorDescription {
 
 /// Indicates the reason for access failure.
 pub enum AccessError {
+    /// The request did not have enough authorization data or was otherwise malformed.
     InvalidRequest,
+
+    /// The provided authorization did not grant sufficient priviledges.
     AccessDenied,
 }
 
@@ -77,6 +89,7 @@ impl ErrorUrl {
         modifier.modify(&mut self.error);
     }
 
+    /// Modify the error by moving it.
     pub fn with<M>(mut self, modifier: M) -> Self where M: AuthorizationErrorExt {
         modifier.modify(&mut self.error);
         self
@@ -124,6 +137,7 @@ impl ErrorDescription {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Represents an access token, a refresh token and the associated scope for serialization.
 pub struct BearerToken(IssuedToken, String);
 
 impl BearerToken {
@@ -160,8 +174,10 @@ pub trait CodeRequest {
     fn redirect_uri(&self) -> Option<Cow<str>>;
     /// Optional parameter the client can use to identify the redirected user-agent.
     fn state(&self) -> Option<Cow<str>>;
-    /// The method requested, MUST be `code`
+    /// The method requested, valid requests MUST return `code`
     fn method(&self) -> Option<Cow<str>>;
+    /// Retrieve an additional parameter used in an extension
+    fn extension(&self, &str) -> Option<Cow<str>>;
 }
 
 /// CodeRef is a thin wrapper around necessary types to execute an authorization code grant.
@@ -176,15 +192,37 @@ pub struct AuthorizationRequest<'a> {
     pre_grant: PreGrant,
     code: CodeRef<'a>,
     state: Option<String>,
+    extensions: Extensions,
 }
 
 impl<'l> CodeRequest for &'l CodeRequest {
-    fn valid(&self) -> bool { (*self).valid() }
-    fn client_id(&self) -> Option<Cow<str>> { (*self).client_id() }
-    fn scope(&self) -> Option<Cow<str>> { (*self).scope() }
-    fn redirect_uri(&self) -> Option<Cow<str>> { (*self).redirect_uri() }
-    fn state(&self) -> Option<Cow<str>> { (*self).state() }
-    fn method(&self) -> Option<Cow<str>> { (*self).method() }
+    fn valid(&self) -> bool {
+        (*self).valid()
+    }
+
+    fn client_id(&self) -> Option<Cow<str>> {
+        (*self).client_id()
+    }
+
+    fn scope(&self) -> Option<Cow<str>> {
+        (*self).scope()
+    }
+
+    fn redirect_uri(&self) -> Option<Cow<str>> {
+        (*self).redirect_uri()
+    }
+
+    fn state(&self) -> Option<Cow<str>> {
+        (*self).state()
+    }
+
+    fn method(&self) -> Option<Cow<str>> {
+        (*self).method()
+    }
+
+    fn extension(&self, key: &str) -> Option<Cow<str>> {
+        (*self).extension(key)
+    }
 }
 
 impl<'u> CodeRef<'u> {
@@ -197,7 +235,7 @@ impl<'u> CodeRef<'u> {
     /// If the client is not registered, the request will otherwise be ignored, if the request has
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
-    pub fn negotiate(self, request: &CodeRequest)
+    pub fn negotiate(self, request: &CodeRequest, extensions: &[&CodeExtension])
     -> CodeResult<AuthorizationRequest<'u>> {
         if !request.valid() {
             return Err(CodeError::Ignore)
@@ -229,7 +267,7 @@ impl<'u> CodeRef<'u> {
 
         // Setup an error with url and state, makes the code flow afterwards easier
         let error_uri = bound_client.redirect_uri.clone().into_owned();
-        let prepared_error = ErrorUrl::new(error_uri.clone(), state,
+        let prepared_error = ErrorUrl::new(error_uri.clone(), state.clone(),
             AuthorizationError::with(()));
 
         match request.method() {
@@ -249,13 +287,28 @@ impl<'u> CodeRef<'u> {
             Some(Ok(scope)) => Some(scope),
         };
 
+        let mut grant_extensions = Extensions::new();
+
+        for extension_instance in extensions {
+            match extension_instance.extend_code(request) {
+                Err(_) =>
+                    return Err(CodeError::Redirect(prepared_error.with(
+                        AuthorizationErrorType::InvalidRequest))),
+                Ok(Some(extension)) =>
+                    grant_extensions.set(extension_instance, extension),
+                Ok(None) => (),
+            }
+        }
+
         Ok(AuthorizationRequest {
             pre_grant: bound_client.negotiate(scope),
             code: CodeRef { registrar: self.registrar, authorizer: self.authorizer },
-            state: request.state().map(|cow| cow.into_owned()),
+            state: state.map(|cow| cow.into_owned()),
+            extensions: grant_extensions,
         })
     }
 
+    /// Construct a reference capable of handling authorization code requests.
     pub fn with(registrar: &'u Registrar, t: &'u mut Authorizer) -> Self {
         CodeRef { registrar, authorizer: t }
     }
@@ -273,12 +326,17 @@ impl<'a> AuthorizationRequest<'a> {
     /// Inform the backend about consent from a resource owner. Use negotiated parameters to
     /// authorize a client for an owner.
     pub fn authorize(self, owner_id: Cow<'a, str>) -> CodeResult<Url> {
-       let grant = self.code.authorizer.authorize(GrantRequest{
-           owner_id: &owner_id,
-           client_id: &self.pre_grant.client_id,
-           redirect_uri: &self.pre_grant.redirect_uri,
-           scope: &self.pre_grant.scope});
-       let mut url = self.pre_grant.redirect_uri;
+       let mut url = self.pre_grant.redirect_uri.clone();
+
+       let grant = self.code.authorizer.authorize(Grant {
+           owner_id: owner_id.into_owned(),
+           client_id: self.pre_grant.client_id,
+           redirect_uri: self.pre_grant.redirect_uri,
+           scope: self.pre_grant.scope,
+           until: Utc::now() + Duration::minutes(10),
+           extensions: self.extensions,
+       }).map_err(|()| CodeError::Ignore)?;
+
        url.query_pairs_mut()
            .append_pair("code", grant.as_str())
            .extend_pairs(self.state.map(|v| ("state", v)))
@@ -304,7 +362,7 @@ pub struct IssuerRef<'a> {
     issuer: &'a mut Issuer,
 }
 
-/// Necessary
+/// Trait based retrieval of parameters necessary for access token request handling.
 pub trait AccessTokenRequest {
     /// Received request might not be encoded correctly. This method gives implementors the chance
     /// to signal that a request was received but its encoding was generally malformed. If this is
@@ -321,11 +379,13 @@ pub trait AccessTokenRequest {
     fn redirect_uri(&self) -> Option<Cow<str>>;
     /// Valid requests have this set to "authorization_code"
     fn grant_type(&self) -> Option<Cow<str>>;
+    /// Retrieve an additional parameter used in an extension
+    fn extension(&self, &str) -> Option<Cow<str>>;
 }
 
 impl<'u> IssuerRef<'u> {
     /// Try to redeem an authorization code.
-    pub fn use_code(&mut self, request: &AccessTokenRequest)
+    pub fn use_code(&mut self, request: &AccessTokenRequest, extensions: &[&AccessTokenExtension])
     -> AccessTokenResult<BearerToken> {
         if !request.valid() {
             return Err(IssuerError::invalid(()))
@@ -367,19 +427,38 @@ impl<'u> IssuerRef<'u> {
             return Err(IssuerError::invalid(AccessTokenErrorType::InvalidGrant))
         }
 
-        if *saved_params.until.as_ref() < Utc::now() {
+        if saved_params.until < Utc::now() {
             return Err(IssuerError::invalid((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
         }
 
-        let token = self.issuer.issue(GrantRequest{
-            client_id: &saved_params.client_id,
-            owner_id: &saved_params.owner_id,
-            redirect_uri: &saved_params.redirect_uri,
-            scope: &saved_params.scope,
-        });
-        Ok(BearerToken{0: token, 1: saved_params.scope.as_ref().to_string()})
+        let mut code_extensions = saved_params.extensions;
+        let mut access_extensions = Extensions::new();
+
+        for extension_instance in extensions {
+            let saved_extension = code_extensions.remove(extension_instance);
+            match extension_instance.extend_access_token(request, saved_extension) {
+                Err(_) =>  return Err(IssuerError::invalid(())),
+                Ok(Some(extension)) => access_extensions.set(extension_instance, extension),
+                Ok(None) => (),
+            }
+        }
+
+        let token = self.issuer.issue(Grant {
+            client_id: saved_params.client_id,
+            owner_id: saved_params.owner_id,
+            redirect_uri: saved_params.redirect_uri,
+            scope: saved_params.scope.clone(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: access_extensions,
+        }).map_err(|()| IssuerError::invalid((
+            AccessTokenErrorType::InvalidRequest,
+            "Failed to generate issued tokens"
+        )))?;
+
+        Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
     }
 
+    /// Construct a reference capable of issuing access token from authorization codes.
     pub fn with(r: &'u Registrar, t: &'u mut Authorizer, i: &'u mut Issuer) -> Self {
         IssuerRef { registrar: r, authorizer: t, issuer: i }
     }
@@ -395,13 +474,18 @@ pub struct GuardRef<'a> {
     issuer: &'a mut Issuer,
 }
 
+/// Required request methods for deciding on the rights to access a protected resource.
 pub trait GuardRequest {
     /// Received request might not be encoded correctly. This method gives implementors the chance
     /// to signal that a request was received but its encoding was generally malformed. If this is
     /// the case, then no other attribute will be queried. This method exists mainly to make
     /// frontends straightforward by not having them handle special cases for malformed requests.
     fn valid(&self) -> bool;
-    /// The bearer token trying to access some resource.
+    /// The authorization used in the request.
+    ///
+    /// Expects the complete `Authorization` HTTP-header, including the qualification as `Bearer`.
+    /// In case the client included multiple forms of authorization, this method MUST return None
+    /// and the request SHOULD be marked as invalid.
     fn token(&self) -> Option<Cow<str>>;
 }
 
@@ -418,13 +502,13 @@ impl<'a> GuardRef<'a> {
         let grant = self.issuer.recover_token(&token)
             .ok_or(AccessError::AccessDenied)?;
 
-        if *grant.until.as_ref() < Utc::now() {
+        if grant.until < Utc::now() {
             return Err(AccessError::AccessDenied);
         }
 
         // Test if any of the possible allowed scopes is included in the grant
         if !self.scopes.iter()
-            .any(|needed_option| needed_option <= grant.scope.as_ref()) {
+            .any(|resource_scope| resource_scope.allow_access(&grant.scope)) {
             return Err(AccessError::AccessDenied);
         }
 
@@ -433,7 +517,7 @@ impl<'a> GuardRef<'a> {
 
     /// Construct a guard from an issuer backend and a choice of scopes. A grant need only have
     /// ONE of the scopes to access the resource but each scope can require multiple subscopes.
-    pub fn with<S>(issuer: &'a mut Issuer, scopes: &'a S) -> Self
+    pub fn with<S: ?Sized>(issuer: &'a mut Issuer, scopes: &'a S) -> Self
     where S: AsRef<[Scope]> {
         GuardRef { scopes: scopes.as_ref(), issuer: issuer }
     }

@@ -62,11 +62,8 @@
 //! }
 //!
 //! fn handle(state: State, request: &mut MyRequest) -> Result<MyResponse, OAuthError> {
-//!     let issuer = IssuerRef::with(
-//!         state.registrar,
-//!         state.authorizer,
-//!         state.issuer);
-//!     GrantFlow::handle(issuer, request)
+//!     GrantFlow::new(state.registrar, state.authorizer, state.issuer)
+//!         .handle(request)
 //! }
 //! # pub fn main() { }
 //! ```
@@ -83,30 +80,41 @@ use std::error;
 use std::fmt;
 use std::str::from_utf8;
 
-use primitives::registrar::PreGrant;
-use super::backend::{AccessTokenRequest, CodeRequest, CodeError, ErrorUrl, IssuerError};
+use primitives::authorizer::Authorizer;
+use primitives::issuer::Issuer;
+use primitives::registrar::{Registrar, PreGrant};
+use primitives::scope::Scope;
+use super::backend::{AccessTokenRequest, CodeRequest, CodeError, IssuerError};
 use super::backend::{AccessError, GuardRequest};
-pub use super::backend::{CodeRef, IssuerRef, GuardRef};
+use super::extensions::{AccessTokenExtension, CodeExtension};
+
+pub use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
 
 use url::Url;
 use base64;
 
 /// Holds the decode query fragments from the url. This does not hold the excess parameters with a
 /// Cow, as we need to have a mutable reference to it for the authorization handler.
-struct AuthorizationParameter<'l> {
+struct AuthorizationParameter<'a> {
     valid: bool,
-    method: Option<Cow<'l, str>>,
-    client_id: Option<Cow<'l, str>>,
-    scope: Option<Cow<'l, str>>,
-    redirect_uri: Option<Cow<'l, str>>,
-    state: Option<Cow<'l, str>>,
+    method: Option<Cow<'a, str>>,
+    client_id: Option<Cow<'a, str>>,
+    scope: Option<Cow<'a, str>>,
+    redirect_uri: Option<Cow<'a, str>>,
+    state: Option<Cow<'a, str>>,
+    extensions: HashMap<Cow<'a, str>, Cow<'a, str>>,
 }
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
 #[derive(Clone)]
 pub enum Authentication {
+    /// The owner did not authorize the client.
     Failed,
+
+    /// The owner has not yet decided, i.e. the returned page is a form for the user.
     InProgress,
+
+    /// Authorization was granted by the specified user.
     Authenticated(String),
 }
 
@@ -117,6 +125,7 @@ struct AccessTokenParameter<'a> {
     grant_type: Option<Cow<'a, str>>,
     code: Option<Cow<'a, str>>,
     authorization: Option<(String, Vec<u8>)>,
+    extensions: HashMap<Cow<'a, str>, Cow<'a, str>>,
 }
 
 struct GuardParameter<'a> {
@@ -130,14 +139,19 @@ struct GuardParameter<'a> {
 pub trait WebRequest {
     /// The error generated from access of malformed or invalid requests.
     type Error: From<OAuthError>;
+
+    /// The corresponding type of Responses returned from this module.
     type Response: WebResponse<Error=Self::Error>;
+
     /// Retrieve a parsed version of the url query. An Err return value indicates a malformed query
     /// or an otherwise malformed WebRequest. Note that an empty query should result in
     /// `Ok(HashMap::new())` instead of an Err.
     fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()>;
+
     /// Retriev the parsed `application/x-form-urlencoded` body of the request. An Err value
     /// indicates a malformed body or a different Content-Type.
     fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()>;
+
     /// Contents of the authorization header or none if none exists. An Err value indicates a
     /// malformed header or request.
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>;
@@ -172,8 +186,12 @@ pub trait WebResponse where Self: Sized {
     fn with_authorization(self, kind: &str) -> Result<Self, Self::Error>;
 }
 
+/// Some instance which can decide the owners approval based on the request.
 pub trait OwnerAuthorizer {
+    /// The request type handled.
     type Request: WebRequest;
+
+    /// Has the owner granted authorization to the client indicated in the `PreGrant`?
     fn get_owner_authorization(&self, &mut Self::Request, &PreGrant)
       -> Result<(Authentication, <Self::Request as WebRequest>::Response), <Self::Request as WebRequest>::Error>;
 }
@@ -211,35 +229,84 @@ impl<'l, 'c: 'l, W: WebRequest> From<&'l mut &'c mut W> for AuthorizationParamet
             redirect_uri: params.remove("redirect_uri"),
             state: params.remove("state"),
             method: params.remove("response_type"),
+            extensions: params,
         }
     }
 }
 
 impl<'l> CodeRequest for AuthorizationParameter<'l> {
-    fn valid(&self) -> bool { self.valid }
-    fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
-    fn scope(&self) -> Option<Cow<str>> { self.scope.clone() }
-    fn redirect_uri(&self) -> Option<Cow<str>> { self.redirect_uri.clone() }
-    fn state(&self) -> Option<Cow<str>> { self.state.clone() }
-    fn method(&self) -> Option<Cow<str>> { self.method.clone() }
+    fn valid(&self) -> bool {
+        self.valid
+    }
+
+    fn client_id(&self) -> Option<Cow<str>> {
+        self.client_id.clone()
+    }
+
+    fn scope(&self) -> Option<Cow<str>> {
+        self.scope.clone()
+    }
+
+    fn redirect_uri(&self) -> Option<Cow<str>> {
+        self.redirect_uri.clone()
+    }
+
+    fn state(&self) -> Option<Cow<str>> {
+        self.state.clone()
+    }
+
+    fn method(&self) -> Option<Cow<str>> {
+        self.method.clone()
+    }
+
+    fn extension(&self, key: &str) -> Option<Cow<str>> {
+        self.extensions.get(key).cloned()
+    }
 }
 
 impl<'l> AuthorizationParameter<'l> {
     fn invalid() -> Self {
-        AuthorizationParameter { valid: false, method: None, client_id: None, scope: None,
-            redirect_uri: None, state: None }
+        AuthorizationParameter {
+            valid: false,
+            method: None,
+            client_id: None,
+            scope: None,
+            redirect_uri: None,
+            state: None,
+            extensions: HashMap::new()
+        }
     }
 }
 
-pub struct AuthorizationFlow;
-impl AuthorizationFlow {
-    pub fn handle<'c, Req>(granter: CodeRef<'c>, mut request: &'c mut Req, page_handler: &OwnerAuthorizer<Request=Req>)
+/// All relevant methods for handling authorization code requests.
+pub struct AuthorizationFlow<'a> {
+    backend: CodeRef<'a>,
+    extensions: Vec<&'a CodeExtension>,
+}
+
+impl<'a> AuthorizationFlow<'a> {
+    /// Initiate an authorization code token flow.
+    pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
+        AuthorizationFlow {
+            backend: CodeRef::with(registrar, authorizer),
+            extensions: Vec::new(),
+        }
+    }
+
+    /// Add an extension to access token handling.
+    pub fn with_extension(mut self, extension: &'a CodeExtension) -> Self {
+        self.extensions.push(extension);
+        self
+    }
+
+    /// React to an authorization code request, handling owner approval with a specified handler.
+    pub fn handle<Req>(self, mut request: &mut Req, page_handler: &OwnerAuthorizer<Request=Req>)
     -> Result<Req::Response, Req::Error> where
         Req: WebRequest,
     {
         let negotiated = {
             let urldecoded = AuthorizationParameter::from(&mut request);
-            let negotiated = match granter.negotiate(&urldecoded) {
+            let negotiated = match self.backend.negotiate(&urldecoded, self.extensions.as_slice()) {
                 Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
                 Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
                 Ok(v) => v,
@@ -267,7 +334,11 @@ impl AuthorizationFlow {
     }
 }
 
-pub struct GrantFlow;
+/// All relevant methods for granting access token from authorization codes.
+pub struct GrantFlow<'a> {
+    backend: IssuerRef<'a>,
+    extensions: Vec<&'a AccessTokenExtension>,
+}
 
 impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> {
     fn from(mut map: HashMap<Cow<'l, str>, Cow<'l, str>>) -> AccessTokenParameter<'l> {
@@ -278,16 +349,32 @@ impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> 
             redirect_uri: map.remove("redirect_uri"),
             grant_type: map.remove("grant_type"),
             authorization: None,
+            extensions: map,
         }
     }
 }
 
 impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
-    fn valid(&self) -> bool { self.valid }
-    fn code(&self) -> Option<Cow<str>> { self.code.clone() }
-    fn client_id(&self) -> Option<Cow<str>> { self.client_id.clone() }
-    fn redirect_uri(&self) -> Option<Cow<str>> { self.redirect_uri.clone() }
-    fn grant_type(&self) -> Option<Cow<str>> { self.grant_type.clone() }
+    fn valid(&self) -> bool {
+        self.valid
+    }
+
+    fn code(&self) -> Option<Cow<str>> {
+        self.code.clone()
+    }
+
+    fn client_id(&self) -> Option<Cow<str>> {
+        self.client_id.clone()
+    }
+
+    fn redirect_uri(&self) -> Option<Cow<str>> {
+        self.redirect_uri.clone()
+    }
+
+    fn grant_type(&self) -> Option<Cow<str>> {
+        self.grant_type.clone()
+    }
+
     fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
         match self.authorization {
             None => None,
@@ -295,17 +382,42 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
                 => Some((id.as_str().into(), pass.as_slice().into())),
         }
     }
+
+    fn extension(&self, key: &str) -> Option<Cow<str>> {
+        self.extensions.get(key).cloned()
+    }
 }
 
 impl<'l> AccessTokenParameter<'l> {
     fn invalid() -> Self {
-        AccessTokenParameter { valid: false, code: None, client_id: None, redirect_uri: None,
-            grant_type: None, authorization: None }
+        AccessTokenParameter {
+            valid: false,
+            code: None,
+            client_id: None,
+            redirect_uri: None,
+            grant_type: None,
+            authorization: None,
+            extensions: HashMap::new(),
+        }
     }
 }
 
-impl GrantFlow {
-    fn create_valid_params<'a, W: WebRequest>(req: &'a mut W) -> Option<AccessTokenParameter<'a>> {
+impl<'a> GrantFlow<'a> {
+    /// Initiate an access token flow.
+    pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer, issuer: &'a mut Issuer) -> Self {
+        GrantFlow {
+            backend: IssuerRef::with(registrar, authorizer, issuer),
+            extensions: Vec::new(),
+        }
+    }
+
+    /// Add an extension to access token handling.
+    pub fn with_extension(mut self, extension: &'a AccessTokenExtension) -> Self {
+        self.extensions.push(extension);
+        self
+    }
+
+    fn create_valid_params<'w, W: WebRequest>(req: &'w mut W) -> Option<AccessTokenParameter<'w>> {
         let authorization = match req.authheader() {
             Err(_) => return None,
             Ok(None) => None,
@@ -338,7 +450,7 @@ impl GrantFlow {
             },
         };
 
-        let mut params: AccessTokenParameter<'a> = match req.urlbody() {
+        let mut params: AccessTokenParameter<'w> = match req.urlbody() {
             Err(_) => return None,
             Ok(body) => extract_single_parameters(body).into(),
         };
@@ -348,13 +460,14 @@ impl GrantFlow {
         Some(params)
     }
 
-    pub fn handle<Req>(mut issuer: IssuerRef, request: &mut Req)
+    /// Construct a response containing the access token or an error message.
+    pub fn handle<Req>(mut self, request: &mut Req)
     -> Result<Req::Response, Req::Error> where Req: WebRequest
     {
         let params = GrantFlow::create_valid_params(request)
             .unwrap_or(AccessTokenParameter::invalid());
 
-        match issuer.use_code(&params) {
+        match self.backend.use_code(&params, self.extensions.as_slice()) {
             Err(IssuerError::Invalid(json_data))
                 => return Req::Response::json(&json_data.to_json())?.as_client_error(),
             Err(IssuerError::Unauthorized(json_data, scheme))
@@ -364,20 +477,38 @@ impl GrantFlow {
     }
 }
 
-pub struct AccessFlow;
+/// All relevant methods for checking authorization for access to a resource.
+pub struct AccessFlow<'a> {
+    backend: GuardRef<'a>,
+}
 
 impl<'l> GuardRequest for GuardParameter<'l> {
-    fn valid(&self) -> bool { self.valid }
-    fn token(&self) -> Option<Cow<str>> { self.token.clone() }
+    fn valid(&self) -> bool {
+        self.valid
+    }
+
+    fn token(&self) -> Option<Cow<str>> {
+        self.token.clone()
+    }
 }
 
 impl<'l> GuardParameter<'l> {
     fn invalid() -> Self {
-        GuardParameter { valid: false, token: None }
+        GuardParameter {
+            valid: false,
+            token: None
+        }
     }
 }
 
-impl AccessFlow {
+impl<'a> AccessFlow<'a> {
+    /// Initiate an access to a protected resource
+    pub fn new(issuer: &'a mut Issuer, scopes: &'a [Scope]) -> Self {
+        AccessFlow {
+            backend: GuardRef::with(issuer, scopes)
+        }
+    }
+
     fn create_valid_params<W: WebRequest>(req: &mut W) -> Option<GuardParameter> {
         let token = match req.authheader() {
             Err(_) => return None,
@@ -397,12 +528,13 @@ impl AccessFlow {
         Some(GuardParameter { valid: true, token })
     }
 
-    pub fn handle<R>(guard: GuardRef, request: &mut R)
+    /// Indicate if the access is allowed or denied via a result.
+    pub fn handle<R>(&self, request: &mut R)
     -> Result<(), R::Error> where R: WebRequest {
         let params = AccessFlow::create_valid_params(request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
-        guard.protect(&params).map_err(|err| {
+        self.backend.protect(&params).map_err(|err| {
             match err {
                 AccessError::InvalidRequest => OAuthError::InternalAccessError(),
                 AccessError::AccessDenied => OAuthError::AccessDenied,
@@ -417,8 +549,16 @@ impl AccessFlow {
 /// body, unexpected parameters, or security relevant required parameters.
 #[derive(Debug)]
 pub enum OAuthError {
+    /// Some unexpected, internal error occured-
     InternalCodeError(),
+
+    /// Access should be silently denied, without providing further explanation.
+    ///
+    /// For example, this response is given when an incorrect client has been provided in the
+    /// authorization request in order to avoid potential indirect denial of service vulnerabilities.
     InternalAccessError(),
+
+    /// No authorization has been granted.
     AccessDenied,
 }
 

@@ -5,10 +5,8 @@
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
 use std::clone::Clone;
-use std::borrow::Cow;
-use chrono::{Utc, Duration};
 use super::Time;
-use super::grant::{Grant, GrantRef, GrantRequest};
+use super::grant::Grant;
 use super::generator::{TokenGenerator, Assertion};
 use ring::digest::SHA256;
 use ring::pbkdf2::derive as key_derive;
@@ -22,13 +20,13 @@ use ring::hmac::SigningKey;
 /// they do not intend to offer a statefull refresh api).
 pub trait Issuer {
     /// Create a token authorizing the request parameters
-    fn issue(&mut self, GrantRequest) -> IssuedToken;
+    fn issue(&mut self, Grant) -> Result<IssuedToken, ()>;
 
     /// Get the values corresponding to a bearer token
-    fn recover_token<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
+    fn recover_token<'a>(&'a self, &'a str) -> Option<Grant>;
 
     /// Get the values corresponding to a refresh token
-    fn recover_refresh<'a>(&'a self, &'a str) -> Option<GrantRef<'a>>;
+    fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant>;
 }
 
 /// Token parameters returned to a client.
@@ -69,32 +67,25 @@ impl<G: TokenGenerator> TokenMap<G> {
 }
 
 impl<G: TokenGenerator> Issuer for TokenMap<G> {
-    fn issue(&mut self, req: GrantRequest) -> IssuedToken {
-        let grant = Grant {
-            owner_id: req.owner_id.to_string(),
-            client_id: req.client_id.to_string(),
-            scope: req.scope.clone(),
-            redirect_uri: req.redirect_uri.clone(),
-            until: Utc::now() + Duration::hours(1),
-        };
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         let (token, refresh) = {
-            let generator_grant = (&grant).into();
-            let token = self.generator.generate(&generator_grant);
-            let refresh = self.generator.generate(&generator_grant);
+            let token = self.generator.generate(&grant)?;
+            let refresh = self.generator.generate(&grant)?;
             (token, refresh)
         };
+
         let until = grant.until.clone();
         self.access.insert(token.clone(), grant.clone());
         self.refresh.insert(refresh.clone(), grant);
-        IssuedToken { token, refresh, until }
+        Ok(IssuedToken { token, refresh, until })
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
-        self.access.get(token).map(|v| v.into())
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        self.access.get(token).cloned()
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
-        self.refresh.get(token).map(|v| v.into())
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        self.refresh.get(token).cloned()
     }
 }
 
@@ -143,24 +134,17 @@ impl TokenSigner {
 }
 
 impl Issuer for TokenSigner {
-    fn issue(&mut self, req: GrantRequest) -> IssuedToken {
-        let grant = GrantRef {
-            owner_id: req.owner_id.into(),
-            client_id: req.client_id.into(),
-            scope: Cow::Borrowed(req.scope),
-            redirect_uri: Cow::Borrowed(req.redirect_uri),
-            until: Cow::Owned(Utc::now() + Duration::hours(1)),
-        };
-        let token = self.signer.tag("token").generate(&grant);
-        let refresh = self.signer.tag("refresh").generate(&grant);
-        IssuedToken {token, refresh, until: grant.until.into_owned() }
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        let token = self.signer.tag("token").generate(&grant)?;
+        let refresh = self.signer.tag("refresh").generate(&grant)?;
+        Ok(IssuedToken {token, refresh, until: grant.until})
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
         self.signer.tag("token").extract(token).ok()
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<GrantRef<'a>> {
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
         self.signer.tag("refresh").extract(token).ok()
     }
 }
@@ -168,23 +152,29 @@ impl Issuer for TokenSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use primitives::grant::Extensions;
+    use chrono::{Duration, Utc};
+
     #[test]
     fn token_signer_roundtrip() {
         let passwd = "Some secret password";
         let mut issuer = TokenSigner::new_from_passphrase(passwd, None);
-        let request = GrantRequest {
-            client_id: "Client".into(),
-            owner_id: "Owner".into(),
-            redirect_uri: &"https://example.com".parse().unwrap(),
-            scope: &"default".parse().unwrap(),
+        let request = Grant {
+            client_id: "Client".to_string(),
+            owner_id: "Owner".to_string(),
+            redirect_uri: "https://example.com".parse().unwrap(),
+            scope: "default".parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
         };
 
-        let issued = issuer.issue(request);
-        assert!(Utc::now() < issued.until);
+        let issued = issuer.issue(request)
+            .expect("Issuing failed");
+        let from_token = issuer.recover_token(&issued.token)
+            .expect("Could not recover the issued token");
 
-        let from_token = issuer.recover_token(&issued.token).unwrap();
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");
-        assert!(Utc::now() < *from_token.until.as_ref());
+        assert!(Utc::now() < from_token.until);
     }
 }

@@ -384,10 +384,11 @@ impl<PH, R, A> iron::Handler for IronAuthorizer<PH, R, A> where
     fn handle<'a>(&'a self, req: &mut iron::Request) -> IronResult<Response> {
         let mut locked_registrar = self.registrar.lock().unwrap();
         let mut locked_authorizer = self.authorizer.lock().unwrap();
-        let code = CodeRef::with(locked_registrar.deref_mut(), locked_authorizer.deref_mut());
+        let authorization_flow = AuthorizationFlow::new(
+            locked_registrar.deref_mut(), locked_authorizer.deref_mut());
 
         let handler = SpecificOwnerAuthorizer(self.page_handler.as_ref(), PhantomData);
-        AuthorizationFlow::handle(code, req, &handler)
+        authorization_flow.handle(req, &handler)
     }
 }
 
@@ -401,12 +402,11 @@ impl<R, A, I> iron::Handler for IronTokenRequest<R, A, I> where
         let mut locked_registrar = self.registrar.lock().unwrap();
         let mut locked_authorizer = self.authorizer.lock().unwrap();
         let mut locked_issuer = self.issuer.lock().unwrap();
-        let issuer = IssuerRef::with(
+        GrantFlow::new(
             locked_registrar.deref_mut(),
             locked_authorizer.deref_mut(),
-            locked_issuer.deref_mut());
-
-        GrantFlow::handle(issuer, request)
+            locked_issuer.deref_mut())
+            .handle(request)
     }
 }
 
@@ -415,9 +415,8 @@ impl<I> iron::BeforeMiddleware for IronGuard<I> where
 {
     fn before(&self, request: &mut Request) -> IronResult<()> {
         let mut locked_issuer = self.issuer.lock().unwrap();
-        let guard = GuardRef::with(locked_issuer.deref_mut(), &self.scopes);
-
-        AccessFlow::handle(guard, request).into()
+        AccessFlow::new(locked_issuer.deref_mut(), &self.scopes)
+            .handle(request).into()
     }
 }
 
