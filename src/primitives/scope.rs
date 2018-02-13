@@ -29,17 +29,28 @@ impl Scope {
 
 /// Error returned from parsing a scope as encoded in an authorization token request.
 #[derive(Debug)]
-pub struct ParseScopeErr;
+pub enum ParseScopeErr {
+    InvalidCharacter(char),
+}
 
 impl str::FromStr for Scope {
     type Err = ParseScopeErr;
 
     fn from_str(string: &str) -> Result<Scope, ParseScopeErr> {
-        if string.find(Scope::invalid_scope_char).is_some() {
-            return Err(ParseScopeErr)
+        if let Some(ch) = string.chars().find(|&ch| Scope::invalid_scope_char(ch)) {
+            return Err(ParseScopeErr::InvalidCharacter(ch))
         }
         let tokens = string.split(' ').filter(|s| s.len() > 0);
         Ok(Scope{ tokens: tokens.map(|r| r.to_string()).collect() })
+    }
+}
+
+impl fmt::Display for ParseScopeErr {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            &ParseScopeErr::InvalidCharacter(ref chr)
+                => write!(fmt, "Encountered invalid character in scope: {}", chr)
+        }
     }
 }
 

@@ -114,6 +114,11 @@ impl Extensions {
         self.extensions.insert(extension.identifier().to_string(), content);
     }
 
+    /// Set content for an extension without a corresponding instance.
+    pub fn set_raw(&mut self, identifier: String, content: Extension) {
+        self.extensions.insert(identifier.to_string(), content);
+    }
+
     /// Retrieve the stored data of an instance.
     ///
     /// This removes the data from the store to avoid possible mixups and to allow a copyless

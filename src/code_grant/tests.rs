@@ -82,8 +82,8 @@ impl WebResponse for CraftedResponse {
 struct TestGenerator(String);
 
 impl TokenGenerator for TestGenerator {
-    fn generate(&self, _grant: &Grant) -> String {
-        self.0.clone()
+    fn generate(&self, _grant: &Grant) -> Result<String, ()> {
+        Ok(self.0.clone())
     }
 }
 
@@ -437,7 +437,7 @@ impl AccessTokenSetup {
             extensions: Extensions::new(),
         };
 
-        let authtoken = authorizer.authorize(authrequest);
+        let authtoken = authorizer.authorize(authrequest).unwrap();
         registrar.register_client(client);
 
         let basic_authorization = base64::encode(&format!("{}:{}",
@@ -471,7 +471,7 @@ impl AccessTokenSetup {
             extensions: Extensions::new(),
         };
 
-        let authtoken = authorizer.authorize(authrequest);
+        let authtoken = authorizer.authorize(authrequest).unwrap();
         registrar.register_client(client);
 
         let basic_authorization = base64::encode(&format!("{}:{}",
@@ -747,7 +747,7 @@ impl ResourceSetup {
             scope: "legit needed andmore".parse().unwrap(),
             until: Utc::now() + Duration::hours(1),
             extensions: Extensions::new(),
-        });
+        }).unwrap();
 
         let wrong_scope_token = issuer.issue(Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
@@ -756,7 +756,7 @@ impl ResourceSetup {
             scope: "wrong needed".parse().unwrap(),
             until: Utc::now() + Duration::hours(1),
             extensions: Extensions::new(),
-        });
+        }).unwrap();
 
         let small_scope_token = issuer.issue(Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
@@ -765,7 +765,7 @@ impl ResourceSetup {
             scope: "legit".parse().unwrap(),
             until: Utc::now() + Duration::hours(1),
             extensions: Extensions::new(),
-        });
+        }).unwrap();
 
         ResourceSetup {
             issuer,

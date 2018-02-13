@@ -20,7 +20,7 @@ use ring::hmac::SigningKey;
 /// they do not intend to offer a statefull refresh api).
 pub trait Issuer {
     /// Create a token authorizing the request parameters
-    fn issue(&mut self, Grant) -> IssuedToken;
+    fn issue(&mut self, Grant) -> Result<IssuedToken, ()>;
 
     /// Get the values corresponding to a bearer token
     fn recover_token<'a>(&'a self, &'a str) -> Option<Grant>;
@@ -67,17 +67,17 @@ impl<G: TokenGenerator> TokenMap<G> {
 }
 
 impl<G: TokenGenerator> Issuer for TokenMap<G> {
-    fn issue(&mut self, grant: Grant) -> IssuedToken {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         let (token, refresh) = {
-            let token = self.generator.generate(&grant);
-            let refresh = self.generator.generate(&grant);
+            let token = self.generator.generate(&grant)?;
+            let refresh = self.generator.generate(&grant)?;
             (token, refresh)
         };
 
         let until = grant.until.clone();
         self.access.insert(token.clone(), grant.clone());
         self.refresh.insert(refresh.clone(), grant);
-        IssuedToken { token, refresh, until }
+        Ok(IssuedToken { token, refresh, until })
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
@@ -134,10 +134,10 @@ impl TokenSigner {
 }
 
 impl Issuer for TokenSigner {
-    fn issue(&mut self, grant: Grant) -> IssuedToken {
-        let token = self.signer.tag("token").generate(&grant);
-        let refresh = self.signer.tag("refresh").generate(&grant);
-        IssuedToken {token, refresh, until: grant.until}
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        let token = self.signer.tag("token").generate(&grant)?;
+        let refresh = self.signer.tag("refresh").generate(&grant)?;
+        Ok(IssuedToken {token, refresh, until: grant.until})
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
@@ -168,8 +168,10 @@ mod tests {
             extensions: Extensions::new(),
         };
 
-        let issued = issuer.issue(request);
-        let from_token = issuer.recover_token(&issued.token).unwrap();
+        let issued = issuer.issue(request)
+            .expect("Issuing failed");
+        let from_token = issuer.recover_token(&issued.token)
+            .expect("Could not recover the issued token");
 
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");

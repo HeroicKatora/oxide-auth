@@ -15,7 +15,7 @@ use super::generator::TokenGenerator;
 /// The authorization code can be traded for a bearer token at the token endpoint.
 pub trait Authorizer {
     /// Create a code which allows retrieval of a bearer token at a later time.
-    fn authorize(&mut self, Grant) -> String;
+    fn authorize(&mut self, Grant) -> Result<String, ()>;
 
     /// Retrieve the parameters associated with a token, invalidating the code in the process. In
     /// particular, a code should not be usable twice (there is no stateless implementation of an
@@ -42,10 +42,10 @@ impl<I: TokenGenerator> Storage<I> {
 }
 
 impl<I: TokenGenerator> Authorizer for Storage<I> {
-    fn authorize(&mut self, grant: Grant) -> String {
-        let token = self.issuer.generate(&grant);
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        let token = self.issuer.generate(&grant)?;
         self.tokens.insert(token.clone(), grant);
-        token
+        Ok(token)
     }
 
     fn extract<'a>(&mut self, grant: &'a str) -> Option<Grant> {
@@ -73,7 +73,8 @@ pub mod tests {
             extensions: Extensions::new(),
         };
 
-        let token = authorizer.authorize(grant.clone());
+        let token = authorizer.authorize(grant.clone())
+            .expect("Authorization should not fail here");
         let recovered_grant = authorizer.extract(&token)
             .expect("Could not extract grant for valid token");
 

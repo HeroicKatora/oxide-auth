@@ -335,7 +335,7 @@ impl<'a> AuthorizationRequest<'a> {
            scope: self.pre_grant.scope,
            until: Utc::now() + Duration::minutes(10),
            extensions: self.extensions,
-       });
+       }).map_err(|()| CodeError::Ignore)?;
 
        url.query_pairs_mut()
            .append_pair("code", grant.as_str())
@@ -450,7 +450,10 @@ impl<'u> IssuerRef<'u> {
             scope: saved_params.scope.clone(),
             until: Utc::now() + Duration::hours(1),
             extensions: access_extensions,
-        });
+        }).map_err(|()| IssuerError::invalid((
+            AccessTokenErrorType::InvalidRequest,
+            "Failed to generate issued tokens"
+        )))?;
 
         Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
     }
