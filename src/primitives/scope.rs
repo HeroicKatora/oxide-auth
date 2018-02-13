@@ -7,7 +7,7 @@ use std::collections::HashSet;
 ///
 /// Scopes are interpreted as a conjunction of scope tokens, i.e. a scope is fulfilled if all of
 /// its scope tokens are fulfilled.  This induces a partial ordering on scopes where scope `A`
-/// is smaller than scope `B` if all scope tokens of `A` are also found in `B`.  This can be
+/// is less or equal than scope `B` if all scope tokens of `A` are also found in `B`.  This can be
 /// interpreted as the rule
 /// > A token with scope `B` is allowed to access a resource requiring scope `A` iff `A <= B`
 ///
@@ -25,12 +25,15 @@ use std::collections::HashSet;
 ///
 /// // Holding a grant with `grant_scope` allows access to the resource since:
 /// assert!(resource_scope <= grant_scope);
+/// assert!(resource_scope.allow_access(&grant_scope));
 ///
 /// // But holders would not be allowed to access another resource with scope `uncomparable`:
 /// assert!(!(uncomparable <= grant_scope));
+/// assert!(!uncomparable.allow_access(&grant_scope));
 ///
 /// // This would also not work the other way around:
 /// assert!(!(grant_scope <= uncomparable));
+/// assert!(!grant_scope.allow_access(&uncomparable));
 /// # }
 /// ```
 ///
@@ -59,9 +62,15 @@ impl Scope {
     }
 
     /// Determines if this scope has enough privileges to access some resource requiring the scope
-    /// on the right side. This operation is equivalent to comparision via `<=`.
-    pub fn privileged_to(&self, rhs: &Scope) -> bool {
-        self.tokens.is_subset(&rhs.tokens)
+    /// on the right side. This operation is equivalent to comparison via `>=`.
+    pub fn priviledged_to(&self, rhs: &Scope) -> bool {
+        rhs <= self
+    }
+
+    /// Determines if a resouce protected by this scope should allow access to a token with the
+    /// grant on the right side. This operation is equivalent to comparison via `<=`.
+    pub fn allow_access(&self, rhs: &Scope) -> bool {
+        self <= rhs
     }
 }
 
@@ -153,5 +162,18 @@ mod tests {
         assert_eq!(scope_uncmp.partial_cmp(&scope_base), None);
 
         assert_eq!(scope_base.partial_cmp(&scope_base), Some(cmp::Ordering::Equal));
+
+        assert!(scope_base.priviledged_to(&scope_less));
+        assert!(scope_base.priviledged_to(&scope_base));
+        assert!(scope_less.allow_access(&scope_base));
+        assert!(scope_base.allow_access(&scope_base));
+
+        assert!(!scope_less.priviledged_to(&scope_base));
+        assert!(!scope_base.allow_access(&scope_less));
+
+        assert!(!scope_less.priviledged_to(&scope_uncmp));
+        assert!(!scope_base.priviledged_to(&scope_uncmp));
+        assert!(!scope_uncmp.allow_access(&scope_less));
+        assert!(!scope_uncmp.allow_access(&scope_base));
     }
 }

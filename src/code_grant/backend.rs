@@ -508,7 +508,7 @@ impl<'a> GuardRef<'a> {
 
         // Test if any of the possible allowed scopes is included in the grant
         if !self.scopes.iter()
-            .any(|needed_option| needed_option <= &grant.scope) {
+            .any(|resource_scope| resource_scope.allow_access(&grant.scope)) {
             return Err(AccessError::AccessDenied);
         }
 
