@@ -71,7 +71,8 @@ pub struct Grant {
 impl Extension {
     /// Creates an extension whose presence and content can be unveiled by the token holder.
     ///
-    /// Note that this is
+    /// Anyone in possession of the token corresponding to such a grant is potentially able to read
+    /// the content of a public extension.
     pub fn public(content: Option<String>) -> Extension {
         Extension::Public(content)
     }

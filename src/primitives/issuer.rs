@@ -4,10 +4,11 @@
 //! renewed. There exist two fundamental implementation as well, one utilizing in memory hash maps
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
-use std::clone::Clone;
+
 use super::Time;
 use super::grant::Grant;
 use super::generator::{TokenGenerator, Assertion};
+
 use ring::digest::SHA256;
 use ring::pbkdf2::derive as key_derive;
 use ring::hmac::SigningKey;
@@ -150,15 +151,21 @@ impl Issuer for TokenSigner {
 }
 
 #[cfg(test)]
-mod tests {
+/// Tests for issuer implementations, including those provided here.
+pub mod tests {
     use super::*;
     use primitives::grant::Extensions;
+    use primitives::generator::RandomGenerator;
     use chrono::{Duration, Utc};
 
-    #[test]
-    fn token_signer_roundtrip() {
-        let passwd = "Some secret password";
-        let mut issuer = TokenSigner::new_from_passphrase(passwd, None);
+    /// Tests the simplest invariants that should be upheld by all authorizers.
+    ///
+    /// This create a token, without any extensions, an lets the issuer generate a issued token.
+    /// The uri is `https://example.com` and the token lasts for an hour. Generation of a valid
+    /// refresh token is not tested against.
+    ///
+    /// Custom implementations may want to import and use this in their own tests.
+    pub fn simple_test_suite(issuer: &mut Issuer) {
         let request = Grant {
             client_id: "Client".to_string(),
             owner_id: "Owner".to_string(),
@@ -176,5 +183,18 @@ mod tests {
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");
         assert!(Utc::now() < from_token.until);
+    }
+
+    #[test]
+    fn signer_test_suite() {
+        let passwd = "Some secret password";
+        let mut signer = TokenSigner::new_from_passphrase(passwd, None);
+        simple_test_suite(&mut signer);
+    }
+
+    #[test]
+    fn token_map_test_suite() {
+        let mut token_map = TokenMap::new(RandomGenerator::new(16));
+        simple_test_suite(&mut token_map);
     }
 }

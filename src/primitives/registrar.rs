@@ -238,6 +238,43 @@ impl Registrar for ClientMap {
 mod tests {
     use super::*;
 
+    /// A test suite for registrars which support simple registrations of arbitrary clients
+    pub fn simple_test_suite<Reg, RegFn>(registrar: &mut Reg, register: RegFn)
+    where
+        Reg: Registrar,
+        RegFn: Fn(&mut Reg, Client)
+    {
+        let public_id = "PrivateClientId";
+        let client_url = "https://example.com";
+
+        let private_id = "PublicClientId";
+        let private_passphrase = b"WOJJCcS8WyS2aGmJK6ZADg==";
+
+        let public_client = Client::public(public_id, client_url.parse().unwrap(),
+            "default".parse().unwrap());
+
+        register(registrar, public_client);
+
+        {
+            let recovered_client = registrar.client(public_id)
+                .expect("Registered client not available");
+            recovered_client.check_authentication(None)
+                .expect("Authorization of public client has changed");
+        }
+
+        let private_client = Client::confidential(private_id, client_url.parse().unwrap(),
+            "default".parse().unwrap(), private_passphrase);
+
+        register(registrar, private_client);
+
+        {
+            let recovered_client = registrar.client(private_id)
+                .expect("Registered client not available");
+            recovered_client.check_authentication(Some(private_passphrase))
+                .expect("Authorization of private client has changed");
+        }
+    }
+
     #[test]
     fn public_client() {
         let client = Client::public("ClientId", "https://example.com".parse().unwrap(),
@@ -255,5 +292,11 @@ mod tests {
         assert!(client.check_authentication(Some(pass)).is_ok());
         assert!(client.check_authentication(Some(b"not the passphrase")).is_err());
         assert!(client.check_authentication(Some(b"")).is_err());
+    }
+
+    #[test]
+    fn client_map() {
+        let mut client_map = ClientMap::new();
+        simple_test_suite(&mut client_map, ClientMap::register_client);
     }
 }
