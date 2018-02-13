@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth"
-version = "0.1.2"
+version = "0.2.0-alpha"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
@@ -13,17 +13,16 @@ license = "MIT"
 
 
 [dependencies]
-base64 = "^0.6"
+base64 = "^0.9"
 chrono = "^0.4"
 iron = { version = "^0.5", optional = true }
 serde = "^1.0"
 serde_derive = "^1.0"
 serde_json = "^1.0"
-rand = "^0.3"
-rental = "^0.3.3"
+rand = "^0.4"
 ring = "0.13.0-alpha"
 rmp-serde = "^0.13"
-url = "^1.5"
+url = "^1.6"
 urlencoded = { version = "^0.5", optional = true }
 
 [features]
