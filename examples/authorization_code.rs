@@ -9,7 +9,7 @@ mod main {
     extern crate urlencoded;
 
     use self::iron::prelude::*;
-    use self::oxide_auth::iron::prelude::*;
+    use self::oxide_auth::frontends::iron::prelude::*;
     use self::urlencoded::UrlEncodedQuery;
     use support::iron::dummy_client;
     use support::open_in_browser;
@@ -53,9 +53,9 @@ mod main {
         router.get("/", protected, "protected");
 
         // Start the server, in a real application this MUST be https instead
-        let join = thread::spawn(|| iron::Iron::new(router).http("localhost:8020").unwrap());
+        let join = thread::spawn(|| iron::Iron::new(router).http(("localhost", 8020)).unwrap());
         // Start a dummy client instance which simply relays the token/response
-        let client = thread::spawn(|| iron::Iron::new(dummy_client).http("localhost:8021").unwrap());
+        let client = thread::spawn(|| iron::Iron::new(dummy_client).http(("localhost", 8021)).unwrap());
 
         // Try to direct the browser to an url initiating the flow
         open_in_browser();
