@@ -1,6 +1,6 @@
 mod support;
 
-#[cfg(feature = "iron-backend")]
+#[cfg(feature = "iron-frontend")]
 mod main {
     extern crate oxide_auth;
     extern crate iron;
@@ -115,7 +115,7 @@ mod main {
     }
 }
 
-#[cfg(not(feature = "iron-backend"))]
+#[cfg(not(feature = "iron-frontend"))]
 mod main { pub fn example() { } }
 
 fn main() {

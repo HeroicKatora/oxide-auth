@@ -1,4 +1,4 @@
-#[cfg(feature = "iron-backend")]
+#[cfg(feature = "iron-frontend")]
 pub mod iron;
 
 pub fn open_in_browser() {
