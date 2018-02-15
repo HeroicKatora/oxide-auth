@@ -37,7 +37,7 @@ mod main {
         let passphrase = "This is a super secret phrase";
         let bearer_tokens = Mutex::new(TokenSigner::new_from_passphrase(passphrase, None));
 
-        let server = Server::new(("localhost", 8020), move |mut request| {
+        let server = Server::new(("localhost", 8020), move |request| {
             use std::ops::DerefMut;
 
             router!(request,
@@ -45,7 +45,7 @@ mod main {
                     let mut issuer = bearer_tokens.lock().unwrap();
                     if let Err(_) = AccessFlow::new(issuer.deref_mut(),
                             &vec!["default".parse().unwrap()]
-                        ).handle(&mut request)
+                        ).handle(request)
                     {
 let text = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
@@ -62,14 +62,14 @@ here</a> to begin the authorization process.
                     let mut registrar = clients.lock().unwrap();
                     let mut authorizer = authorization_codes.lock().unwrap();
                     AuthorizationFlow::new(registrar.deref_mut(), authorizer.deref_mut())
-                        .handle(&mut request, &handle_get)
+                        .handle(request, &handle_get)
                         .unwrap_or_else(|_| Response::empty_400())
                 },
                 (POST) ["/authorize"] => {
                     let mut registrar = clients.lock().unwrap();
                     let mut authorizer = authorization_codes.lock().unwrap();
                     AuthorizationFlow::new(registrar.deref_mut(), authorizer.deref_mut())
-                        .handle(&mut request, &handle_post)
+                        .handle(request, &handle_post)
                         .unwrap_or_else(|_| Response::empty_400())
                 },
                 (POST) ["/token"] => {
@@ -77,7 +77,7 @@ here</a> to begin the authorization process.
                     let mut issuer = bearer_tokens.lock().unwrap();
                     let mut registrar = clients.lock().unwrap();
                     GrantFlow::new(registrar.deref_mut(), authorizer.deref_mut(), issuer.deref_mut())
-                        .handle(&mut request)
+                        .handle(request)
                         .unwrap_or_else(|_| Response::empty_400())
                 },
                 _ => Response::empty_404()

@@ -212,8 +212,8 @@ fn extract_single_parameters<'l>(params: Cow<'l, HashMap<String, Vec<String>>>)
     }
 }
 
-impl<'l, 'c: 'l, W: WebRequest> From<&'l mut &'c mut W> for AuthorizationParameter<'l> {
-    fn from(val: &'l mut &'c mut W) -> Self {
+impl<'l, W: WebRequest> From<&'l mut W> for AuthorizationParameter<'l> {
+    fn from(val: &'l mut W) -> Self {
         let mut params = match val.query() {
             Err(()) => return Self::invalid(),
             Ok(query) => extract_single_parameters(query),
@@ -297,7 +297,7 @@ impl<'a> AuthorizationFlow<'a> {
     }
 
     /// React to an authorization code request, handling owner approval with a specified handler.
-    pub fn handle<Req>(self, mut request: &mut Req, page_handler: &OwnerAuthorizer<Req>)
+    pub fn handle<Req>(self, mut request: Req, page_handler: &OwnerAuthorizer<Req>)
     -> Result<Req::Response, Req::Error> where
         Req: WebRequest,
     {
@@ -312,7 +312,7 @@ impl<'a> AuthorizationFlow<'a> {
             negotiated
         };
 
-        let authorization = match page_handler.get_owner_authorization(request, negotiated.pre_grant())? {
+        let authorization = match page_handler.get_owner_authorization(&mut request, negotiated.pre_grant())? {
             (Authentication::Failed, _)
                 => negotiated.deny(),
             (Authentication::InProgress, response)
@@ -458,10 +458,10 @@ impl<'a> GrantFlow<'a> {
     }
 
     /// Construct a response containing the access token or an error message.
-    pub fn handle<Req>(mut self, request: &mut Req)
+    pub fn handle<Req>(mut self, mut request: Req)
     -> Result<Req::Response, Req::Error> where Req: WebRequest
     {
-        let params = GrantFlow::create_valid_params(request)
+        let params = GrantFlow::create_valid_params(&mut request)
             .unwrap_or(AccessTokenParameter::invalid());
 
         match self.backend.use_code(&params, self.extensions.as_slice()) {
@@ -526,9 +526,9 @@ impl<'a> AccessFlow<'a> {
     }
 
     /// Indicate if the access is allowed or denied via a result.
-    pub fn handle<R>(&self, request: &mut R)
+    pub fn handle<R: 'a>(&self, mut request: R)
     -> Result<(), R::Error> where R: WebRequest {
-        let params = AccessFlow::create_valid_params(request)
+        let params = AccessFlow::create_valid_params(&mut request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
         self.backend.protect(&params).map_err(|err| {

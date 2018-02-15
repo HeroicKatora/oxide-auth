@@ -10,7 +10,6 @@ use self::rouille::{Request, Response};
 use std::collections::HashMap;
 use std::io::Read;
 
-
 pub fn dummy_client(request: &Request) -> Response {
     if let Some(cause) = request.get_param("error") {
         return Response::text(format!("Error during owner authorization: {:?}", cause))

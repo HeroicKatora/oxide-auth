@@ -249,14 +249,14 @@ impl<A: Handler> GenericOwnerAuthorizer for IronOwnerAuthorizer<A> {
 
 struct SpecificOwnerAuthorizer<'l, 'a, 'b: 'a>(&'l GenericOwnerAuthorizer, PhantomData<Request<'a, 'b>>);
 
-impl<'l, 'a, 'b: 'a> OwnerAuthorizer<Request<'a, 'b>> for SpecificOwnerAuthorizer<'l, 'a, 'b> {
-    fn get_owner_authorization(&self, req: &mut Request<'a, 'b>, auth: &PreGrant)
+impl<'l, 'a, 'b: 'a, 'r> OwnerAuthorizer<&'r mut Request<'a, 'b>> for SpecificOwnerAuthorizer<'l, 'a, 'b> {
+    fn get_owner_authorization(&self, req: &mut &'r mut Request<'a, 'b>, auth: &PreGrant)
     -> IronResult<(Authentication, Response)> {
         self.0.get_owner_authorization(req, auth)
     }
 }
 
-impl<'a, 'b> WebRequest for Request<'a, 'b> {
+impl<'a, 'b, 'r> WebRequest for &'r mut Request<'a, 'b> {
     type Response = Response;
     type Error = IronError;
 
@@ -383,14 +383,14 @@ impl<PH, R, A> Handler for IronAuthorizer<PH, R, A> where
     R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static
 {
-    fn handle<'a>(&'a self, req: &mut Request) -> IronResult<Response> {
+    fn handle(&self, request: &mut Request) -> IronResult<Response> {
         let mut locked_registrar = self.registrar.lock().unwrap();
         let mut locked_authorizer = self.authorizer.lock().unwrap();
         let authorization_flow = AuthorizationFlow::new(
             locked_registrar.deref_mut(), locked_authorizer.deref_mut());
 
         let handler = SpecificOwnerAuthorizer(self.page_handler.as_ref(), PhantomData);
-        authorization_flow.handle(req, &handler)
+        authorization_flow.handle(request, &handler)
     }
 }
 
@@ -400,7 +400,7 @@ impl<R, A, I> Handler for IronTokenRequest<R, A, I> where
     A: Authorizer + Send + 'static,
     I: Issuer + Send + 'static
 {
-    fn handle<'a>(&'a self, request: &mut Request) -> IronResult<Response> {
+    fn handle(&self, request: &mut Request) -> IronResult<Response> {
         let mut locked_registrar = self.registrar.lock().unwrap();
         let mut locked_authorizer = self.authorizer.lock().unwrap();
         let mut locked_issuer = self.issuer.lock().unwrap();
