@@ -187,13 +187,10 @@ pub trait WebResponse where Self: Sized {
 }
 
 /// Some instance which can decide the owners approval based on the request.
-pub trait OwnerAuthorizer {
-    /// The request type handled.
-    type Request: WebRequest;
-
+pub trait OwnerAuthorizer<Request: WebRequest> {
     /// Has the owner granted authorization to the client indicated in the `PreGrant`?
-    fn get_owner_authorization(&self, &mut Self::Request, &PreGrant)
-      -> Result<(Authentication, <Self::Request as WebRequest>::Response), <Self::Request as WebRequest>::Error>;
+    fn get_owner_authorization(&self, &mut Request, &PreGrant)
+      -> Result<(Authentication, <Request as WebRequest>::Response), <Request as WebRequest>::Error>;
 }
 
 fn extract_single_parameters<'l>(params: Cow<'l, HashMap<String, Vec<String>>>)
@@ -300,7 +297,7 @@ impl<'a> AuthorizationFlow<'a> {
     }
 
     /// React to an authorization code request, handling owner approval with a specified handler.
-    pub fn handle<Req>(self, mut request: &mut Req, page_handler: &OwnerAuthorizer<Request=Req>)
+    pub fn handle<Req>(self, mut request: &mut Req, page_handler: &OwnerAuthorizer<Req>)
     -> Result<Req::Response, Req::Error> where
         Req: WebRequest,
     {

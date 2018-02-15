@@ -1,5 +1,7 @@
 #[cfg(feature = "iron-frontend")]
 pub mod iron;
+#[cfg(feature = "rouille-frontend")]
+pub mod rouille;
 
 pub fn open_in_browser() {
     let target_addres = "http://localhost:8020/";

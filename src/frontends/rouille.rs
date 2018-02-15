@@ -7,8 +7,8 @@ extern crate serde_urlencoded;
 
 use code_grant::frontend::{WebRequest, WebResponse};
 pub use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow};
-pub use code_grant::frontend::{Authentication, OAuthError};
-pub use code_grant::prelude::{PreGrant, Scope};
+pub use code_grant::frontend::{Authentication, OAuthError, OwnerAuthorizer};
+pub use code_grant::prelude::*;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use self::rouille::{Request, Response};
 use url::Url;
 
-impl WebRequest for Request {
+impl<'a> WebRequest for &'a Request {
     type Error = OAuthError;
     type Response = Response;
 
@@ -77,5 +77,15 @@ impl WebResponse for Response {
         self.status_code = 401;
         let replaced = self.with_unique_header("WWW-Authenticate", Cow::Owned(kind.to_string()));
         Ok(replaced)
+    }
+}
+
+impl<'a, F> OwnerAuthorizer<&'a Request> for F
+where
+    F: for<'r, 's> Fn(&'r Request, &'s PreGrant) -> Result<(Authentication, Response), OAuthError> {
+
+    fn get_owner_authorization(&self, request: &mut &'a Request, grant: &PreGrant)
+    -> Result<(Authentication, Response), OAuthError> {
+        self(request, grant)
     }
 }

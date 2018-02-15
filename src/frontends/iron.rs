@@ -249,9 +249,8 @@ impl<A: Handler> GenericOwnerAuthorizer for IronOwnerAuthorizer<A> {
 
 struct SpecificOwnerAuthorizer<'l, 'a, 'b: 'a>(&'l GenericOwnerAuthorizer, PhantomData<Request<'a, 'b>>);
 
-impl<'l, 'a, 'b: 'a> OwnerAuthorizer for SpecificOwnerAuthorizer<'l, 'a, 'b> {
-    type Request = Request<'a, 'b>;
-    fn get_owner_authorization(&self, req: &mut Self::Request, auth: &PreGrant)
+impl<'l, 'a, 'b: 'a> OwnerAuthorizer<Request<'a, 'b>> for SpecificOwnerAuthorizer<'l, 'a, 'b> {
+    fn get_owner_authorization(&self, req: &mut Request<'a, 'b>, auth: &PreGrant)
     -> IronResult<(Authentication, Response)> {
         self.0.get_owner_authorization(req, auth)
     }
