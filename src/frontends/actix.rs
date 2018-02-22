@@ -3,104 +3,85 @@ extern crate futures;
 
 use code_grant::frontend::{WebRequest, WebResponse};
 pub use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow};
-use code_grant::frontend::{Authentication, OAuthError, OwnerAuthorizer};
-use code_grant::prelude::*;
+pub use code_grant::frontend::{Authentication, OAuthError, OwnerAuthorizer};
+pub use code_grant::prelude::*;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 
 use self::actix_web::{HttpRequest, HttpResponse, StatusCode};
 use self::actix_web::dev::UrlEncoded;
-use self::futures::{Async, Future, Poll};
+use self::futures::{Async, Poll};
+pub use self::futures::Future;
 use url::Url;
 
 pub trait OAuth {
-    fn oauth2(self) -> OAuthRequest;
+    type State;
+    fn oauth2(self) -> OAuthRequest<Self::State>;
 }
 
-pub struct OAuthRequest(HttpRequest);
+pub struct OAuthRequest<State>(HttpRequest<State>);
 
-struct ResolvedRequest<'a> {
-    request: &'a HttpRequest,
-    authentication: Result<Option<Cow<'a, str>>, ()>,
+struct ResolvedRequest<State> {
+    request: HttpRequest<State>,
+    authentication: Result<Option<String>, ()>,
     query: Result<HashMap<String, Vec<String>>, ()>,
     body: Result<HashMap<String, Vec<String>>, ()>,
 }
 
-enum OAuthRequestError {
-    UrlEncoded(<UrlEncoded as Future>::Error),
-}
-
-impl OAuth for HttpRequest {
-    fn oauth2(self) -> OAuthRequest {
+impl<State> OAuth for HttpRequest<State> {
+    type State = State;
+    fn oauth2(self) -> OAuthRequest<State> {
         OAuthRequest(self)
     }
 }
 
-impl OAuthRequest {
-    fn authorization_code<'f, F: 'f, A: 'f>(self, f: F, auth: A) -> AuthorizationCodeRequest<'f, F, A>
-    where
-        F: FnOnce() -> AuthorizationFlow<'f>,
-        A: Fn(&HttpRequest, &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
+impl<State> OAuthRequest<State> {
+    pub fn authorization_code(self) -> AuthorizationCodeRequest<State> {
         let OAuthRequest(request) = self;
 
         AuthorizationCodeRequest {
-            request: request,
-            owner_authorization: Some(auth),
-            context: Some(f),
+            request: Some(request),
         }
     }
 
-    fn access_token<'f, F: 'f>(self, f: F) -> GrantRequest<'f, F>
-    where
-        F: FnOnce() -> GrantFlow<'f> {
+    pub fn access_token(self) -> GrantRequest<State> {
         let OAuthRequest(request) = self;
         let body = request.urlencoded();
 
         GrantRequest {
-            request: request,
+            request: Some(request),
             body: body,
-            context: Some(f),
         }
     }
 
-    fn guard<'f, F: 'f>(self, f: F) -> GuardRequest<'f, F>
-    where
-        F: FnOnce() -> AccessFlow<'f> {
+    pub fn guard(self) -> GuardRequest<State> {
         let OAuthRequest(request) = self;
 
         GuardRequest {
-            request: request,
-            context: Some(f),
+            request: Some(request),
         }
     }
 }
 
-struct AuthorizationCodeRequest<'f, F: 'f, A: 'f>
-where
-    F: FnOnce() -> AuthorizationFlow<'f>,
-    A: Fn(&HttpRequest, &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
-    request: HttpRequest,
-    owner_authorization: Option<A>,
-    context: Option<F>,
+pub struct AuthorizationCodeRequest<State> {
+    request: Option<HttpRequest<State>>,
 }
 
-struct GrantRequest<'f, F: 'f>
-where
-    F: FnOnce() -> GrantFlow<'f> {
-    request: HttpRequest,
+pub struct GrantRequest<State> {
+    request: Option<HttpRequest<State>>,
     body: UrlEncoded,
-    context: Option<F>,
 }
 
-struct GuardRequest<'f, F: 'f>
-where
-    F: FnOnce() -> AccessFlow<'f> {
-    request: HttpRequest,
-    context: Option<F>,
+pub struct GuardRequest<State> {
+    request: Option<HttpRequest<State>>,
 }
 
-impl<'a> WebRequest for ResolvedRequest<'a> {
+pub struct ReadyAuthorizationCodeRequest<State>(ResolvedRequest<State>);
+pub struct ReadyGrantRequest<State>(ResolvedRequest<State>);
+pub struct ReadyGuardRequest<State>(ResolvedRequest<State>);
+
+impl<State> WebRequest for ResolvedRequest<State> {
     type Error = OAuthError;
     type Response = HttpResponse;
 
@@ -113,7 +94,11 @@ impl<'a> WebRequest for ResolvedRequest<'a> {
      }
 
      fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>{
-         self.authentication.clone()
+         match &self.authentication {
+             &Ok(Some(ref string)) => Ok(Some(Cow::Borrowed(string))),
+             &Ok(None) => Ok(None),
+             &Err(_) => Err(())
+         }
      }
 }
 
@@ -159,25 +144,27 @@ impl WebResponse for HttpResponse {
     }
 }
 
-impl<'a> ResolvedRequest<'a> {
-    fn headers_only(request: &'a mut HttpRequest) -> Self {
+impl<State> ResolvedRequest<State> {
+    fn headers_only(request: HttpRequest<State>) -> Self {
+        let authentication = match request.headers().get("Authentication").map(|header| header.to_str()) {
+            None => Ok(None),
+            Some(Ok(as_str)) => Ok(Some(as_str.to_string())),
+            Some(Err(_)) => Err(())
+        };
+        let query = request
+            .query()
+            .iter()
+            .map(|&(ref key, ref val)| (key.clone().into_owned(), vec![val.clone().into_owned()]))
+            .collect();
         ResolvedRequest {
             request: request,
-            authentication: match request.headers().get("Authentication").map(|header| header.to_str()) {
-                None => Ok(None),
-                Some(Ok(as_str)) => Ok(Some(Cow::Borrowed(as_str))),
-                Some(Err(_)) => Err(())
-            },
-            query: Ok(request
-                .query()
-                .iter()
-                .map(|&(ref key, ref val)| (key.clone().into_owned(), vec![val.clone().into_owned()]))
-                .collect()),
+            authentication: authentication,
+            query: Ok(query),
             body: Err(()),
         }
     }
 
-    fn with_body(request: &'a mut HttpRequest, body: HashMap<String, String>) -> Self {
+    fn with_body(request: HttpRequest<State>, body: HashMap<String, String>) -> Self {
         let mut resolved = Self::headers_only(request);
         resolved.body = Ok(body
             .into_iter()
@@ -189,54 +176,34 @@ impl<'a> ResolvedRequest<'a> {
 
 struct ResolvedOwnerAuthorization<A>(A);
 
-impl<'f, A: 'f> OwnerAuthorizer<ResolvedRequest<'f>> for ResolvedOwnerAuthorization<A>
-where A: Fn(&HttpRequest, &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
-    fn get_owner_authorization(&self, request: &mut ResolvedRequest<'f>, grant: &PreGrant)
+impl<A, State> OwnerAuthorizer<ResolvedRequest<State>> for ResolvedOwnerAuthorization<A>
+where A: Fn(&HttpRequest<State>, &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
+    fn get_owner_authorization(&self, request: &mut ResolvedRequest<State>, grant: &PreGrant)
     -> Result<(Authentication, HttpResponse), OAuthError> {
-        self.0(request.request, grant)
+        self.0(&request.request, grant)
     }
 }
 
-impl<'f, F: 'f, A: 'f> Future for AuthorizationCodeRequest<'f, F, A>
-where
-    F: FnOnce() -> AuthorizationFlow<'f>,
-    A: Fn(&HttpRequest, &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
-    type Item = HttpResponse;
+impl<State> Future for AuthorizationCodeRequest<State> {
+    type Item = ReadyAuthorizationCodeRequest<State>;
     type Error = OAuthError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let resolved = ResolvedRequest::headers_only(&mut self.request);
-
-        // Contract error if this happens multiple times
-        let context = self.context.take().unwrap()();
-
-        let owner_authorization = self.owner_authorization.take().unwrap();
-        let owner_authorization = ResolvedOwnerAuthorization(owner_authorization);
-
-        match context.handle(resolved, &owner_authorization) {
-            Ok(response) => Ok(Async::Ready(response)),
-            Err(err) => Err(err),
-        }
+        let resolved = ResolvedRequest::headers_only(self.request.take().unwrap());
+        Ok(Async::Ready(ReadyAuthorizationCodeRequest(resolved)))
     }
 }
 
 
-impl<'f, F: 'f> Future for GrantRequest<'f, F>
-where
-    F: FnOnce() -> GrantFlow<'f> {
-    type Item = HttpResponse;
+impl<State> Future for GrantRequest<State> {
+    type Item = ReadyGrantRequest<State>;
     type Error = OAuthError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.body.poll() {
             Ok(Async::Ready(body)) => {
-                let resolved = ResolvedRequest::with_body(&mut self.request, body);
-                // Contract error if this happens multiple times
-                let context = self.context.take().unwrap()();
-                match context.handle(resolved) {
-                    Ok(response) => Ok(Async::Ready(response)),
-                    Err(err) => Err(err),
-                }
+                let resolved = ResolvedRequest::with_body(self.request.take().unwrap(), body);
+                Ok(Async::Ready(ReadyGrantRequest(resolved)))
             },
             Ok(Async::NotReady) => Ok(Async::NotReady),
 
@@ -246,20 +213,44 @@ where
     }
 }
 
-impl<'f, F: 'f> Future for GuardRequest<'f, F>
-where
-    F: FnOnce() -> AccessFlow<'f> {
-    type Item = ();
+impl<State> Future for GuardRequest<State> {
+    type Item = ReadyGuardRequest<State>;
     type Error = OAuthError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let resolved = ResolvedRequest::headers_only(&mut self.request);
+        let resolved = ResolvedRequest::headers_only(self.request.take().unwrap());
+        Ok(Async::Ready(ReadyGuardRequest(resolved)))
+    }
+}
 
-        // Contract error if this happens multiple times
-        let context = self.context.take().unwrap()();
-        match context.handle(resolved) {
-            Ok(response) => Ok(Async::Ready(response)),
-            Err(err) => Err(err),
-        }
+impl<State> ReadyAuthorizationCodeRequest<State> {
+    pub fn handle<A>(self, flow: AuthorizationFlow, authorizer: A) -> Result<HttpResponse, OAuthError>
+    where
+        A: Fn(&HttpRequest<State>, &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
+        flow.handle(self.0, &ResolvedOwnerAuthorization(authorizer))
+    }
+
+    pub fn state(&self) -> &State {
+        self.0.request.state()
+    }
+}
+
+impl<State> ReadyGrantRequest<State> {
+    pub fn handle(self, flow: GrantFlow) -> Result<HttpResponse, OAuthError> {
+        flow.handle(self.0)
+    }
+
+    pub fn state(&self) -> &State {
+        self.0.request.state()
+    }
+}
+
+impl<State> ReadyGuardRequest<State> {
+    pub fn handle(self, flow: AccessFlow) -> Result<(), OAuthError> {
+        flow.handle(self.0)
+    }
+
+    pub fn state(&self) -> &State {
+        self.0.request.state()
     }
 }

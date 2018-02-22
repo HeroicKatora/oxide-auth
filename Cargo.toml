@@ -13,11 +13,13 @@ license = "MIT"
 
 
 [dependencies]
+actix = { version = "0.4.5", optional = true }
 actix-web = { version = "0.3.3", optional = true }
 base64 = "^0.9"
 chrono = "^0.4"
 iron = { version = "^0.5", optional = true }
 futures = { version = "0.1.18", optional = true }
+lazy_static = { version = "1.0", optional = true }
 serde = "^1.0"
 serde_derive = "^1.0"
 serde_json = "^1.0"
@@ -33,7 +35,7 @@ urlencoded = { version = "^0.5", optional = true }
 default = ["actix-frontend"]
 iron-frontend = ["iron", "urlencoded"]
 rouille-frontend = ["rouille", "serde_urlencoded"]
-actix-frontend = ["actix-web", "futures"]
+actix-frontend = ["actix", "actix-web", "lazy_static", "futures"]
 
 [dev-dependencies]
 router = "^0.5"

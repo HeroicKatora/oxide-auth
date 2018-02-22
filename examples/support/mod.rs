@@ -11,6 +11,8 @@
 pub mod iron;
 #[cfg(feature = "rouille-frontend")]
 pub mod rouille;
+#[cfg(feature = "actix-frontend")]
+pub mod actix;
 
 /// Try to open the server url `http://localhost:8020` in the browser, or print a guiding statement
 /// to the console if this is not possible.
