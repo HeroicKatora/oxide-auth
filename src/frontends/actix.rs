@@ -24,7 +24,7 @@ pub struct OAuthRequest<State>(HttpRequest<State>);
 
 struct ResolvedRequest<State> {
     request: HttpRequest<State>,
-    authentication: Result<Option<String>, ()>,
+    authorization: Result<Option<String>, ()>,
     query: Result<HashMap<String, Vec<String>>, ()>,
     body: Result<HashMap<String, Vec<String>>, ()>,
 }
@@ -94,7 +94,7 @@ impl<State> WebRequest for ResolvedRequest<State> {
      }
 
      fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>{
-         match &self.authentication {
+         match &self.authorization {
              &Ok(Some(ref string)) => Ok(Some(Cow::Borrowed(string))),
              &Ok(None) => Ok(None),
              &Err(_) => Err(())
@@ -146,7 +146,7 @@ impl WebResponse for HttpResponse {
 
 impl<State> ResolvedRequest<State> {
     fn headers_only(request: HttpRequest<State>) -> Self {
-        let authentication = match request.headers().get("Authentication").map(|header| header.to_str()) {
+        let authorization = match request.headers().get("Authorization").map(|header| header.to_str()) {
             None => Ok(None),
             Some(Ok(as_str)) => Ok(Some(as_str.to_string())),
             Some(Err(_)) => Err(())
@@ -158,7 +158,7 @@ impl<State> ResolvedRequest<State> {
             .collect();
         ResolvedRequest {
             request: request,
-            authentication: authentication,
+            authorization: authorization,
             query: Ok(query),
             body: Err(()),
         }
