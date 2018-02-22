@@ -526,7 +526,7 @@ impl<'a> AccessFlow<'a> {
     }
 
     /// Indicate if the access is allowed or denied via a result.
-    pub fn handle<R: 'a>(&self, mut request: R)
+    pub fn handle<R>(&self, mut request: R)
     -> Result<(), R::Error> where R: WebRequest {
         let params = AccessFlow::create_valid_params(&mut request)
             .unwrap_or_else(|| GuardParameter::invalid());

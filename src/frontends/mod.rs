@@ -13,8 +13,10 @@
 //! token flows (currently only authorization code grant).
 //!
 //! Lets step through those implementations one by one.
-//! 
+//!
 
+#[cfg(feature = "actix-frontend")]
+pub mod actix;
 #[cfg(feature = "iron-frontend")]
 pub mod iron;
 #[cfg(feature = "rouille-frontend")]
