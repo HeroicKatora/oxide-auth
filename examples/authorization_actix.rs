@@ -13,27 +13,23 @@ mod main {
     use self::actix_web::*;
     use self::oxide_auth::frontends::actix::*;
 
-    use support::open_in_browser;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
 
     type State = ();
 
     static PASSPHRASE: &str = "This is a super secret phrase";
 lazy_static! {
-    static ref REGISTRAR: Arc<Mutex<ClientMap>> = {
+    static ref REGISTRAR: Mutex<ClientMap> = {
         let mut clients  = ClientMap::new();
         // Register a dummy client instance
         let client = Client::public("LocalClient", // Client id
             "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
             "default".parse().unwrap()); // Allowed client scope
         clients.register_client(client);
-        Arc::new(Mutex::new(clients))
+        Mutex::new(clients)
     };
-    static ref AUTHORIZER: Arc<Mutex<Storage<RandomGenerator>>> = Arc::new(Mutex::new(Storage::new(RandomGenerator::new(16))));
-    static ref ISSUER: Arc<Mutex<TokenSigner>> = Arc::new(Mutex::new(TokenSigner::new_from_passphrase(&PASSPHRASE, None)));
- //
- //
- // ;
+    static ref AUTHORIZER: Mutex<Storage<RandomGenerator>> = Mutex::new(Storage::new(RandomGenerator::new(16)));
+    static ref ISSUER: Mutex<TokenSigner> = Mutex::new(TokenSigner::new_from_passphrase(&PASSPHRASE, None));
 }
     /// Example of a main function of a rouille server supporting oauth.
     pub fn example() {

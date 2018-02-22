@@ -33,10 +33,20 @@ pub fn dummy_client(request: HttpRequest) -> HttpResponse {
     let access_token_request = client
         .post("http://localhost:8020/token")
         .form(&params).build().unwrap();
-    let mut token_response = client.execute(access_token_request).unwrap();
+    let mut token_response = match client.execute(access_token_request) {
+        Ok(response) => response,
+        Err(_) => return HttpResponse::BadRequest()
+            .body("Could not fetch bearer token")
+            .unwrap(),
+    };
     let mut token = String::new();
     token_response.read_to_string(&mut token).unwrap();
-    let token_map: HashMap<String, String> = serde_json::from_str(&token).unwrap();
+    let token_map: HashMap<String, String> = match serde_json::from_str(&token) {
+        Ok(token_map) => token_map,
+        Err(err) => return HttpResponse::BadRequest()
+            .body(format!("Error unwrapping json response, got {:?} instead", err))
+            .unwrap(),
+    };
 
     if token_map.get("error").is_some() || !token_map.get("access_token").is_some() {
         return HttpResponse::BadRequest()
@@ -50,7 +60,12 @@ pub fn dummy_client(request: HttpRequest) -> HttpResponse {
         .header(Authorization("Bearer ".to_string() + token_map.get("access_token").unwrap()))
         .build()
         .unwrap();
-    let mut page_response = client.execute(page_request).unwrap();
+    let mut page_response = match client.execute(page_request) {
+        Ok(response) => response,
+        Err(_) => return HttpResponse::BadRequest()
+            .body("Could not access protected resource")
+            .unwrap(),
+    };
     let mut protected_page = String::new();
     page_response.read_to_string(&mut protected_page).unwrap();
 
