@@ -33,5 +33,5 @@ iron-frontend = ["iron", "urlencoded"]
 rouille-frontend = ["rouille", "serde_urlencoded"]
 
 [dev-dependencies]
-router = "^0.5"
+router = "^0.6"
 reqwest = "^0.8"
