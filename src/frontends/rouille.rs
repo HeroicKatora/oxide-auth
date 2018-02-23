@@ -10,7 +10,7 @@ use code_grant::frontend::{QueryParameter, SingleValueQuery, WebRequest, WebResp
 // In the spirit of simplicity, this module does not implement any wrapper structures.  In order to
 // allow efficient and intuitive usage, we simply re-export common structures.
 pub use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow};
-pub use code_grant::frontend::{Authentication, OAuthError, OwnerAuthorizer};
+pub use code_grant::frontend::{OAuthError, OwnerAuthorizer, OwnerAuthorization};
 pub use code_grant::prelude::*;
 
 use std::borrow::Cow;
@@ -79,11 +79,9 @@ impl WebResponse for Response {
 }
 
 impl<'a, F> OwnerAuthorizer<&'a Request> for F
-where
-    F: for<'r, 's> Fn(&'r Request, &'s PreGrant) -> Result<(Authentication, Response), OAuthError> {
-
-    fn get_owner_authorization(&self, request: &mut &'a Request, grant: &PreGrant)
-    -> Result<(Authentication, Response), OAuthError> {
-        self(request, grant)
+where F: FnOnce(&'a Request, &PreGrant) -> OwnerAuthorization<Response> {
+    fn check_authorization(self, request: &'a Request, pre_grant: &PreGrant)
+    -> OwnerAuthorization<Response> {
+        self(request, pre_grant)
     }
 }

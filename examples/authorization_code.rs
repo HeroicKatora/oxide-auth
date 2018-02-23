@@ -42,7 +42,7 @@ mod main {
         });
 
         // Set up required oauth endpoints
-        router.get("/authorize", ohandler.authorize(handle_get), "authorize");
+        router.get("/authorize", ohandler.authorize(MethodAuthorizer(handle_get)), "authorize");
         router.post("/authorize", ohandler.authorize(IronOwnerAuthorizer(handle_post)), "authorize");
         router.post("/token", ohandler.token(), "token");
 
@@ -66,7 +66,7 @@ mod main {
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.
-    fn handle_get(_: &mut Request, grant: &PreGrant) -> Result<(Authentication, Response), OAuthError> {
+    fn handle_get(_: &mut Request, grant: &PreGrant) -> OwnerAuthorization<Response> {
         let text = format!(
             "<html>'{}' (at {}) is requesting permission for '{}'
             <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
@@ -77,7 +77,7 @@ mod main {
             </form>
             </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
         let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
-        Ok((Authentication::InProgress, response))
+        OwnerAuthorization::InProgress(response)
     }
 
     /// This shows the second style of authentication handler, a iron::Handler compatible form.
@@ -85,9 +85,9 @@ mod main {
     fn handle_post(req: &mut Request) -> IronResult<Response> {
         // No real user authentication is done here, in production you SHOULD use session keys or equivalent
         if req.get::<UrlEncodedQuery>().unwrap_or(HashMap::new()).contains_key("deny") {
-            req.extensions.insert::<Authentication>(Authentication::Failed);
+            req.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
         } else {
-            req.extensions.insert::<Authentication>(Authentication::Authenticated("dummy user".to_string()));
+            req.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Allowed("dummy user".to_string()));
         }
         Ok(Response::with(iron::status::Ok))
     }
