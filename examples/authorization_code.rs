@@ -84,12 +84,13 @@ mod main {
     /// Allows composition with other libraries or frameworks built around iron.
     fn handle_post(req: &mut Request) -> IronResult<Response> {
         // No real user authentication is done here, in production you SHOULD use session keys or equivalent
+        let mut response = Response::with(iron::status::Ok);
         if req.get::<UrlEncodedQuery>().unwrap_or(HashMap::new()).contains_key("deny") {
-            req.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
+            response.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
         } else {
-            req.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Allowed("dummy user".to_string()));
+            response.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Allowed("dummy user".to_string()));
         }
-        Ok(Response::with(iron::status::Ok))
+        Ok(response)
     }
 
     /// Show a message to unauthorized requests of the protected resource.

@@ -201,21 +201,22 @@ impl typemap::Key for SimpleAuthorization { type Value = SimpleAuthorization; }
 /// fn iron_handler(req: &mut Request) -> IronResult<Response> {
 ///     let query = req.get::<UrlEncodedQuery>()
 ///         .map_err(|ue| IronError::new(ue, iron::status::BadRequest))?;
+///     let mut response = Response::with(iron::status::Ok);
 ///     if query.contains_key("deny") {
-///         req.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
+///         response.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
 ///
 ///     // Obviously should be replaced with real user authentication, signed cookies or macroons
 ///     } else if let Some(user) = query.get("user_id") {
 ///         if user.len() == 1 {
-///             req.extensions.insert::<SimpleAuthorization>(
+///             response.extensions.insert::<SimpleAuthorization>(
 ///                 SimpleAuthorization::Allowed(user[1].clone()));
 ///         } else {
-///             req.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
+///             response.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
 ///         }
 ///     } else {
-///         req.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
+///         response.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
 ///     }
-///     Ok(Response::with(iron::status::Ok))
+///     Ok(response)
 /// }
 ///
 /// fn main() {
