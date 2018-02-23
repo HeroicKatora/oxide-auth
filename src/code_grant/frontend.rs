@@ -234,7 +234,7 @@ pub trait WebResponse where Self: Sized {
     fn as_client_error(self) -> Result<Self, Self::Error>;
     /// Set the response status to 401
     fn as_unauthorized(self) -> Result<Self, Self::Error>;
-    /// Add an Authorization header
+    /// Add an `WWW-Authenticate` header
     fn with_authorization(self, kind: &str) -> Result<Self, Self::Error>;
 }
 
