@@ -5,7 +5,7 @@
 extern crate rouille;
 extern crate serde_urlencoded;
 
-use code_grant::frontend::{WebRequest, WebResponse};
+use code_grant::frontend::{QueryParameter, SingleValueQuery, WebRequest, WebResponse};
 
 // In the spirit of simplicity, this module does not implement any wrapper structures.  In order to
 // allow efficient and intuitive usage, we simply re-export common structures.
@@ -23,16 +23,15 @@ impl<'a> WebRequest for &'a Request {
     type Error = OAuthError;
     type Response = Response;
 
-    fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
+    fn query<'s>(&'s mut self) -> Result<QueryParameter<'s>, ()> {
         let query = self.raw_query_string();
-        let data: HashMap<String, String> = serde_urlencoded::from_str(query).map_err(|_| ())?;
-        let data = data.into_iter()
-            .map(|(key, value)| (key, vec![value]))
-            .collect();
-        Ok(Cow::Owned(data))
+        let data: HashMap<Cow<'s, str>, Cow<'s, str>>
+            = serde_urlencoded::from_str(query).map_err(|_| ())?;
+        Ok(QueryParameter::SingleValue(
+            SingleValueQuery::CowValue(Cow::Owned(data))))
     }
 
-    fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
+    fn urlbody(&mut self) -> Result<QueryParameter, ()> {
         match self.header("Content-Type") {
             None | Some("application/x-www-form-urlencoded") => (),
             _ => return Err(()),
@@ -40,10 +39,8 @@ impl<'a> WebRequest for &'a Request {
 
         let body = self.data().ok_or(())?;
         let data: HashMap<String, String> = serde_urlencoded::from_reader(body).map_err(|_| ())?;
-        let data = data.into_iter()
-            .map(|(key, value)| (key, vec![value]))
-            .collect();
-        Ok(Cow::Owned(data))
+        Ok(QueryParameter::SingleValue(
+            SingleValueQuery::StringValue(Cow::Owned(data))))
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {

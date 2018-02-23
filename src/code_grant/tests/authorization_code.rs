@@ -31,9 +31,9 @@ impl AuthorizationSetup {
         }
     }
 
-    fn test_silent_error(&mut self, mut request: CraftedRequest) {
+    fn test_silent_error(&mut self, request: CraftedRequest) {
         let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
-        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer).handle(&mut request, &pagehandler) {
+        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer).handle(request, &pagehandler) {
             Ok(CraftedResponse::Redirect(url))
                 => panic!("Redirection without client id {:?}", url),
             Ok(resp) => panic!("Response without client id {:?}", resp),
@@ -41,8 +41,8 @@ impl AuthorizationSetup {
         };
     }
 
-    fn test_error_redirect (&mut self, mut request: CraftedRequest, pagehandler: &OwnerAuthorizer<Request=CraftedRequest>) {
-        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer).handle(&mut request, pagehandler) {
+    fn test_error_redirect (&mut self, request: CraftedRequest, pagehandler: &OwnerAuthorizer<CraftedRequest>) {
+        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer).handle(request, pagehandler) {
             Ok(CraftedResponse::RedirectFromError(ref url))
             if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some()
                 => (),

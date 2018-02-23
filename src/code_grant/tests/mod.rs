@@ -29,12 +29,22 @@ impl WebRequest for CraftedRequest {
     type Response = CraftedResponse;
     type Error = OAuthError;
 
-    fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
-        self.query.as_ref().map(Cow::Borrowed).ok_or(())
+    fn query(&mut self) -> Result<QueryParameter, ()> {
+        self.query.as_ref()
+            .map(|params|
+                QueryParameter::MultiValue(
+                    MultiValueQuery::StringValues(
+                        Cow::Borrowed(params))))
+            .ok_or(())
     }
 
-    fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
-        self.urlbody.as_ref().map(Cow::Borrowed).ok_or(())
+    fn urlbody(&mut self) -> Result<QueryParameter, ()> {
+        self.urlbody.as_ref()
+            .map(|params|
+                QueryParameter::MultiValue(
+                    MultiValueQuery::StringValues(
+                        Cow::Borrowed(params))))
+            .ok_or(())
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
@@ -84,16 +94,14 @@ impl TokenGenerator for TestGenerator {
 struct Allow(String);
 struct Deny;
 
-impl OwnerAuthorizer for Allow {
-    type Request = CraftedRequest;
+impl OwnerAuthorizer<CraftedRequest> for Allow {
     fn get_owner_authorization(&self, _: &mut CraftedRequest, _: &PreGrant)
     -> Result<(Authentication, CraftedResponse), OAuthError> {
         Ok((Authentication::Authenticated(self.0.clone()), CraftedResponse::Text("".to_string())))
     }
 }
 
-impl OwnerAuthorizer for Deny {
-    type Request = CraftedRequest;
+impl OwnerAuthorizer<CraftedRequest> for Deny {
     fn get_owner_authorization(&self, _: &mut CraftedRequest, _: &PreGrant)
     -> Result<(Authentication, CraftedResponse), OAuthError> {
         Ok((Authentication::Failed, CraftedResponse::Text("".to_string())))

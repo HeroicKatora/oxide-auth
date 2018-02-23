@@ -61,9 +61,9 @@ impl ResourceSetup {
         }
     }
 
-    fn test_access_error(&mut self, mut request: CraftedRequest) {
+    fn test_access_error(&mut self, request: CraftedRequest) {
         match AccessFlow::new(&mut self.issuer, &self.resource_scope)
-            .handle(&mut request)
+            .handle(request)
         {
             Ok(resp) => panic!("Expected an error instead of {:?}", resp),
             Err(_) => (),

@@ -92,13 +92,14 @@ extern crate urlencoded;
 
 use code_grant::prelude::*;
 use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
-pub use code_grant::frontend::{Authentication, OAuthError};
+pub use code_grant::frontend::{Authentication, OAuthError, QueryParameter, MultiValueQuery};
 pub use code_grant::prelude::{PreGrant, Scope};
+
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 use std::ops::DerefMut;
 use std::marker::PhantomData;
+
 use self::iron::{BeforeMiddleware, Handler, IronResult, IronError, Plugin, Url as IronUrl};
 use self::iron::headers::{Authorization as AuthHeader, ContentType};
 use self::iron::modifiers::Header;
@@ -260,16 +261,18 @@ impl<'a, 'b, 'r> WebRequest for &'r mut Request<'a, 'b> {
     type Response = Response;
     type Error = IronError;
 
-    fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
+    fn query(&mut self) -> Result<QueryParameter, ()> {
         match self.get_ref::<UrlEncodedQuery>() {
-            Ok(query) => Ok(Cow::Borrowed(query)),
+            Ok(query) => Ok(QueryParameter::MultiValue(
+                MultiValueQuery::StringValues(Cow::Borrowed(query)))),
             Err(_) => Err(()),
         }
     }
 
-    fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
+    fn urlbody(&mut self) -> Result<QueryParameter, ()> {
         match self.get_ref::<UrlEncodedBody>() {
-            Ok(query) => Ok(Cow::Borrowed(query)),
+            Ok(query) => Ok(QueryParameter::MultiValue(
+                MultiValueQuery::StringValues(Cow::Borrowed(query)))),
             Err(_) => Err(()),
         }
     }

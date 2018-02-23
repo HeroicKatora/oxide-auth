@@ -41,7 +41,7 @@ impl PkceSetup {
         }
     }
 
-    fn test_correct_access(&mut self, mut auth_request: CraftedRequest, mut access_request: CraftedRequest) {
+    fn test_correct_access(&mut self, auth_request: CraftedRequest, access_request: CraftedRequest) {
         use code_grant::extensions::Pkce;
 
         let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
@@ -49,20 +49,20 @@ impl PkceSetup {
 
         match AuthorizationFlow::new(&self.registrar, &mut self.authorizer)
                 .with_extension(&pkce_extension)
-                .handle(&mut auth_request, &pagehandler) {
+                .handle(auth_request, &pagehandler) {
             Ok(ref _response) => (),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
 
         match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
                 .with_extension(&pkce_extension)
-                .handle(&mut access_request) {
+                .handle(access_request) {
             Ok(ref _response) => (),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
     }
 
-    fn test_failed_verification(&mut self, mut auth_request: CraftedRequest, mut access_request: CraftedRequest) {
+    fn test_failed_verification(&mut self, auth_request: CraftedRequest, access_request: CraftedRequest) {
         use code_grant::extensions::Pkce;
 
         let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
@@ -70,14 +70,14 @@ impl PkceSetup {
 
         match AuthorizationFlow::new(&self.registrar, &mut self.authorizer)
                 .with_extension(&pkce_extension)
-                .handle(&mut auth_request, &pagehandler) {
+                .handle(auth_request, &pagehandler) {
             Ok(ref _response) => (),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
 
         match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
                 .with_extension(&pkce_extension)
-                .handle(&mut access_request) {
+                .handle(access_request) {
             Ok(CraftedResponse::ClientError(_)) => (),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }

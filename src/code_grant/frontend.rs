@@ -28,7 +28,7 @@
 //! # use std::borrow::Cow;
 //! # use std::collections::HashMap;
 //! # use std::vec::Vec;
-//! use oxide_auth::code_grant::frontend::{WebRequest, WebResponse, OAuthError};
+//! use oxide_auth::code_grant::frontend::{OAuthError, QueryParameter, WebRequest, WebResponse};
 //! use oxide_auth::code_grant::frontend::{IssuerRef, GrantFlow};
 //! use oxide_auth::primitives::prelude::*;
 //! use url::Url;
@@ -39,8 +39,8 @@
 //!     type Error = OAuthError; /* Custom type permitted but this is easier */
 //!     type Response = MyResponse;
 //!     /* Implementation of the traits' methods */
-//! # fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> { Err(()) }
-//! # fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> { Err(()) }
+//! # fn query(&mut self) -> Result<QueryParameter, ()> { Err(()) }
+//! # fn urlbody(&mut self) -> Result<QueryParameter, ()> { Err(()) }
 //! # fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> { Err(()) }
 //! }
 //!
@@ -61,7 +61,7 @@
 //!     issuer: &'a mut Issuer,
 //! }
 //!
-//! fn handle(state: State, request: &mut MyRequest) -> Result<MyResponse, OAuthError> {
+//! fn handle(state: State, request: MyRequest) -> Result<MyResponse, OAuthError> {
 //!     GrantFlow::new(state.registrar, state.authorizer, state.issuer)
 //!         .handle(request)
 //! }
@@ -102,7 +102,7 @@ struct AuthorizationParameter<'a> {
     scope: Option<Cow<'a, str>>,
     redirect_uri: Option<Cow<'a, str>>,
     state: Option<Cow<'a, str>>,
-    extensions: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    extensions: QueryParameter<'a>,
 }
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
@@ -125,12 +125,61 @@ struct AccessTokenParameter<'a> {
     grant_type: Option<Cow<'a, str>>,
     code: Option<Cow<'a, str>>,
     authorization: Option<(String, Vec<u8>)>,
-    extensions: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    extensions: QueryParameter<'a>,
 }
 
 struct GuardParameter<'a> {
     valid: bool,
     token: Option<Cow<'a, str>>,
+}
+
+/// Representation of query parameters with a single value for each key.
+///
+/// All enums support Copy-on-Write values, useful when the extracted representation is stored
+/// within the request but also when the representation is returned as a value.
+pub enum SingleValueQuery<'a> {
+    /// Choose this if the query parameters are recovered as references to the underlying data.
+    StrValue(Cow<'a, HashMap<&'a str, &'a str>>),
+
+    /// Choose this if the query parameters are copied from the underlying data.
+    StringValue(Cow<'a, HashMap<String, String>>),
+
+    /// Some query parameters are copied from the underlying data and some are references.
+    CowValue(Cow<'a, HashMap<Cow<'a, str>, Cow<'a, str>>>),
+}
+
+/// Representation of query parameters allowing multiple values per key.
+///
+/// All enums support Copy-on-Write values, useful when the extracted representation is stored
+/// within the request but also when the representation is returned as a value.
+pub enum MultiValueQuery<'a> {
+    /// Choose this if the query parameters are recovered as references to the underlying data.
+    StrValues(Cow<'a, HashMap<&'a str, Vec<&'a str>>>),
+
+    /// Choose this if the query parameters are copied from the underlying data.
+    StringValues(Cow<'a, HashMap<String, Vec<String>>>),
+
+    /// Some query parameters are copied from the underlying data and some are references.
+    CowValues(Cow<'a, HashMap<Cow<'a, str>, Vec<Cow<'a, str>>>>)
+}
+
+/// A versatile representation of url encoded query parameters.
+///
+/// The return value of both urlencoded entities in the `WebRequest`.  This enum encompasses
+/// several different styles and ownerships for decoding url query parameters.  It tries to make
+/// as few assumptions about internal representations of the concrete type while keeping in mind
+/// that conversions are not zero-copy.  For example, neither of `HashMap<String, String>` and
+/// `HashMap<Cow<str>, Cow<str>>` could be easily converted into the other and there does not
+/// exist a common type.
+///
+/// Several implementations also support multiple values for a single key which is not useful in
+/// any of the supported OAuth 2.0 parameters.
+pub enum QueryParameter<'a> {
+    /// For web frameworks which only support single value query parameters.
+    SingleValue(SingleValueQuery<'a>),
+
+    /// For web frameworks with multi map queries.
+    MultiValue(MultiValueQuery<'a>),
 }
 
 /// Abstraction of web requests with several different abstractions and constructors needed by this
@@ -146,11 +195,11 @@ pub trait WebRequest {
     /// Retrieve a parsed version of the url query. An Err return value indicates a malformed query
     /// or an otherwise malformed WebRequest. Note that an empty query should result in
     /// `Ok(HashMap::new())` instead of an Err.
-    fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()>;
+    fn query(&mut self) -> Result<QueryParameter, ()>;
 
     /// Retriev the parsed `application/x-form-urlencoded` body of the request. An Err value
     /// indicates a malformed body or a different Content-Type.
-    fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()>;
+    fn urlbody(&mut self) -> Result<QueryParameter, ()>;
 
     /// Contents of the authorization header or none if none exists. An Err value indicates a
     /// malformed header or request.
@@ -193,39 +242,95 @@ pub trait OwnerAuthorizer<Request: WebRequest> {
       -> Result<(Authentication, <Request as WebRequest>::Response), <Request as WebRequest>::Error>;
 }
 
-fn extract_single_parameters<'l>(params: Cow<'l, HashMap<String, Vec<String>>>)
- -> HashMap<Cow<'l, str>, Cow<'l, str>> {
-    match params {
-        Cow::Owned(map) => map.into_iter()
-            .filter_map(|(k, mut v)|
-                if v.len() < 2 {
-                    v.pop().map(|v| (k, v))
-                } else { None })
-            .map(|(k, v)| (k.into(), v.into()))
-            .collect::<HashMap<_, _>>(),
-        Cow::Borrowed(map) => map.iter()
-           .filter_map(|(ref k, ref v)|
-                if v.len() == 1 {
-                    Some((k.as_str().into(), v[0].as_str().into()))
-                } else { None })
-           .collect::<HashMap<_, _>>(),
+impl<'a> QueryParameter<'a> {
+    /// Choose the most efficient (least copies) option. Either get a copy of the stored value
+    /// if it is the only value or a copy of referenced value or return None if it does exist or
+    /// if the value is not the only stored value.
+    fn get(&self, key: &str) -> Option<Cow<'a, str>> {
+        match self {
+            &QueryParameter::SingleValue(
+                SingleValueQuery::StrValue(
+                    Cow::Borrowed(ref map))) => map.get(key).map(|st| Cow::Borrowed(*st)),
+            &QueryParameter::SingleValue(
+                SingleValueQuery::StrValue(
+                    Cow::Owned(ref map))) => map.get(key).map(|st| Cow::Borrowed(*st)),
+            &QueryParameter::SingleValue(
+                SingleValueQuery::StringValue(
+                    Cow::Borrowed(ref map))) => map.get(key).map(|st| Cow::Borrowed(st.as_str())),
+            &QueryParameter::SingleValue(
+                SingleValueQuery::StringValue(
+                    // Since the map is owned, the lifetime 'a might be longer
+                    Cow::Owned(ref map))) => map.get(key).cloned().map(Cow::Owned),
+            &QueryParameter::SingleValue(
+                SingleValueQuery::CowValue(
+                    Cow::Borrowed(ref map))) => map.get(key).map(|st| Cow::Borrowed(&**st)),
+            &QueryParameter::SingleValue(
+                SingleValueQuery::CowValue(
+                    // Since the map is owned, the lifetime 'a might be longer
+                    Cow::Owned(ref map))) => map.get(key).cloned(),
+
+            &QueryParameter::MultiValue(
+                MultiValueQuery::StrValues(
+                    Cow::Borrowed(ref map))) => match map.get(key) {
+                        Some(vec) if vec.len() == 1
+                            => Some(Cow::Borrowed(vec[0])),
+                        _ => None,
+                    },
+            &QueryParameter::MultiValue(
+                MultiValueQuery::StrValues(
+                    Cow::Owned(ref map))) => match map.get(key) {
+                        Some(vec) if vec.len() == 1
+                            => Some(Cow::Borrowed(vec[0])),
+                        _ => None,
+                    },
+            &QueryParameter::MultiValue(
+                MultiValueQuery::StringValues(
+                    Cow::Borrowed(ref map))) => match map.get(key) {
+                        Some(vec) if vec.len() == 1
+                            => Some(Cow::Borrowed(vec[0].as_str())),
+                        _ => None,
+                    },
+            &QueryParameter::MultiValue(
+                MultiValueQuery::StringValues(
+                    Cow::Owned(ref map))) => match map.get(key) {
+                        Some(vec) if vec.len() == 1
+                            // Since the map is owned, the lifetime 'a might be longer
+                            => Some(Cow::Owned(vec[0].clone())),
+                        _ => None,
+                    },
+            &QueryParameter::MultiValue(
+                MultiValueQuery::CowValues(
+                    Cow::Borrowed(ref map))) => match map.get(key) {
+                        Some(vec) if vec.len() == 1
+                            => Some(Cow::Borrowed(&*vec[0])),
+                        _ => None,
+                    },
+            &QueryParameter::MultiValue(
+                MultiValueQuery::CowValues(
+                    Cow::Owned(ref map))) => match map.get(key) {
+                        Some(vec) if vec.len() == 1
+                            // Since the map is owned, the lifetime 'a might be longer
+                            => Some(vec[0].clone()),
+                        _ => None,
+                    },
+        }
     }
 }
 
 impl<'l, W: WebRequest> From<&'l mut W> for AuthorizationParameter<'l> {
     fn from(val: &'l mut W) -> Self {
-        let mut params = match val.query() {
+        let params = match val.query() {
             Err(()) => return Self::invalid(),
-            Ok(query) => extract_single_parameters(query),
+            Ok(query) => query,
         };
 
         AuthorizationParameter {
             valid: true,
-            client_id: params.remove("client_id"),
-            scope: params.remove("scope"),
-            redirect_uri: params.remove("redirect_uri"),
-            state: params.remove("state"),
-            method: params.remove("response_type"),
+            client_id: params.get("client_id"),
+            scope: params.get("scope"),
+            redirect_uri: params.get("redirect_uri"),
+            state: params.get("state"),
+            method: params.get("response_type"),
             extensions: params,
         }
     }
@@ -257,7 +362,7 @@ impl<'l> CodeRequest for AuthorizationParameter<'l> {
     }
 
     fn extension(&self, key: &str) -> Option<Cow<str>> {
-        self.extensions.get(key).cloned()
+        self.extensions.get(key)
     }
 }
 
@@ -270,7 +375,11 @@ impl<'l> AuthorizationParameter<'l> {
             scope: None,
             redirect_uri: None,
             state: None,
-            extensions: HashMap::new()
+            extensions: QueryParameter::SingleValue(
+                SingleValueQuery::CowValue(
+                    Cow::Owned(HashMap::new())
+                )
+            ),
         }
     }
 }
@@ -337,14 +446,14 @@ pub struct GrantFlow<'a> {
     extensions: Vec<&'a AccessTokenExtension>,
 }
 
-impl<'l> From<HashMap<Cow<'l, str>, Cow<'l, str>>> for AccessTokenParameter<'l> {
-    fn from(mut map: HashMap<Cow<'l, str>, Cow<'l, str>>) -> AccessTokenParameter<'l> {
+impl<'l> From<QueryParameter<'l>> for AccessTokenParameter<'l> {
+    fn from(map: QueryParameter<'l>) -> AccessTokenParameter<'l> {
         AccessTokenParameter {
             valid: true,
-            client_id: map.remove("client_id"),
-            code: map.remove("code"),
-            redirect_uri: map.remove("redirect_uri"),
-            grant_type: map.remove("grant_type"),
+            client_id: map.get("client_id"),
+            code: map.get("code"),
+            redirect_uri: map.get("redirect_uri"),
+            grant_type: map.get("grant_type"),
             authorization: None,
             extensions: map,
         }
@@ -381,7 +490,7 @@ impl<'l> AccessTokenRequest for AccessTokenParameter<'l> {
     }
 
     fn extension(&self, key: &str) -> Option<Cow<str>> {
-        self.extensions.get(key).cloned()
+        self.extensions.get(key)
     }
 }
 
@@ -394,7 +503,11 @@ impl<'l> AccessTokenParameter<'l> {
             redirect_uri: None,
             grant_type: None,
             authorization: None,
-            extensions: HashMap::new(),
+            extensions: QueryParameter::SingleValue(
+                SingleValueQuery::CowValue(
+                    Cow::Owned(HashMap::new())
+                )
+            ),
         }
     }
 }
@@ -449,7 +562,7 @@ impl<'a> GrantFlow<'a> {
 
         let mut params: AccessTokenParameter<'w> = match req.urlbody() {
             Err(_) => return None,
-            Ok(body) => extract_single_parameters(body).into(),
+            Ok(body) => body.into(),
         };
 
         params.authorization = authorization;
