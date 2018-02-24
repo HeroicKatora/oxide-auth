@@ -22,7 +22,7 @@ pub trait Registrar {
     fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
 
     /// Look up a client id.
-    fn client(&self, client_id: &str) -> Option<&Client>;
+    fn client(&self, client_id: &str) -> Option<RegisteredClient>;
 }
 
 /// A pair of `client_id` and an optional `redirect_uri`.
@@ -53,7 +53,7 @@ pub struct BoundClient<'a> {
 
     /// A reference to the client instance, for authentication and to retrieve additional
     /// information.
-    pub client: &'a Client,
+    pub client: &'a EncodedClient,
 }
 
 /// These are the parameters presented to the resource owner when confirming or denying a grant
@@ -99,17 +99,46 @@ pub struct Client {
     client_type: ClientType,
 }
 
-enum ClientType {
-    /// A public client with no authentication information
+/// A client whose credentials have been wrapped by a password policy.
+///
+/// This provides a standard encoding for `Registrars` who wish to store their clients and makes it
+/// possible to test password policies.
+pub struct EncodedClient {
+    /// The id of this client. If this is was registered at a `Registrar`, this should be a key
+    /// to the instance.
+    pub client_id: String,
+
+    /// The registered redirect uri.
+    pub redirect_uri: Url,
+
+    /// The scope the client gets if none was given.
+    pub default_scope: Scope,
+
+    /// The authentication data.
+    pub encoded_client: ClientType,
+}
+
+/// Recombines an `EncodedClient` and a  `PasswordPolicy` to check authentication.
+pub struct RegisteredClient<'a> {
+    client: &'a EncodedClient,
+    policy: &'a PasswordPolicy,
+}
+
+/// Enumeration of the two defined client types.
+pub enum ClientType {
+    /// A public client with no authentication information.
     Public,
 
-    /// A confidential client who needs to be authenticated before communicating
-    Confidential{ passdata: Vec<u8>, },
+    /// A confidential client who needs to be authenticated before communicating.
+    Confidential{
+        /// Byte data encoding the password authentication under the used policy.
+        passdata: Vec<u8>,
+    },
 }
 
 /// A very simple, in-memory hash map of client ids to Client entries.
 pub struct ClientMap {
-    clients: HashMap<String, Client>,
+    clients: HashMap<String, EncodedClient>,
 }
 
 impl<'a> BoundClient<'a> {
@@ -132,19 +161,55 @@ impl<'a> BoundClient<'a> {
 }
 
 impl Client {
-    /// Create a public client
+    /// Create a public client.
     pub fn public(client_id: &str, redirect_uri: Url, default_scope: Scope) -> Client {
         Client { client_id: client_id.to_string(), redirect_uri, default_scope, client_type: ClientType::Public }
     }
 
-    /// Create a confidential client
+    /// Create a confidential client.
     pub fn confidential(client_id: &str, redirect_uri: Url, default_scope: Scope, passphrase: &[u8]) -> Client {
-        let passdata = SHA256Policy.store(client_id, passphrase);
         Client {
             client_id: client_id.to_string(),
             redirect_uri,
             default_scope,
-            client_type: ClientType::Confidential { passdata },
+            client_type: ClientType::Confidential {
+                passdata: passphrase.to_owned()
+            },
+        }
+    }
+
+    /// Obscure the clients authentication data.
+    ///
+    /// This could apply a one-way function to the passphrase using an adequate password hashing
+    /// method. The resulting passdata is then used for validating authentication details provided
+    /// when later reasserting the identity of a client.
+    pub fn encode(self, policy: &PasswordPolicy) -> EncodedClient {
+        let encoded_client = match self.client_type {
+            ClientType::Public => ClientType::Public,
+            ClientType::Confidential { passdata: passphrase }
+                => ClientType::Confidential {
+                    passdata: policy.store(&self.client_id, &passphrase)
+                }
+        };
+
+        EncodedClient {
+            client_id: self.client_id,
+            redirect_uri: self.redirect_uri,
+            default_scope: self.default_scope,
+            encoded_client
+        }
+    }
+}
+
+impl<'a> RegisteredClient<'a> {
+    /// Binds a client and a policy reference together.
+    ///
+    /// The policy should be the same or equivalent to the policy used to create the encoded client
+    /// data, as otherwise authentication will obviously not work.
+    pub fn new(client: &'a EncodedClient, policy: &'a PasswordPolicy) -> Self {
+        RegisteredClient {
+            client,
+            policy,
         }
     }
 
@@ -152,19 +217,21 @@ impl Client {
     /// client is public and no passphrase was provided or if the client is confidential and the
     /// passphrase matches.
     pub fn check_authentication(&self, passphrase: Option<&[u8]>) -> Result<&Self, Unspecified> {
-        match (passphrase, &self.client_type) {
+        match (passphrase, &self.client.encoded_client) {
             (None, &ClientType::Public) => Ok(self),
             (Some(provided), &ClientType::Confidential{ passdata: ref stored })
-                => SHA256Policy.check(&self.client_id, provided, stored).map(|()| self),
+                => self.policy.check(&self.client.client_id, provided, stored).map(|()| self),
             _ => return Err(Unspecified)
         }
     }
 }
 
 /// Determines how passphrases are stored and checked. Most likely you want to use Argon2
-trait PasswordPolicy {
-    /// Transform the passphrase so it can be stored in the confidential client
+pub trait PasswordPolicy {
+    /// Transform the passphrase so it can be stored in the confidential client.
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8>;
+
+    /// Check if the stored data corresponds to that of the client id and passphrase.
     fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified>;
 }
 
@@ -178,6 +245,8 @@ struct SHA256Policy;
 #[allow(deprecated)]
 impl PasswordPolicy for SHA256Policy {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
+        // let salt = [0; 16];
+        // ring::rand::SecureRandom
         let mut context = digest::Context::new(&digest::SHA256);
         context.update(client_id.as_bytes());
         context.update(passphrase);
@@ -204,7 +273,7 @@ impl ClientMap {
 
     /// Insert or update the client record.
     pub fn register_client(&mut self, client: Client) {
-        self.clients.insert(client.client_id.clone(), client);
+        self.clients.insert(client.client_id.clone(), client.encode(&SHA256Policy));
     }
 }
 
@@ -222,21 +291,50 @@ impl Registrar for ClientMap {
             _ => return Err(RegistrarError::MismatchedRedirect),
         }
 
-        Ok(BoundClient{
+        Ok(BoundClient {
             client_id: bound.client_id,
             redirect_uri: bound.redirect_uri.unwrap_or_else(
                 || Cow::Owned(client.redirect_uri.clone())),
-            client: client})
+            client: client
+        })
     }
 
-    fn client(&self, client_id: &str) -> Option<&Client> {
-        self.clients.get(client_id)
+    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        self.clients.get(client_id).map(|client| {
+            RegisteredClient::new(client, &SHA256Policy)
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // No checking involved at all. This is a bad idea in a real system.
+    struct NoCheckPolicy;
+
+    impl PasswordPolicy for NoCheckPolicy {
+        fn store(&self, _: &str, _: &[u8]) -> Vec<u8> {
+            Vec::new()
+        }
+
+        fn check(&self, _: &str, _: &[u8], _: &[u8]) -> Result<(), Unspecified> {
+            Ok(())
+        }
+    }
+
+    // Literally save the password. Also a bad idea in a real system.
+    struct PlaintextPolicy;
+
+    impl PasswordPolicy for PlaintextPolicy {
+        fn store(&self, _: &str, passphrase: &[u8]) -> Vec<u8> {
+            passphrase.to_owned()
+        }
+
+        fn check(&self, _: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified> {
+            constant_time::verify_slices_are_equal(passphrase, stored)
+        }
+    }
 
     /// A test suite for registrars which support simple registrations of arbitrary clients
     pub fn simple_test_suite<Reg, RegFn>(registrar: &mut Reg, register: RegFn)
@@ -277,17 +375,29 @@ mod tests {
 
     #[test]
     fn public_client() {
-        let client = Client::public("ClientId", "https://example.com".parse().unwrap(),
-            "default".parse().unwrap());
+        let client = Client::public(
+            "ClientId",
+            "https://example.com".parse().unwrap(),
+            "default".parse().unwrap()
+        ).encode(&NoCheckPolicy);
+        let client = RegisteredClient::new(&client, &NoCheckPolicy);
+
+        // Providing no authentication data is ok
         assert!(client.check_authentication(None).is_ok());
+        // Any authentication data is a fail
         assert!(client.check_authentication(Some(b"")).is_err());
     }
 
     #[test]
     fn confidential_client() {
         let pass = b"AB3fAj6GJpdxmEVeNCyPoA==";
-        let client = Client::confidential("ClientId", "https://example.com".parse().unwrap(),
-            "default".parse().unwrap(), pass);
+        let client = Client::confidential(
+            "ClientId",
+            "https://example.com".parse().unwrap(),
+            "default".parse().unwrap(),
+            pass
+        ).encode(&PlaintextPolicy);
+        let client = RegisteredClient::new(&client, &PlaintextPolicy);
         assert!(client.check_authentication(None).is_err());
         assert!(client.check_authentication(Some(pass)).is_ok());
         assert!(client.check_authentication(Some(b"not the passphrase")).is_err());
