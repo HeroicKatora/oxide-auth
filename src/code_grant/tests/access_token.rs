@@ -106,9 +106,9 @@ impl AccessTokenSetup {
         }
     }
 
-    fn test_simple_error(&mut self, mut request: CraftedRequest) {
+    fn test_simple_error(&mut self, request: CraftedRequest) {
         match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
-            .handle(&mut request)
+            .handle(request)
         {
             Ok(ref response) =>
                 Self::assert_json_error_set(response),
