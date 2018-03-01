@@ -14,7 +14,7 @@ mod main {
 
     use support::rouille::dummy_client;
     use support::open_in_browser;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
     use std::thread;
 
     /// Example of a main function of a rouille server supporting oauth.
@@ -35,14 +35,14 @@ mod main {
 
         // Bearer tokens are signed (but not encrypted) using a passphrase.
         let passphrase = "This is a super secret phrase";
-        let bearer_tokens = Mutex::new(TokenSigner::new_from_passphrase(passphrase, None));
+        let bearer_tokens = Arc::new(TokenSigner::new_from_passphrase(passphrase, None));
 
         // Create the main server instance
         let server = Server::new(("localhost", 8020), move |request| {
             router!(request,
                 (GET) ["/"] => {
-                    let mut issuer = bearer_tokens.lock().unwrap();
-                    if let Err(_) = AccessFlow::new(&mut*issuer, &vec!["default".parse().unwrap()])
+                    let mut issuer = &*bearer_tokens;
+                    if let Err(_) = AccessFlow::new(&mut issuer, &vec!["default".parse().unwrap()])
                         .handle(request)
                     { // Does not have the proper authorization token
 let text = "<html>
@@ -72,9 +72,9 @@ here</a> to begin the authorization process.
                 },
                 (POST) ["/token"] => {
                     let mut authorizer = authorization_codes.lock().unwrap();
-                    let mut issuer = bearer_tokens.lock().unwrap();
+                    let mut issuer = &*bearer_tokens;
                     let mut registrar = clients.lock().unwrap();
-                    GrantFlow::new(&mut*registrar, &mut*authorizer, &mut*issuer)
+                    GrantFlow::new(&mut*registrar, &mut*authorizer, &mut issuer)
                         .handle(request)
                         .unwrap_or_else(|_| Response::empty_400())
                 },

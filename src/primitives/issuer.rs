@@ -150,6 +150,22 @@ impl Issuer for TokenSigner {
     }
 }
 
+impl<'a> Issuer for &'a TokenSigner {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        let token = self.signer.tag("token").generate(&grant)?;
+        let refresh = self.signer.tag("refresh").generate(&grant)?;
+        Ok(IssuedToken {token, refresh, until: grant.until})
+    }
+
+    fn recover_token<'t>(&'t self, token: &'t str) -> Option<Grant> {
+        self.signer.tag("token").extract(token).ok()
+    }
+
+    fn recover_refresh<'t>(&'t self, token: &'t str) -> Option<Grant> {
+        self.signer.tag("refresh").extract(token).ok()
+    }
+}
+
 #[cfg(test)]
 /// Tests for issuer implementations, including those provided here.
 pub mod tests {
