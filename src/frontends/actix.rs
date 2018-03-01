@@ -1,7 +1,7 @@
 extern crate actix_web;
 extern crate futures;
 
-use code_grant::frontend::{WebRequest, WebResponse};
+use code_grant::frontend::{SingleValueQuery, QueryParameter, WebRequest, WebResponse};
 pub use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow};
 pub use code_grant::frontend::{Authentication, OAuthError, OwnerAuthorizer};
 pub use code_grant::prelude::*;
@@ -15,6 +15,7 @@ use self::futures::{Async, Poll};
 pub use self::futures::Future;
 use url::Url;
 
+/// Bundles all oauth related methods under a single type.
 pub trait OAuth {
     type State;
     fn oauth2(self) -> OAuthRequest<Self::State>;
@@ -25,8 +26,8 @@ pub struct OAuthRequest<State>(HttpRequest<State>);
 struct ResolvedRequest<State> {
     request: HttpRequest<State>,
     authorization: Result<Option<String>, ()>,
-    query: Result<HashMap<String, Vec<String>>, ()>,
-    body: Result<HashMap<String, Vec<String>>, ()>,
+    query: Option<HashMap<String, String>>,
+    body: Option<HashMap<String, String>>,
 }
 
 impl<State> OAuth for HttpRequest<State> {
@@ -85,12 +86,16 @@ impl<State> WebRequest for ResolvedRequest<State> {
     type Error = OAuthError;
     type Response = HttpResponse;
 
-     fn query(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
-         self.query.as_ref().map(Cow::Borrowed).map_err(|_| ())
+     fn query(&mut self) -> Result<QueryParameter, ()> {
+         self.query.as_ref().map(|query| QueryParameter::SingleValue(
+             SingleValueQuery::StringValue(Cow::Borrowed(query))))
+             .ok_or(())
      }
 
-     fn urlbody(&mut self) -> Result<Cow<HashMap<String, Vec<String>>>, ()> {
-         self.body.as_ref().map(Cow::Borrowed).map_err(|_| ())
+     fn urlbody(&mut self) -> Result<QueryParameter, ()> {
+         self.body.as_ref().map(|body| QueryParameter::SingleValue(
+             SingleValueQuery::StringValue(Cow::Borrowed(body))))
+             .ok_or(())
      }
 
      fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>{
@@ -154,22 +159,19 @@ impl<State> ResolvedRequest<State> {
         let query = request
             .query()
             .iter()
-            .map(|&(ref key, ref val)| (key.clone().into_owned(), vec![val.clone().into_owned()]))
+            .map(|&(ref key, ref val)| (key.clone().into_owned(), val.clone().into_owned()))
             .collect();
         ResolvedRequest {
             request: request,
             authorization: authorization,
-            query: Ok(query),
-            body: Err(()),
+            query: Some(query),
+            body: None,
         }
     }
 
     fn with_body(request: HttpRequest<State>, body: HashMap<String, String>) -> Self {
         let mut resolved = Self::headers_only(request);
-        resolved.body = Ok(body
-            .into_iter()
-            .map(|(key, val)| (key, vec![val]))
-            .collect());
+        resolved.body = Some(body);
         resolved
     }
 }
@@ -208,7 +210,7 @@ impl<State> Future for GrantRequest<State> {
             Ok(Async::NotReady) => Ok(Async::NotReady),
 
             // Not a valid url encoded body
-            Err(err) => Err(OAuthError::AccessDenied),
+            Err(_) => Err(OAuthError::AccessDenied),
         }
     }
 }
