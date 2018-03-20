@@ -130,7 +130,7 @@ pub struct IronGranter<R, A, I> where
 /// Only holds handles to authorization relevant objects. An additional external handler is used
 /// to communicate with the owner authorization process.
 pub struct IronAuthorizer<PH, R, A> where
-    PH: Copy + Send + Sync + for <'l, 'a, 'b: 'a> OwnerAuthorizer<&'l mut Request<'a, 'b>>,
+    PH: Copy + Send + Sync + for <'l, 'a, 'b> OwnerAuthorizer<&'l mut Request<'a, 'b>>,
     R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static,
 {
@@ -375,7 +375,7 @@ impl<R, A, I> IronGranter<R, A, I> where
     /// Create an authorization code endpoint.
     pub fn authorize<Handler>(&self, page_handler: Handler) -> IronAuthorizer<Handler, R, A>
     where
-        Handler: Copy + Send + Sync + for <'l, 'a, 'b: 'a> OwnerAuthorizer<&'l mut Request<'a, 'b>>, {
+        Handler: Copy + Send + Sync + for <'l, 'a, 'b> OwnerAuthorizer<&'l mut Request<'a, 'b>>, {
         IronAuthorizer {
             authorizer: self.authorizer.clone(),
             page_handler: page_handler,
@@ -420,7 +420,7 @@ impl From<OAuthError> for IronError {
 }
 
 impl<PH, R, A> Handler for IronAuthorizer<PH, R, A> where
-    PH: Copy + Send + Sync + 'static + for <'l, 'a, 'b: 'a> OwnerAuthorizer<&'l mut Request<'a, 'b>>,
+    PH: Copy + Send + Sync + 'static + for <'l, 'a, 'b> OwnerAuthorizer<&'l mut Request<'a, 'b>>,
     R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static
 {
