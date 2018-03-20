@@ -139,6 +139,7 @@ pub enum ClientType {
 /// A very simple, in-memory hash map of client ids to Client entries.
 pub struct ClientMap {
     clients: HashMap<String, EncodedClient>,
+    password_policy: Option<Box<PasswordPolicy>>,
 }
 
 impl<'a> BoundClient<'a> {
@@ -227,7 +228,7 @@ impl<'a> RegisteredClient<'a> {
 }
 
 /// Determines how passphrases are stored and checked. Most likely you want to use Argon2
-pub trait PasswordPolicy {
+pub trait PasswordPolicy: Send + Sync {
     /// Transform the passphrase so it can be stored in the confidential client.
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8>;
 
@@ -268,12 +269,28 @@ impl PasswordPolicy for SHA256Policy {
 impl ClientMap {
     /// Create an empty map without any clients in it.
     pub fn new() -> ClientMap {
-        ClientMap { clients: HashMap::new() }
+        ClientMap {
+            clients: HashMap::new(),
+            password_policy: None,
+        }
     }
 
     /// Insert or update the client record.
     pub fn register_client(&mut self, client: Client) {
-        self.clients.insert(client.client_id.clone(), client.encode(&SHA256Policy));
+        let password_policy = Self::current_policy(&self.password_policy);
+        self.clients.insert(client.client_id.clone(), client.encode(password_policy));
+    }
+
+    /// Change how passwords are encoded while stored.
+    pub fn set_password_policy<P: PasswordPolicy + 'static>(&mut self, new_policy: P) {
+        self.password_policy = Some(Box::new(new_policy))
+    }
+
+    // This is not an instance method because it needs to borrow the box but register needs &mut
+    fn current_policy<'a>(policy: &'a Option<Box<PasswordPolicy>>) -> &'a PasswordPolicy {
+        policy
+            .as_ref().map(|boxed| &**boxed)
+            .unwrap_or(&SHA256Policy)
     }
 }
 
@@ -300,8 +317,10 @@ impl Registrar for ClientMap {
     }
 
     fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        let password_policy = Self::current_policy(&self.password_policy);
+
         self.clients.get(client_id).map(|client| {
-            RegisteredClient::new(client, &SHA256Policy)
+            RegisteredClient::new(client, password_policy)
         })
     }
 }
