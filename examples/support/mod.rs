@@ -11,6 +11,8 @@
 pub mod iron;
 #[cfg(feature = "rouille-frontend")]
 pub mod rouille;
+#[cfg(feature = "gotham-frontend")]
+pub mod gotham;
 
 /// Try to open the server url `http://localhost:8020` in the browser, or print a guiding statement
 /// to the console if this is not possible.
