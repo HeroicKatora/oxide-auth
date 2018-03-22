@@ -179,6 +179,8 @@
 //! may want to provide additional wrappers.
 //!
 
+#[cfg(feature = "gotham-frontend")]
+pub mod gotham;
 #[cfg(feature = "iron-frontend")]
 pub mod iron;
 #[cfg(feature = "rouille-frontend")]
