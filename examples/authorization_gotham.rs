@@ -1,11 +1,16 @@
 mod support;
 
+#[cfg(feature = "gotham-frontend")]
 extern crate gotham;
+#[cfg(feature = "gotham-frontend")]
 extern crate hyper;
+#[cfg(feature = "gotham-frontend")]
 #[macro_use]
 extern crate lazy_static;
+#[cfg(feature = "gotham-frontend")]
 #[macro_use]
 extern crate gotham_derive;
+#[cfg(feature = "gotham-frontend")]
 #[macro_use]
 extern crate serde_derive;
 
@@ -18,7 +23,6 @@ mod main {
     use self::oxide_auth::frontends::gotham::*;
 
     use support::gotham::dummy_client;
-    use support::gotham::QueryStringExtractor;
     use support::open_in_browser;
     use std::sync::Mutex;
     use std::thread;
@@ -48,8 +52,13 @@ lazy_static! {
 }
 
     #[derive(Deserialize, StateData, StaticResponseExtender)]
-    pub struct OauthAuthorizeQueryStringExtractor {
+    pub struct OauthAuthorizeQueryExtractor {
         deny: Option<i32>,
+    }
+    #[derive(Deserialize, StateData, StaticResponseExtender)]
+    pub struct OauthResultQueryExtractor {
+        pub error: Option<String>,
+        pub code: Option<String>,
     }
 
     pub fn example() {
@@ -61,7 +70,9 @@ lazy_static! {
 
                 route.get("/authorize").to(authorize_get_handler);
 
-                route.post("/authorize").with_query_string_extractor::<OauthAuthorizeQueryStringExtractor>().to(authorize_post_handler);
+                route.post("/authorize")
+                    .with_query_string_extractor::<OauthAuthorizeQueryExtractor>()
+                    .to(authorize_post_handler);
 
                 route.post("/token").to(token_handler);
             })
@@ -69,7 +80,9 @@ lazy_static! {
 
         let client_router = {
             build_simple_router(|route| {
-                route.get("/endpoint").with_query_string_extractor::<QueryStringExtractor>().to(dummy_client);
+                route.get("/endpoint")
+                    .with_query_string_extractor::<OauthResultQueryExtractor>()
+                    .to(dummy_client);
             })
         };
 
@@ -109,7 +122,7 @@ lazy_static! {
     /// either accepted or denied the request.
     fn handle_post(_: &Request, state: &State, _: &PreGrant) -> OwnerAuthorization<Response> {
         // No real user authentication is done here, in production you SHOULD use session keys or equivalent
-        let query_params = OauthAuthorizeQueryStringExtractor::borrow_from(&state);
+        let query_params = OauthAuthorizeQueryExtractor::borrow_from(&state);
         if let Some(_) = query_params.deny {
             OwnerAuthorization::Denied
         } else {
@@ -135,18 +148,18 @@ lazy_static! {
             })
             .wait()
             .unwrap_or_else(|_| {
-              // Does not have the proper authorization token
-              let text = "<html>
+                // Does not have the proper authorization token
+                let text = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
 here</a> to begin the authorization process.
 </html>
 ";
-              create_response(
+                create_response(
                   &state,
                   StatusCode::Ok,
                   Some((String::from(text).into_bytes(), mime::TEXT_HTML)),
-              )
+                )
             });
 
         (state, res)

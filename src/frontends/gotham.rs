@@ -4,25 +4,21 @@ extern crate futures;
 extern crate gotham;
 extern crate serde_urlencoded;
 
-
-use code_grant::frontend::{WebRequest, WebResponse};
+use super::dev::*;
 pub use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow};
-pub use code_grant::frontend::{OwnerAuthorization, OAuthError, OwnerAuthorizer, QueryParameter, SingleValueQuery, AuthorizationResult};
+pub use code_grant::frontend::{OwnerAuthorization, OAuthError, OwnerAuthorizer, AuthorizationResult};
 pub use code_grant::prelude::*;
 
-use self::hyper::{StatusCode, Request, Response, Method, Uri, Body};
+use self::hyper::{StatusCode, Request, Response, Method, Uri, Headers, Body};
 use self::hyper::header::{Authorization, ContentLength, ContentType, Location};
-use gotham::state::{FromState, State};
+use gotham::state::State;
 use gotham::middleware::Middleware;
 use gotham::handler::HandlerFuture;
 
-use url::Url;
 use self::futures::{Async, Poll, Stream};
 pub use self::futures::{Future, future};
 
-use std::borrow::Cow;
 use std::collections::HashMap;
-use gotham::handler::IntoHandlerError;
 
 #[derive(StateData)]
 pub struct OAuthRequest(Request);
@@ -37,16 +33,20 @@ impl Middleware for OAuthRequestMiddleware {
         let f = state.take::<Body>().concat2().then(move |chunk| {
             let method = state.borrow::<Method>().clone();
             let uri = state.borrow::<Uri>().clone();
+            let headers = state.borrow::<Headers>().clone();
 
+            // Reconstruct the hyper request for OAuthRequest.
             let mut request = Request::new(method.clone(), uri.clone());
             let body = chunk.unwrap().to_vec();
             request.set_body(body.clone());
-
-            let mut request2 = Request::new(method, uri);
-            request2.set_body(body);
+            for header in headers.iter() {
+                request.headers_mut()
+                    .set_raw(header.name().to_owned(), header.raw().clone());
+            }
 
             state.put(OAuthRequest(request));
-            state.put(request2.body());
+            // Put body back into state for the handler.
+            state.put::<Body>(body.into());
 
             chain(state)
         });
