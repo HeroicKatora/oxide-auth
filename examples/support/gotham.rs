@@ -12,19 +12,15 @@ use self::gotham::state::{FromState, State};
 use self::gotham::http::response::create_response;
 use self::gotham::router::Router;
 use self::gotham::router::builder::*;
-use self::gotham::router::response::extender::StaticResponseExtender;
 
 use std::collections::HashMap;
 use std::io::Read;
 
-#[derive(Deserialize, StateData, StaticResponseExtender)]
-pub struct QueryStringExtractor {
-    error: Option<String>,
-    code: Option<String>,
-}
+use main::OauthResultQueryExtractor;
+
 
 pub fn dummy_client(mut state: State) -> (State, Response) {
-    let query_params = QueryStringExtractor::take_from(&mut state);
+    let query_params = OauthResultQueryExtractor::take_from(&mut state);
     if let Some(cause) = query_params.error {
         let res = create_response(
             &state,
