@@ -32,12 +32,12 @@ pub fn dummy_client(mut state: State) -> (State, Response) {
 
     let code = match query_params.code {
         None => {
-          let res = create_response(
-            &state,
-            StatusCode::BadRequest,
-            Some((String::from("Missing code").into_bytes(), mime::TEXT_PLAIN)),
-          );
-          return (state, res)
+            let res = create_response(
+                &state,
+                StatusCode::BadRequest,
+                Some((String::from("Missing code").into_bytes(), mime::TEXT_PLAIN)),
+            );
+            return (state, res)
         },
         Some(code) => code,
     };
