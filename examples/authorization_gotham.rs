@@ -46,11 +46,13 @@ mod main {
     pub fn example() {
         let passphrase = "This is a super secret phrase";
 
-        let mut clients  = ClientMap::new();
+        let mut clients = ClientMap::new();
         // Register a dummy client instance
-        let client = Client::public("LocalClient", // Client id
+        let client = Client::public(
+            "LocalClient", // Client id
             "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
-            "default".parse().unwrap()); // Allowed client scope
+            "default".parse().unwrap() // Allowed client scope
+        );
         clients.register_client(client);
 
         // Create the main token instance, a code_granter with an iron frontend.
@@ -73,12 +75,16 @@ here</a> to begin the authorization process.
 
         let server_router = {
             let pipelines = new_pipeline_set();
-            let (pipelines, default) = pipelines.add(new_pipeline()
-                .add(OAuthStateDataMiddleware::new(ohandler))
-                .build());
-            let (pipelines, extended) = pipelines.add(new_pipeline()
-                .add(OAuthGuardMiddleware::new(error_text.to_owned(), scopes))
-                .build());
+            let (pipelines, default) = pipelines.add(
+                new_pipeline()
+                    .add(OAuthStateDataMiddleware::new(ohandler))
+                    .build()
+            );
+            let (pipelines, extended) = pipelines.add(
+                new_pipeline()
+                    .add(OAuthGuardMiddleware::new(error_text.to_owned(), scopes))
+                    .build()
+            );
             let pipeline_set = finalize_pipeline_set(pipelines);
 
             let default_chain = (default, ());
@@ -169,7 +175,7 @@ here</a> to begin the authorization process.
             .and_then(|request| {
                 let mut registrar = gotham_granter.registrar.lock().unwrap();
                 let mut authorizer = gotham_granter.authorizer.lock().unwrap();
-                let flow = AuthorizationFlow::new(&mut*registrar, &mut*authorizer);
+                let flow = AuthorizationFlow::new(&mut *registrar, &mut *authorizer);
                 request.handle(flow, handle_get)
             })
             .wait()
@@ -185,7 +191,7 @@ here</a> to begin the authorization process.
             .and_then(|request| {
                 let mut registrar = gotham_granter.registrar.lock().unwrap();
                 let mut authorizer = gotham_granter.authorizer.lock().unwrap();
-                let flow = AuthorizationFlow::new(&mut*registrar, &mut*authorizer);
+                let flow = AuthorizationFlow::new(&mut *registrar, &mut *authorizer);
                 request.handle(flow, handle_post)
             })
             .wait()

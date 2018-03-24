@@ -6,7 +6,8 @@ extern crate serde_urlencoded;
 
 use super::dev::*;
 pub use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow};
-pub use code_grant::frontend::{OwnerAuthorization, OAuthError, OwnerAuthorizer, AuthorizationResult};
+pub use code_grant::frontend::{OwnerAuthorization, OwnerAuthorizer};
+pub use code_grant::frontend::{OAuthError, AuthorizationResult};
 pub use code_grant::prelude::*;
 
 use self::hyper::{StatusCode, Request, Response, Method, Uri, Headers, Body};
@@ -39,7 +40,7 @@ pub struct OAuthStateDataMiddleware {
 
 impl OAuthStateDataMiddleware {
     pub fn new(granter: GothamGranter) -> Self {
-        Self  { granter: granter }
+        Self { granter: granter }
     }
 }
 
@@ -58,8 +59,10 @@ impl Middleware for OAuthStateDataMiddleware {
             let body = chunk.unwrap().to_vec();
             request.set_body(body.clone());
             for header in headers.iter() {
-                request.headers_mut()
-                    .set_raw(header.name().to_owned(), header.raw().clone());
+                request.headers_mut().set_raw(
+                    header.name().to_owned(),
+                    header.raw().clone()
+                );
             }
 
             state.put(OAuthRequest(request));
@@ -92,24 +95,23 @@ impl Middleware for OAuthGuardMiddleware {
         Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
     {
         let oath = state.take::<OAuthRequest>();
-        let f = oath.guard()
-            .then(move |result| {
-                let gotham_granter = state.take::<GothamGranter>();
-                let mut issuer = gotham_granter.issuer.lock().unwrap();
-                let flow = AccessFlow::new(&mut *issuer, self.scopes.as_slice());
-                match result.unwrap().handle(flow) {
-                    Ok(_) => chain(state),
-                    _ => {
-                        let res = create_response(
-                            &state,
-                            StatusCode::Ok,
-                            Some((String::from(self.error_text).into_bytes(), mime::TEXT_HTML)),
-                        );
+        let f = oath.guard().then(move |result| {
+            let gotham_granter = state.take::<GothamGranter>();
+            let mut issuer = gotham_granter.issuer.lock().unwrap();
+            let flow = AccessFlow::new(&mut *issuer, self.scopes.as_slice());
+            match result.unwrap().handle(flow) {
+                Ok(_) => chain(state),
+                _ => {
+                    let res = create_response(
+                        &state,
+                        StatusCode::Ok,
+                        Some((String::from(self.error_text).into_bytes(), mime::TEXT_HTML)),
+                    );
 
-                        Box::new(future::ok((state, res)))
-                    }
+                    Box::new(future::ok((state, res)))
                 }
-            });
+            }
+        });
 
         Box::new(f)
     }
@@ -175,25 +177,25 @@ impl WebRequest for ResolvedRequest {
     type Error = OAuthError;
     type Response = Response;
 
-     fn query(&mut self) -> Result<QueryParameter, ()> {
-         self.query.as_ref().map(|query| QueryParameter::SingleValue(
-             SingleValueQuery::StringValue(Cow::Borrowed(query))))
-             .ok_or(())
-     }
+    fn query(&mut self) -> Result<QueryParameter, ()> {
+        self.query.as_ref().map(|query| QueryParameter::SingleValue(
+            SingleValueQuery::StringValue(Cow::Borrowed(query))))
+            .ok_or(())
+    }
 
-     fn urlbody(&mut self) -> Result<QueryParameter, ()> {
-         self.body.as_ref().map(|body| QueryParameter::SingleValue(
-             SingleValueQuery::StringValue(Cow::Borrowed(body))))
-             .ok_or(())
-     }
+    fn urlbody(&mut self) -> Result<QueryParameter, ()> {
+        self.body.as_ref().map(|body| QueryParameter::SingleValue(
+            SingleValueQuery::StringValue(Cow::Borrowed(body))))
+            .ok_or(())
+    }
 
-     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>{
-         match &self.authorization {
-             &Ok(Some(ref string)) => Ok(Some(Cow::Borrowed(string))),
-             &Ok(None) => Ok(None),
-             &Err(_) => Err(())
-         }
-     }
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>{
+        match &self.authorization {
+            &Ok(Some(ref string)) => Ok(Some(Cow::Borrowed(string))),
+            &Ok(None) => Ok(None),
+            &Err(_) => Err(())
+        }
+    }
 }
 
 impl WebResponse for Response {
@@ -250,15 +252,13 @@ impl ResolvedRequest {
     fn headers_only(request: Request) -> Self {
         let authorization = match request.headers().get::<Authorization<String>>() {
             None => Ok(None),
-            Some(header) => Ok(Some(format!("{}", header)))
+            Some(header) => Ok(Some(format!("{}", header))),
         };
 
         let mut query = None;
         if let Some(query_string) = request.query() {
             query = serde_urlencoded::from_str::<HashMap<String, String>>(query_string)
-                .map(|v| {
-                  Some(v)
-                })
+                .map(|v| Some(v))
                 .unwrap();
         }
 
@@ -334,7 +334,9 @@ impl Future for GuardRequest {
 
 impl<'a> ReadyAuthorizationCodeRequest<'a> {
     pub fn handle<A>(self, flow: AuthorizationFlow, authorizer: A)-> Result<Response, OAuthError>
-    where A: Fn(&Request, &State, &PreGrant) -> OwnerAuthorization<Response> {
+    where
+        A: Fn(&Request, &State, &PreGrant) -> OwnerAuthorization<Response>
+    {
         flow.handle(self.request).complete(ResolvedOwnerAuthorization { handler: authorizer, state: self.state })
     }
 }
