@@ -6,9 +6,6 @@ extern crate gotham;
 extern crate hyper;
 #[cfg(feature = "gotham-frontend")]
 #[macro_use]
-extern crate lazy_static;
-#[cfg(feature = "gotham-frontend")]
-#[macro_use]
 extern crate gotham_derive;
 #[cfg(feature = "gotham-frontend")]
 #[macro_use]
@@ -24,8 +21,8 @@ mod main {
 
     use support::gotham::dummy_client;
     use support::open_in_browser;
-    use std::sync::Mutex;
     use std::thread;
+    use std::sync::{Arc, Mutex};
 
     use hyper::{Request, Response, StatusCode, Body};
 
@@ -34,22 +31,7 @@ mod main {
     use gotham::state::{FromState, State};
     use gotham::router::builder::*;
     use gotham::pipeline::new_pipeline;
-    use gotham::pipeline::single::single_pipeline;
-
-    static PASSPHRASE: &str = "This is a super secret phrase";
-lazy_static! {
-    static ref REGISTRAR: Mutex<ClientMap> = {
-        let mut clients  = ClientMap::new();
-        // Register a dummy client instance
-        let client = Client::public("LocalClient", // Client id
-            "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
-            "default".parse().unwrap()); // Allowed client scope
-        clients.register_client(client);
-        Mutex::new(clients)
-    };
-    static ref AUTHORIZER: Mutex<Storage<RandomGenerator>> = Mutex::new(Storage::new(RandomGenerator::new(16)));
-    static ref ISSUER: Mutex<TokenSigner> = Mutex::new(TokenSigner::new_from_passphrase(&PASSPHRASE, None));
-}
+    use gotham::pipeline::set::{finalize_pipeline_set, new_pipeline_set};
 
     #[derive(Deserialize, StateData, StaticResponseExtender)]
     pub struct OauthAuthorizeQueryExtractor {
@@ -62,17 +44,57 @@ lazy_static! {
     }
 
     pub fn example() {
+        let passphrase = "This is a super secret phrase";
+
+        let mut clients  = ClientMap::new();
+        // Register a dummy client instance
+        let client = Client::public("LocalClient", // Client id
+            "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
+            "default".parse().unwrap()); // Allowed client scope
+        clients.register_client(client);
+
+        // Create the main token instance, a code_granter with an iron frontend.
+        let ohandler = GothamGranter {
+            // Stores clients in a simple in-memory hash map.
+            registrar: Arc::new(Mutex::new(clients)),
+            // Authorization tokens are 16 byte random keys to a memory hash map.
+            authorizer: Arc::new(Mutex::new(Storage::new(RandomGenerator::new(16)))),
+            // Bearer tokens are signed (but not encrypted) using a passphrase.
+            issuer: Arc::new(Mutex::new(TokenSigner::new_from_passphrase(passphrase, None)))
+        };
+
+        let error_text = "<html>
+This page should be accessed via an oauth token from the client in the example. Click
+<a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
+here</a> to begin the authorization process.
+</html>
+";
+        let scopes = vec!["default".parse().unwrap()];
+
         let server_router = {
-            let (chain, pipelines) = single_pipeline(new_pipeline().add(OAuthRequestMiddleware).build());
+            let pipelines = new_pipeline_set();
+            let (pipelines, default) = pipelines.add(new_pipeline()
+                .add(OAuthStateDataMiddleware::new(ohandler))
+                .build());
+            let (pipelines, extended) = pipelines.add(new_pipeline()
+                .add(OAuthGuardMiddleware::new(error_text.to_owned(), scopes))
+                .build());
+            let pipeline_set = finalize_pipeline_set(pipelines);
 
-            build_router(chain, pipelines, |route| {
-                route.get("/").to(home_handler);
+            let default_chain = (default, ());
+            let oauth_guarded_chain = (extended, default_chain);
+            build_router(default_chain, pipeline_set, |route| {
+                route.with_pipeline_chain(oauth_guarded_chain, |route| {
+                    route.get("/").to(home_handler);
+                });
 
-                route.get("/authorize").to(authorize_get_handler);
+                route.associate("/authorize", |route| {
+                    route.get().to(authorize_get_handler);
 
-                route.post("/authorize")
-                    .with_query_string_extractor::<OauthAuthorizeQueryExtractor>()
-                    .to(authorize_post_handler);
+                    route.post()
+                        .with_query_string_extractor::<OauthAuthorizeQueryExtractor>()
+                        .to(authorize_post_handler);
+                });
 
                 route.post("/token").to(token_handler);
             })
@@ -130,47 +152,23 @@ lazy_static! {
         }
     }
 
-    fn home_handler(mut state: State) -> (State, Response) {
-        let oath = state.take::<OAuthRequest>();
-        let res = oath.guard()
-            .and_then(|guard| {
-                let mut issuer = ISSUER.lock().unwrap();
-                let scopes = vec!["default".parse().unwrap()];
-                let flow = AccessFlow::new(&mut *issuer, scopes.as_slice());
-                guard.handle(flow)
-            })
-            .map(|()| {
-                create_response(
-                    &state,
-                    StatusCode::Ok,
-                    Some((String::from("Hello world!").into_bytes(), mime::TEXT_PLAIN)),
-                )
-            })
-            .wait()
-            .unwrap_or_else(|_| {
-                // Does not have the proper authorization token
-                let text = "<html>
-This page should be accessed via an oauth token from the client in the example. Click
-<a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
-here</a> to begin the authorization process.
-</html>
-";
-                create_response(
-                  &state,
-                  StatusCode::Ok,
-                  Some((String::from(text).into_bytes(), mime::TEXT_HTML)),
-                )
-            });
+    fn home_handler(state: State) -> (State, Response) {
+        let res = create_response(
+            &state,
+            StatusCode::Ok,
+            Some((String::from("Hello world!").into_bytes(), mime::TEXT_PLAIN)),
+        );
 
         (state, res)
     }
 
     fn authorize_get_handler(mut state: State) -> (State, Response) {
         let oath = state.take::<OAuthRequest>();
+        let gotham_granter = state.take::<GothamGranter>();
         let res = oath.authorization_code(&state)
             .and_then(|request| {
-                let mut registrar = REGISTRAR.lock().unwrap();
-                let mut authorizer = AUTHORIZER.lock().unwrap();
+                let mut registrar = gotham_granter.registrar.lock().unwrap();
+                let mut authorizer = gotham_granter.authorizer.lock().unwrap();
                 let flow = AuthorizationFlow::new(&mut*registrar, &mut*authorizer);
                 request.handle(flow, handle_get)
             })
@@ -182,10 +180,11 @@ here</a> to begin the authorization process.
 
     fn authorize_post_handler(mut state: State) -> (State, Response) {
         let oath = state.take::<OAuthRequest>();
+        let gotham_granter = state.take::<GothamGranter>();
         let res = oath.authorization_code(&state)
             .and_then(|request| {
-                let mut registrar = REGISTRAR.lock().unwrap();
-                let mut authorizer = AUTHORIZER.lock().unwrap();
+                let mut registrar = gotham_granter.registrar.lock().unwrap();
+                let mut authorizer = gotham_granter.authorizer.lock().unwrap();
                 let flow = AuthorizationFlow::new(&mut*registrar, &mut*authorizer);
                 request.handle(flow, handle_post)
             })
@@ -197,12 +196,13 @@ here</a> to begin the authorization process.
 
     fn token_handler(mut state: State) -> (State, Response) {
         let oath = state.take::<OAuthRequest>();
+        let gotham_granter = state.take::<GothamGranter>();
         let body = state.take::<Body>();
         let res = oath.access_token(body)
             .and_then(|request| {
-                let mut registrar = REGISTRAR.lock().unwrap();
-                let mut authorizer = AUTHORIZER.lock().unwrap();
-                let mut issuer = ISSUER.lock().unwrap();
+                let mut registrar = gotham_granter.registrar.lock().unwrap();
+                let mut authorizer = gotham_granter.authorizer.lock().unwrap();
+                let mut issuer = gotham_granter.issuer.lock().unwrap();
                 let flow = GrantFlow::new(&mut *registrar, &mut *authorizer, &mut *issuer);
                 request.handle(flow)
             })
