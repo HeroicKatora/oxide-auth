@@ -11,21 +11,39 @@ pub use code_grant::prelude::*;
 
 use self::hyper::{StatusCode, Request, Response, Method, Uri, Headers, Body};
 use self::hyper::header::{Authorization, ContentLength, ContentType, Location};
-use gotham::state::State;
+use gotham::state::{State, StateData};
 use gotham::middleware::Middleware;
 use gotham::handler::HandlerFuture;
+use gotham::http::response::create_response;
 
 use self::futures::{Async, Poll, Stream};
 pub use self::futures::{Future, future};
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+#[derive(StateData, Clone)]
+pub struct GothamGranter {
+    pub registrar: Arc<Mutex<Registrar + Send>>,
+    pub authorizer: Arc<Mutex<Authorizer + Send>>,
+    pub issuer: Arc<Mutex<Issuer + Send>>,
+}
 
 #[derive(StateData)]
 pub struct OAuthRequest(Request);
 
 #[derive(Clone, NewMiddleware)]
-pub struct OAuthRequestMiddleware;
-impl Middleware for OAuthRequestMiddleware {
+pub struct OAuthStateDataMiddleware {
+    pub granter: GothamGranter,
+}
+
+impl OAuthStateDataMiddleware {
+    pub fn new(granter: GothamGranter) -> Self {
+        Self  { granter: granter }
+    }
+}
+
+impl Middleware for OAuthStateDataMiddleware {
     fn call<Chain>(self, mut state: State, chain: Chain) -> Box<HandlerFuture>
     where
         Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
@@ -45,11 +63,53 @@ impl Middleware for OAuthRequestMiddleware {
             }
 
             state.put(OAuthRequest(request));
+            state.put(self.granter);
             // Put body back into state for the handler.
             state.put::<Body>(body.into());
 
             chain(state)
         });
+
+        Box::new(f)
+    }
+}
+
+#[derive(Clone, NewMiddleware)]
+pub struct OAuthGuardMiddleware {
+    error_text: String,
+    scopes: Vec<Scope>,
+}
+
+impl OAuthGuardMiddleware {
+    pub fn new(error_text: String, scopes: Vec<Scope>) -> Self {
+        Self { error_text: error_text, scopes: scopes }
+    }
+}
+
+impl Middleware for OAuthGuardMiddleware {
+    fn call<Chain>(self, mut state: State, chain: Chain) -> Box<HandlerFuture>
+    where
+        Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
+    {
+        let oath = state.take::<OAuthRequest>();
+        let f = oath.guard()
+            .then(move |result| {
+                let gotham_granter = state.take::<GothamGranter>();
+                let mut issuer = gotham_granter.issuer.lock().unwrap();
+                let flow = AccessFlow::new(&mut *issuer, self.scopes.as_slice());
+                match result.unwrap().handle(flow) {
+                    Ok(_) => chain(state),
+                    _ => {
+                        let res = create_response(
+                            &state,
+                            StatusCode::Ok,
+                            Some((String::from(self.error_text).into_bytes(), mime::TEXT_HTML)),
+                        );
+
+                        Box::new(future::ok((state, res)))
+                    }
+                }
+            });
 
         Box::new(f)
     }
