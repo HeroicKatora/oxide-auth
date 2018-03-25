@@ -20,26 +20,86 @@ use self::futures::{Async, Poll, Stream};
 pub use self::futures::{Future, future};
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 
 #[derive(StateData, Clone)]
-pub struct GothamGranter {
-    pub registrar: Arc<Mutex<Registrar + Send>>,
-    pub authorizer: Arc<Mutex<Authorizer + Send>>,
-    pub issuer: Arc<Mutex<Issuer + Send>>,
+pub struct GothamOauthProvider {
+    registrar: Arc<Mutex<Registrar + Send>>,
+    authorizer: Arc<Mutex<Authorizer + Send>>,
+    issuer: Arc<Mutex<Issuer + Send>>,
 }
+impl GothamOauthProvider {
+    pub fn new<R, A, I>(registrar: R, data: A, issuer: I) -> Self where
+        R: Registrar + Send + 'static,
+        A: Authorizer + Send + 'static,
+        I: Issuer + Send + 'static
+    {
+        Self {
+            registrar: Arc::new(Mutex::new(registrar)),
+            authorizer: Arc::new(Mutex::new(data)),
+            issuer: Arc::new(Mutex::new(issuer)),
+        }
+    }
 
-#[derive(StateData)]
-pub struct OAuthRequest(Request);
+    /// Thread-safely access the underlying registrar, which is responsible for client registrarion.
+    pub fn registrar(&self) -> LockResult<MutexGuard<Registrar + Send + 'static>> {
+        self.registrar.lock()
+    }
+
+    /// Thread-safely access the underlying authorizer, which builds and holds authorization codes.
+    pub fn authorizer(&self) -> LockResult<MutexGuard<Authorizer + Send + 'static>> {
+        self.authorizer.lock()
+    }
+
+    /// Thread-safely access the underlying issuer, which builds and holds access tokens.
+    pub fn issuer(&self) -> LockResult<MutexGuard<Issuer + Send + 'static>> {
+        self.issuer.lock()
+    }
+
+    fn request_from_state(&self, state: &State) -> Request {
+        let method = state.borrow::<Method>().clone();
+        let uri = state.borrow::<Uri>().clone();
+        let headers = state.borrow::<Headers>().clone();
+
+        let mut request = Request::new(method.clone(), uri.clone());
+        for header in headers.iter() {
+            request.headers_mut().set_raw(
+                header.name().to_owned(),
+                header.raw().clone()
+            );
+        }
+
+        request
+    }
+
+    pub fn authorization_code(&self, state: &State) -> AuthorizationCodeRequest {
+        AuthorizationCodeRequest {
+            request: Some(self.request_from_state(&state)),
+        }
+    }
+
+    pub fn access_token(&self, state: &State, body: Body) -> GrantRequest {
+        GrantRequest {
+            request: Some(self.request_from_state(&state)),
+            body: Some(body),
+        }
+    }
+
+    pub fn guard(&self, state: &State) -> GuardRequest {
+        GuardRequest {
+            request: Some(self.request_from_state(&state)),
+        }
+    }
+}
 
 #[derive(Clone, NewMiddleware)]
 pub struct OAuthStateDataMiddleware {
-    granter: GothamGranter,
+    provider: GothamOauthProvider,
 }
 
 impl OAuthStateDataMiddleware {
-    pub fn new(granter: GothamGranter) -> Self {
-        Self { granter: granter }
+    pub fn new(provider: GothamOauthProvider) -> Self {
+        Self { provider: provider }
     }
 }
 
@@ -48,36 +108,9 @@ impl Middleware for OAuthStateDataMiddleware {
     where
         Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
     {
-        let f = state.take::<Body>().concat2().then(move |chunk| {
-            match chunk {
-                Ok(valid_body) => {
-                    let method = state.borrow::<Method>().clone();
-                    let uri = state.borrow::<Uri>().clone();
-                    let headers = state.borrow::<Headers>().clone();
+        state.put(self.provider);
 
-                    // Reconstruct the hyper request for OAuthRequest.
-                    let mut request = Request::new(method.clone(), uri.clone());
-                    let body = valid_body.to_vec();
-                    request.set_body(body.clone());
-                    for header in headers.iter() {
-                        request.headers_mut().set_raw(
-                            header.name().to_owned(),
-                            header.raw().clone()
-                        );
-                    }
-
-                    state.put(OAuthRequest(request));
-                    state.put(self.granter);
-                    // Put body back into state for the handler.
-                    state.put::<Body>(body.into());
-
-                    chain(state)
-                },
-                Err(e) => Box::new(future::err((state, e.into_handler_error()))),
-            }
-        });
-
-        Box::new(f)
+        chain(state)
     }
 }
 
@@ -97,12 +130,12 @@ impl Middleware for OAuthGuardMiddleware {
     where
         Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
     {
-        let oath = state.take::<OAuthRequest>();
-        let f = oath.guard().then(move |result| {
+        let oauth = state.borrow::<GothamOauthProvider>().clone();
+        let guard_request = oauth.guard(&state);
+        let f = guard_request.then(move |result| {
             match result {
                 Ok(guard) => {
-                    let gotham_granter = state.take::<GothamGranter>();
-                    let mut issuer = gotham_granter.issuer.lock().unwrap();
+                    let mut issuer = oauth.issuer().unwrap();
                     let flow = AccessFlow::new(&mut *issuer, self.scopes.as_slice());
                     match guard.handle(flow) {
                         Ok(_) => chain(state),
@@ -124,37 +157,8 @@ pub struct ResolvedRequest {
     body: Option<HashMap<String, String>>,
 }
 
-impl OAuthRequest {
-    pub fn authorization_code(self, state: &State) -> AuthorizationCodeRequest {
-        let OAuthRequest(request) = self;
-
-        AuthorizationCodeRequest {
-            request: Some(request),
-            state: state,
-        }
-    }
-
-    pub fn access_token(self, body: Body) -> GrantRequest {
-        let OAuthRequest(request) = self;
-
-        GrantRequest {
-            request: Some(request),
-            body: Some(body),
-        }
-    }
-
-    pub fn guard(self) -> GuardRequest {
-        let OAuthRequest(request) = self;
-
-        GuardRequest {
-            request: Some(request),
-        }
-    }
-}
-
-pub struct AuthorizationCodeRequest<'a> {
+pub struct AuthorizationCodeRequest {
     request: Option<Request>,
-    state: &'a State,
 }
 
 pub struct GrantRequest {
@@ -166,10 +170,7 @@ pub struct GuardRequest {
     request: Option<Request>,
 }
 
-pub struct ReadyAuthorizationCodeRequest<'a> {
-    request: ResolvedRequest,
-    state: &'a State,
-}
+pub struct ReadyAuthorizationCodeRequest(ResolvedRequest);
 pub struct ReadyGrantRequest(ResolvedRequest);
 pub struct ReadyGuardRequest(ResolvedRequest);
 
@@ -274,25 +275,26 @@ impl ResolvedRequest {
     }
 }
 
-struct ResolvedOwnerAuthorization<'a, A> {
+struct ResolvedOwnerAuthorization<A> {
     handler: A,
-    state: &'a State,
 }
 
-impl<'a, A> OwnerAuthorizer<ResolvedRequest> for ResolvedOwnerAuthorization<'a, A>
-where A: Fn(&Request, &State, &PreGrant) -> OwnerAuthorization<Response> {
+impl<A> OwnerAuthorizer<ResolvedRequest> for ResolvedOwnerAuthorization<A>
+where
+    A: Fn(&Request, &PreGrant) -> OwnerAuthorization<Response>
+{
     fn check_authorization(self, request: ResolvedRequest, grant: &PreGrant) -> OwnerAuthorization<Response> {
-        (self.handler)(&request.request, self.state, grant)
+        (self.handler)(&request.request, grant)
     }
 }
 
-impl<'a> Future for AuthorizationCodeRequest<'a> {
-    type Item = ReadyAuthorizationCodeRequest<'a>;
+impl Future for AuthorizationCodeRequest {
+    type Item = ReadyAuthorizationCodeRequest;
     type Error = OAuthError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let resolved = ResolvedRequest::headers_only(self.request.take().unwrap());
-        Ok(Async::Ready(ReadyAuthorizationCodeRequest {request: resolved, state: self.state}))
+        Ok(Async::Ready(ReadyAuthorizationCodeRequest(resolved)))
     }
 }
 
@@ -334,12 +336,12 @@ impl Future for GuardRequest {
     }
 }
 
-impl<'a> ReadyAuthorizationCodeRequest<'a> {
+impl ReadyAuthorizationCodeRequest {
     pub fn handle<A>(self, flow: AuthorizationFlow, authorizer: A)-> Result<Response, OAuthError>
     where
-        A: Fn(&Request, &State, &PreGrant) -> OwnerAuthorization<Response>
+        A: Fn(&Request, &PreGrant) -> OwnerAuthorization<Response>
     {
-        flow.handle(self.request).complete(ResolvedOwnerAuthorization { handler: authorizer, state: self.state })
+        flow.handle(self.0).complete(ResolvedOwnerAuthorization { handler: authorizer })
     }
 }
 
