@@ -179,6 +179,7 @@
 //! may want to provide additional wrappers.
 //!
 
+/// Integration with gotham and its state system.
 #[cfg(feature = "gotham-frontend")]
 pub mod gotham;
 #[cfg(feature = "iron-frontend")]

@@ -22,6 +22,8 @@ pub use self::futures::{Future, future};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 
+/// A struct that wraps all oauth related services and makes them available through
+/// state eg by `state.borrow::<GothamOauthProvider>()`.
 #[derive(StateData, Clone)]
 pub struct GothamOauthProvider {
     registrar: Arc<Mutex<Registrar + Send>>,
@@ -29,6 +31,8 @@ pub struct GothamOauthProvider {
     issuer: Arc<Mutex<Issuer + Send>>,
 }
 impl GothamOauthProvider {
+
+    /// Constructs a new Gotham OAuth provider, wrapping all the common oauth services.
     pub fn new<R, A, I>(registrar: R, data: A, issuer: I) -> Self where
         R: Registrar + Send + 'static,
         A: Authorizer + Send + 'static,
@@ -56,6 +60,7 @@ impl GothamOauthProvider {
         self.issuer.lock()
     }
 
+    /// Reconstruct a hyper request from State. See https://github.com/gotham-rs/gotham/issues/186
     fn request_from_state(&self, state: &State) -> Request {
         let method = state.borrow::<Method>().clone();
         let uri = state.borrow::<Uri>().clone();
@@ -72,32 +77,37 @@ impl GothamOauthProvider {
         request
     }
 
-    pub fn authorization_code(&self, state: &State) -> AuthorizationCodeRequest {
+    /// Initiate a future that resolves an authorization code request.
+    pub fn authorization_code_request(&self, state: &State) -> AuthorizationCodeRequest {
         AuthorizationCodeRequest {
             request: Some(self.request_from_state(&state)),
         }
     }
 
-    pub fn access_token(&self, state: &State, body: Body) -> GrantRequest {
+    /// Initiate a future that resolves an access token request.
+    pub fn access_token_request(&self, state: &State, body: Body) -> GrantRequest {
         GrantRequest {
             request: Some(self.request_from_state(&state)),
             body: Some(body),
         }
     }
 
-    pub fn guard(&self, state: &State) -> GuardRequest {
+    /// Initiate a future that resolves a guard request.
+    pub fn guard_request(&self, state: &State) -> GuardRequest {
         GuardRequest {
             request: Some(self.request_from_state(&state)),
         }
     }
 }
 
+/// Gotham middleware that inserts oauth data into state making them available to handlers.
 #[derive(Clone, NewMiddleware)]
 pub struct OAuthStateDataMiddleware {
     provider: GothamOauthProvider,
 }
 
 impl OAuthStateDataMiddleware {
+    /// Construct a new middleware containing the provider that wraps all common auth services.
     pub fn new(provider: GothamOauthProvider) -> Self {
         Self { provider: provider }
     }
@@ -114,25 +124,26 @@ impl Middleware for OAuthStateDataMiddleware {
     }
 }
 
+/// Middleware that protect routes which require an active oauth access token.
 #[derive(Clone, NewMiddleware)]
 pub struct OAuthGuardMiddleware {
     scopes: Vec<Scope>,
 }
 
 impl OAuthGuardMiddleware {
+    /// Construct a new guard middleware with the scopes that it should guard against.
     pub fn new(scopes: Vec<Scope>) -> Self {
         Self { scopes: scopes }
     }
 }
 
 impl Middleware for OAuthGuardMiddleware {
-    fn call<Chain>(self, mut state: State, chain: Chain) -> Box<HandlerFuture>
+    fn call<Chain>(self, state: State, chain: Chain) -> Box<HandlerFuture>
     where
         Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
     {
         let oauth = state.borrow::<GothamOauthProvider>().clone();
-        let guard_request = oauth.guard(&state);
-        let f = guard_request.then(move |result| {
+        let f = oauth.guard_request(&state).then(move |result| {
             match result {
                 Ok(guard) => {
                     let mut issuer = oauth.issuer().unwrap();
@@ -150,6 +161,7 @@ impl Middleware for OAuthGuardMiddleware {
     }
 }
 
+/// Resolved request containing after polling oauth access token, grant or guard requests.
 pub struct ResolvedRequest {
     request: Request,
     authorization: Result<Option<String>, ()>,
@@ -157,21 +169,29 @@ pub struct ResolvedRequest {
     body: Option<HashMap<String, String>>,
 }
 
+/// A request for authorization code.
 pub struct AuthorizationCodeRequest {
     request: Option<Request>,
 }
 
+/// An oauth grant request.
 pub struct GrantRequest {
     request: Option<Request>,
     body: Option<Body>,
 }
 
+/// An oauth guard request.
 pub struct GuardRequest {
     request: Option<Request>,
 }
 
+/// A wrapper for a successfully resolved authorization request after polling.
 pub struct ReadyAuthorizationCodeRequest(ResolvedRequest);
+
+/// A wrapper for a successfully resolved grant request after polling.
 pub struct ReadyGrantRequest(ResolvedRequest);
+
+/// A wrapper for a successfully resolved guard request after polling.
 pub struct ReadyGuardRequest(ResolvedRequest);
 
 impl WebRequest for ResolvedRequest {
@@ -284,6 +304,7 @@ where
     A: Fn(&Request, &PreGrant) -> OwnerAuthorization<Response>
 {
     fn check_authorization(self, request: ResolvedRequest, grant: &PreGrant) -> OwnerAuthorization<Response> {
+        // @todo Investigate passing along the state.
         (self.handler)(&request.request, grant)
     }
 }
@@ -337,6 +358,7 @@ impl Future for GuardRequest {
 }
 
 impl ReadyAuthorizationCodeRequest {
+    /// Wrapper proxy method to the handler of authorization flow, passing the resolved request.
     pub fn handle<A>(self, flow: AuthorizationFlow, authorizer: A)-> Result<Response, OAuthError>
     where
         A: Fn(&Request, &PreGrant) -> OwnerAuthorization<Response>
@@ -346,12 +368,14 @@ impl ReadyAuthorizationCodeRequest {
 }
 
 impl ReadyGrantRequest {
+    /// Wrapper proxy method to the handler of grant flow, passing the resolved request.
     pub fn handle(self, flow: GrantFlow) -> Result<Response, OAuthError> {
         flow.handle(self.0)
     }
 }
 
 impl ReadyGuardRequest {
+    /// Wrapper proxy method to the handler of guard flow, passing the resolved request.
     pub fn handle(self, flow: AccessFlow) -> Result<(), OAuthError> {
         flow.handle(self.0)
     }

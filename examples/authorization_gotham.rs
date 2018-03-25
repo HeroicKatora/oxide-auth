@@ -196,7 +196,7 @@ here</a> to begin the authorization process.
 
     fn authorize_get_handler(state: State) -> Box<HandlerFuture> {
         let oauth = state.borrow::<GothamOauthProvider>().clone();
-        let f = oauth.authorization_code(&state).then(|result| {
+        let f = oauth.authorization_code_request(&state).then(|result| {
             match result {
                 Ok(request) => {
                     let oauth = state.borrow::<GothamOauthProvider>().clone();
@@ -217,7 +217,7 @@ here</a> to begin the authorization process.
 
     fn authorize_post_handler(state: State) -> Box<HandlerFuture> {
         let oauth = state.borrow::<GothamOauthProvider>().clone();
-        let f = oauth.authorization_code(&state).then(|result| {
+        let f = oauth.authorization_code_request(&state).then(|result| {
             match result {
                 Ok(request) => {
                     let oauth = state.borrow::<GothamOauthProvider>().clone();
@@ -239,7 +239,7 @@ here</a> to begin the authorization process.
     fn token_handler(mut state: State) -> Box<HandlerFuture> {
         let oauth = state.borrow::<GothamOauthProvider>().clone();
         let body = state.take::<Body>();
-        let f = oauth.access_token(&state, body).then(|result| {
+        let f = oauth.access_token_request(&state, body).then(|result| {
             match result {
                 Ok(request) => {
                     let oauth = state.borrow::<GothamOauthProvider>().clone();
