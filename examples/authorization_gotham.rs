@@ -55,7 +55,7 @@ mod main {
         );
         clients.register_client(client);
 
-        // Create the main token instance, a code_granter with an iron frontend.
+        // Create the gotham provider.
         let ohandler = GothamOauthProvider::new(
             // Stores clients in a simple in-memory hash map.
             clients,
