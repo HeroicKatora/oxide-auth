@@ -16,29 +16,27 @@ mod main {
     extern crate oxide_auth;
     extern crate futures;
     extern crate mime;
+    extern crate serde_urlencoded;
 
     use self::oxide_auth::frontends::gotham::*;
 
     use support::gotham::dummy_client;
     use support::open_in_browser;
+    use std::collections::HashMap;
     use std::thread;
-    use std::sync::{Arc, Mutex};
 
     use hyper::{Request, Response, StatusCode, Body};
+    use hyper::header::{ContentLength, ContentType};
 
     use gotham;
     use gotham::handler::HandlerFuture;
     use gotham::http::response::create_response;
     use gotham::middleware::Middleware;
-    use gotham::state::{FromState, State};
+    use gotham::state::State;
     use gotham::router::builder::*;
     use gotham::pipeline::new_pipeline;
     use gotham::pipeline::set::{finalize_pipeline_set, new_pipeline_set};
 
-    #[derive(Deserialize, StateData, StaticResponseExtender)]
-    pub struct OauthAuthorizeQueryExtractor {
-        deny: Option<i32>,
-    }
     #[derive(Deserialize, StateData, StaticResponseExtender)]
     pub struct OauthResultQueryExtractor {
         pub error: Option<String>,
@@ -58,14 +56,14 @@ mod main {
         clients.register_client(client);
 
         // Create the main token instance, a code_granter with an iron frontend.
-        let ohandler = GothamGranter {
+        let ohandler = GothamOauthProvider::new(
             // Stores clients in a simple in-memory hash map.
-            registrar: Arc::new(Mutex::new(clients)),
+            clients,
             // Authorization tokens are 16 byte random keys to a memory hash map.
-            authorizer: Arc::new(Mutex::new(Storage::new(RandomGenerator::new(16)))),
+            Storage::new(RandomGenerator::new(16)),
             // Bearer tokens are signed (but not encrypted) using a passphrase.
-            issuer: Arc::new(Mutex::new(TokenSigner::new_from_passphrase(passphrase, None)))
-        };
+            TokenSigner::new_from_passphrase(passphrase, None)
+        );
 
         /// Middleware that will show a helpful message to unauthorized requests
         /// of the protected resource.
@@ -125,10 +123,7 @@ here</a> to begin the authorization process.
 
                 route.associate("/authorize", |route| {
                     route.get().to(authorize_get_handler);
-
-                    route.post()
-                        .with_query_string_extractor::<OauthAuthorizeQueryExtractor>()
-                        .to(authorize_post_handler);
+                    route.post().to(authorize_post_handler);
                 });
 
                 route.post("/token").to(token_handler);
@@ -157,7 +152,7 @@ here</a> to begin the authorization process.
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.
-    fn handle_get(_: &Request, state: &State, grant: &PreGrant) -> OwnerAuthorization<Response> {
+    fn handle_get(_: &Request, grant: &PreGrant) -> OwnerAuthorization<Response> {
         let text = format!(
             "<html>'{}' (at {}) is requesting permission for '{}'
             <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
@@ -167,20 +162,22 @@ here</a> to begin the authorization process.
                 <input type=\"submit\" value=\"Deny\">
             </form>
             </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
-        let response = create_response(
-            &state,
-            StatusCode::Ok,
-            Some((String::from(text).into_bytes(), mime::TEXT_HTML)),
-        );
+        let response = Response::new()
+            .with_header(ContentLength(text.len() as u64))
+            .with_header(ContentType(mime::TEXT_HTML))
+            .with_status(StatusCode::Ok)
+            .with_body(text.to_owned());
         OwnerAuthorization::InProgress(response)
     }
 
     /// Handle form submission by a user, completing the authorization flow. The resource owner
     /// either accepted or denied the request.
-    fn handle_post(_: &Request, state: &State, _: &PreGrant) -> OwnerAuthorization<Response> {
+    fn handle_post(request: &Request, _: &PreGrant) -> OwnerAuthorization<Response> {
         // No real user authentication is done here, in production you SHOULD use session keys or equivalent
-        let query_params = OauthAuthorizeQueryExtractor::borrow_from(&state);
-        if let Some(_) = query_params.deny {
+        let query = request.query().and_then(|query_string| {
+            serde_urlencoded::from_str::<HashMap<String, String>>(query_string).ok()
+        }).unwrap_or(HashMap::new());
+        if query.contains_key("deny") {
             OwnerAuthorization::Denied
         } else {
             OwnerAuthorization::Authorized("dummy user".to_string())
@@ -197,54 +194,69 @@ here</a> to begin the authorization process.
         (state, res)
     }
 
-    fn authorize_get_handler(mut state: State) -> (State, Response) {
-        let oath = state.take::<OAuthRequest>();
-        let gotham_granter = state.take::<GothamGranter>();
-        let res = oath.authorization_code(&state)
-            .and_then(|request| {
-                let mut registrar = gotham_granter.registrar.lock().unwrap();
-                let mut authorizer = gotham_granter.authorizer.lock().unwrap();
-                let flow = AuthorizationFlow::new(&mut *registrar, &mut *authorizer);
-                request.handle(flow, handle_get)
-            })
-            .wait()
-            .unwrap_or(create_response(&state, StatusCode::BadRequest, None));
+    fn authorize_get_handler(state: State) -> Box<HandlerFuture> {
+        let oauth = state.borrow::<GothamOauthProvider>().clone();
+        let f = oauth.authorization_code(&state).then(|result| {
+            match result {
+                Ok(request) => {
+                    let oauth = state.borrow::<GothamOauthProvider>().clone();
+                    let mut registrar = oauth.registrar().unwrap();
+                    let mut authorizer = oauth.authorizer().unwrap();
+                    let flow = AuthorizationFlow::new(&mut *registrar, &mut *authorizer);
+                    future::ok((state, request.handle(flow, handle_get).unwrap()))
+                },
+                Err(_) => {
+                    let res = create_response(&state, StatusCode::BadRequest, None);
+                    future::ok((state, res))
+                }
+            }
+        });
 
-        (state, res)
+        Box::new(f)
     }
 
-    fn authorize_post_handler(mut state: State) -> (State, Response) {
-        let oath = state.take::<OAuthRequest>();
-        let gotham_granter = state.take::<GothamGranter>();
-        let res = oath.authorization_code(&state)
-            .and_then(|request| {
-                let mut registrar = gotham_granter.registrar.lock().unwrap();
-                let mut authorizer = gotham_granter.authorizer.lock().unwrap();
-                let flow = AuthorizationFlow::new(&mut *registrar, &mut *authorizer);
-                request.handle(flow, handle_post)
-            })
-            .wait()
-            .unwrap_or(create_response(&state, StatusCode::BadRequest, None));
+    fn authorize_post_handler(state: State) -> Box<HandlerFuture> {
+        let oauth = state.borrow::<GothamOauthProvider>().clone();
+        let f = oauth.authorization_code(&state).then(|result| {
+            match result {
+                Ok(request) => {
+                    let oauth = state.borrow::<GothamOauthProvider>().clone();
+                    let mut registrar = oauth.registrar().unwrap();
+                    let mut authorizer = oauth.authorizer().unwrap();
+                    let flow = AuthorizationFlow::new(&mut *registrar, &mut *authorizer);
+                    future::ok((state, request.handle(flow, handle_post).unwrap()))
+                },
+                Err(_) => {
+                    let res = create_response(&state, StatusCode::BadRequest, None);
+                    future::ok((state, res))
+                }
+            }
+        });
 
-        (state, res)
+        Box::new(f)
     }
 
-    fn token_handler(mut state: State) -> (State, Response) {
-        let oath = state.take::<OAuthRequest>();
-        let gotham_granter = state.take::<GothamGranter>();
+    fn token_handler(mut state: State) -> Box<HandlerFuture> {
+        let oauth = state.borrow::<GothamOauthProvider>().clone();
         let body = state.take::<Body>();
-        let res = oath.access_token(body)
-            .and_then(|request| {
-                let mut registrar = gotham_granter.registrar.lock().unwrap();
-                let mut authorizer = gotham_granter.authorizer.lock().unwrap();
-                let mut issuer = gotham_granter.issuer.lock().unwrap();
-                let flow = GrantFlow::new(&mut *registrar, &mut *authorizer, &mut *issuer);
-                request.handle(flow)
-            })
-            .wait()
-            .unwrap_or(create_response(&state, StatusCode::BadRequest, None));
+        let f = oauth.access_token(&state, body).then(|result| {
+            match result {
+                Ok(request) => {
+                    let oauth = state.borrow::<GothamOauthProvider>().clone();
+                    let mut registrar = oauth.registrar().unwrap();
+                    let mut authorizer = oauth.authorizer().unwrap();
+                    let mut issuer = oauth.issuer().unwrap();
+                    let flow = GrantFlow::new(&mut *registrar, &mut *authorizer, &mut *issuer);
+                    future::ok((state, request.handle(flow).unwrap()))
+                },
+                Err(_) => {
+                    let res = create_response(&state, StatusCode::BadRequest, None);
+                    future::ok((state, res))
+                }
+            }
+        });
 
-        (state, res)
+        Box::new(f)
     }
 }
 
