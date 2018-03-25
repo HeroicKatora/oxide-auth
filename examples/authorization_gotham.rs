@@ -1,4 +1,6 @@
 mod support;
+#[cfg(feature = "gotham-frontend")]
+mod support_gotham;
 
 #[cfg(feature = "gotham-frontend")]
 extern crate gotham;
@@ -20,7 +22,7 @@ mod main {
 
     use self::oxide_auth::frontends::gotham::*;
 
-    use support::gotham::dummy_client;
+    use support_gotham::dummy_client;
     use support::open_in_browser;
     use std::collections::HashMap;
     use std::thread;

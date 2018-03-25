@@ -7,11 +7,9 @@ extern crate serde_json;
 extern crate hyper;
 
 use self::reqwest::header::Authorization;
-use self::hyper::{StatusCode, Request, Response};
+use self::hyper::{StatusCode, Response};
 use self::gotham::state::{FromState, State};
 use self::gotham::http::response::create_response;
-use self::gotham::router::Router;
-use self::gotham::router::builder::*;
 
 use std::collections::HashMap;
 use std::io::Read;
