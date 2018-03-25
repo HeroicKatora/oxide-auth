@@ -27,7 +27,9 @@ mod main {
     use hyper::{Request, Response, StatusCode, Body};
 
     use gotham;
+    use gotham::handler::HandlerFuture;
     use gotham::http::response::create_response;
+    use gotham::middleware::Middleware;
     use gotham::state::{FromState, State};
     use gotham::router::builder::*;
     use gotham::pipeline::new_pipeline;
@@ -65,12 +67,38 @@ mod main {
             issuer: Arc::new(Mutex::new(TokenSigner::new_from_passphrase(passphrase, None)))
         };
 
-        let error_text = "<html>
+        /// Middleware that will show a helpful message to unauthorized requests
+        /// of the protected resource.
+        #[derive(Clone, NewMiddleware)]
+        pub struct OAuthErrorMiddleware;
+
+        impl Middleware for OAuthErrorMiddleware {
+            fn call<Chain>(self, state: State, chain: Chain) -> Box<HandlerFuture>
+            where
+                Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
+            {
+                let result = chain(state);
+                let f = result.or_else(move |(state, _error)| {
+                    let text = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
 here</a> to begin the authorization process.
-</html>
-";
+</html>";
+
+                    let response = create_response(
+                        &state,
+                        StatusCode::Ok,
+                        Some((String::from(text).into_bytes(), mime::TEXT_HTML)),
+                    );
+
+                    future::ok((state, response))
+                });
+
+
+                Box::new(f)
+            }
+        }
+
         let scopes = vec!["default".parse().unwrap()];
 
         let server_router = {
@@ -82,7 +110,8 @@ here</a> to begin the authorization process.
             );
             let (pipelines, extended) = pipelines.add(
                 new_pipeline()
-                    .add(OAuthGuardMiddleware::new(error_text.to_owned(), scopes))
+                    .add(OAuthErrorMiddleware)
+                    .add(OAuthGuardMiddleware::new(scopes))
                     .build()
             );
             let pipeline_set = finalize_pipeline_set(pipelines);
