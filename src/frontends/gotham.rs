@@ -1,3 +1,57 @@
+//! Offers bindings for the code_grant module with gotham servers.
+//!
+//! ## Hello world
+//!
+//! ```rust
+//! # extern crate gotham;
+//! # extern crate hyper;
+//! # extern crate oxide_auth;
+//! # use hyper::{Response, StatusCode};
+//! # use gotham::pipeline::new_pipeline;
+//! # use gotham::pipeline::single::single_pipeline;
+//! # use gotham::state::State;
+//! # use gotham::router::Router;
+//! # use gotham::router::builder::*;
+//! # use gotham::test::TestServer;
+//! # use oxide_auth::frontends::gotham::*;
+//! #
+//! # fn router() -> Router {
+//!      /// The gotham provider needs to be created and then pass it to the state
+//!      /// data middleware that will take care adding it in to state data.
+//!      let ohandler = GothamOauthProvider::new(
+//!          ClientMap::new(),
+//!          Storage::new(RandomGenerator::new(16)),
+//!          TokenSigner::new_from_passphrase("foobar", None)
+//!      );
+//!      let (chain, pipelines) = single_pipeline(
+//!          new_pipeline()
+//!              .add(OAuthStateDataMiddleware::new(ohandler))
+//!              .build()
+//!      );
+//!
+//! #     build_router(chain, pipelines, |route| {
+//! #         route.get("/").to(my_handler);
+//! #     })
+//! # }
+//! #
+//! # fn my_handler(mut state: State) -> (State, Response) {
+//!      /// Then in you handler you can access it through state.
+//!     let oauth = state.take::<GothamOauthProvider>();
+//!     let mut registrar = oauth.registrar().unwrap();
+//!     let mut authorizer = oauth.authorizer().unwrap();
+//!     let mut issuer = oauth.issuer().unwrap();
+//! #   (state, Response::new().with_status(StatusCode::Accepted))
+//! # }
+//! #
+//! # fn main() {
+//! #   let test_server = TestServer::new(router()).unwrap();
+//! #   let response = test_server.client()
+//! #       .get("https://example.com/")
+//! #       .perform()
+//! #       .unwrap();
+//! #   assert_eq!(response.status(), StatusCode::Accepted);
+//! # }
+//! ```
 extern crate hyper;
 extern crate mime;
 extern crate futures;
@@ -22,8 +76,7 @@ pub use self::futures::{Future, future};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 
-/// A struct that wraps all oauth related services and makes them available through
-/// state eg by `state.borrow::<GothamOauthProvider>()`.
+/// A struct that wraps all oauth related services and makes them available through state.
 #[derive(StateData, Clone)]
 pub struct GothamOauthProvider {
     registrar: Arc<Mutex<Registrar + Send>>,
