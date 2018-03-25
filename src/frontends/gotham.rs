@@ -49,27 +49,32 @@ impl Middleware for OAuthStateDataMiddleware {
         Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
     {
         let f = state.take::<Body>().concat2().then(move |chunk| {
-            let method = state.borrow::<Method>().clone();
-            let uri = state.borrow::<Uri>().clone();
-            let headers = state.borrow::<Headers>().clone();
+            match chunk {
+                Ok(valid_body) => {
+                    let method = state.borrow::<Method>().clone();
+                    let uri = state.borrow::<Uri>().clone();
+                    let headers = state.borrow::<Headers>().clone();
 
-            // Reconstruct the hyper request for OAuthRequest.
-            let mut request = Request::new(method.clone(), uri.clone());
-            let body = chunk.unwrap().to_vec();
-            request.set_body(body.clone());
-            for header in headers.iter() {
-                request.headers_mut().set_raw(
-                    header.name().to_owned(),
-                    header.raw().clone()
-                );
+                    // Reconstruct the hyper request for OAuthRequest.
+                    let mut request = Request::new(method.clone(), uri.clone());
+                    let body = valid_body.to_vec();
+                    request.set_body(body.clone());
+                    for header in headers.iter() {
+                        request.headers_mut().set_raw(
+                            header.name().to_owned(),
+                            header.raw().clone()
+                        );
+                    }
+
+                    state.put(OAuthRequest(request));
+                    state.put(self.granter);
+                    // Put body back into state for the handler.
+                    state.put::<Body>(body.into());
+
+                    chain(state)
+                },
+                Err(e) => Box::new(future::err((state, e.into_handler_error()))),
             }
-
-            state.put(OAuthRequest(request));
-            state.put(self.granter);
-            // Put body back into state for the handler.
-            state.put::<Body>(body.into());
-
-            chain(state)
         });
 
         Box::new(f)
@@ -94,12 +99,17 @@ impl Middleware for OAuthGuardMiddleware {
     {
         let oath = state.take::<OAuthRequest>();
         let f = oath.guard().then(move |result| {
-            let gotham_granter = state.take::<GothamGranter>();
-            let mut issuer = gotham_granter.issuer.lock().unwrap();
-            let flow = AccessFlow::new(&mut *issuer, self.scopes.as_slice());
-            match result.unwrap().handle(flow) {
-                Ok(_) => chain(state),
-                Err(e) => Box::new(future::err((state, e.into_handler_error())))
+            match result {
+                Ok(guard) => {
+                    let gotham_granter = state.take::<GothamGranter>();
+                    let mut issuer = gotham_granter.issuer.lock().unwrap();
+                    let flow = AccessFlow::new(&mut *issuer, self.scopes.as_slice());
+                    match guard.handle(flow) {
+                        Ok(_) => chain(state),
+                        Err(e) => Box::new(future::err((state, e.into_handler_error())))
+                    }
+                },
+                Err(e) => Box::new(future::err((state, e.into_handler_error()))),
             }
         });
 
@@ -245,12 +255,9 @@ impl ResolvedRequest {
             Some(header) => Ok(Some(format!("{}", header))),
         };
 
-        let mut query = None;
-        if let Some(query_string) = request.query() {
-            query = serde_urlencoded::from_str::<HashMap<String, String>>(query_string)
-                .map(|v| Some(v))
-                .unwrap();
-        }
+        let query = request.query().and_then(|query_string| {
+            serde_urlencoded::from_str::<HashMap<String, String>>(query_string).ok()
+        });
 
         ResolvedRequest {
             request: request,
@@ -297,12 +304,17 @@ impl Future for GrantRequest {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.body.take().unwrap().poll() {
             Ok(Async::Ready(body)) => {
-                let vec = body.unwrap().to_vec();
-                let body_string = String::from_utf8(vec).unwrap();
-                let body_decoded: HashMap<String, String> = serde_urlencoded::from_str(body_string.as_str())
-                  .map_err(|_| ()).unwrap();
-                let resolved = ResolvedRequest::with_body(self.request.take().unwrap(), body_decoded);
-                Ok(Async::Ready(ReadyGrantRequest(resolved)))
+                body.and_then(|valid_body| {
+                    String::from_utf8(valid_body.to_vec()).ok()
+                })
+                .and_then(|body_string| {
+                    serde_urlencoded::from_str::<HashMap<String, String>>(body_string.as_str()).ok()
+                })
+                .and_then(|decoded_body| {
+                    let resolved = ResolvedRequest::with_body(self.request.take().unwrap(), decoded_body);
+                    Some(Async::Ready(ReadyGrantRequest(resolved)))
+                })
+                .ok_or_else(|| OAuthError::AccessDenied)
             },
             Ok(Async::NotReady) => Ok(Async::NotReady),
 
