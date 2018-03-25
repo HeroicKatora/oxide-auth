@@ -33,7 +33,7 @@ url = "^1.6"
 urlencoded = { version = "^0.6", optional = true }
 
 [features]
-default = ["iron-frontend", "rouille-frontend"]
+default = ["gotham-frontend", "iron-frontend", "rouille-frontend"]
 iron-frontend = ["iron", "urlencoded"]
 rouille-frontend = ["rouille", "serde_urlencoded"]
 gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures"]
