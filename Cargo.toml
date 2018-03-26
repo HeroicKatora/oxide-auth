@@ -15,6 +15,11 @@ license = "MIT"
 [dependencies]
 base64 = "^0.9"
 chrono = "^0.4"
+futures = { version = "0.1.18", optional = true }
+gotham = { version = "^0.2", optional = true }
+gotham_derive = { version = "^0.2", optional = true }
+hyper = { version = "^0.11", optional = true }
+mime = { version = "^0.3", optional = true }
 iron = { version = "^0.6", optional = true }
 serde = "^1.0"
 serde_derive = "^1.0"
@@ -28,9 +33,10 @@ url = "^1.6"
 urlencoded = { version = "^0.6", optional = true }
 
 [features]
-default = ["iron-frontend", "rouille-frontend"]
+default = ["gotham-frontend", "iron-frontend", "rouille-frontend"]
 iron-frontend = ["iron", "urlencoded"]
 rouille-frontend = ["rouille", "serde_urlencoded"]
+gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures"]
 
 [dev-dependencies]
 router = "^0.6"
