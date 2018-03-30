@@ -431,6 +431,8 @@ mod tests {
                 .expect("Registered client not available");
             recovered_client.check_authentication(None)
                 .expect("Authorization of public client has changed");
+            recovered_client.check_authentication(Some(b""))
+                .err().expect("Authorization with password succeeded");
         }
 
         let private_client = Client::confidential(private_id, client_url.parse().unwrap(),
@@ -442,7 +444,9 @@ mod tests {
             let recovered_client = registrar.client(private_id)
                 .expect("Registered client not available");
             recovered_client.check_authentication(Some(private_passphrase))
-                .expect("Authorization of private client has changed");
+                .expect("Authorization with right password did not succeed");
+            recovered_client.check_authentication(Some(b"Not the private passphrase"))
+                .err().expect("Authorization succeed with wrong password");
         }
     }
 
