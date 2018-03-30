@@ -7,7 +7,7 @@ use super::scope::Scope;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
-use ring::{constant_time, digest};
+use ring::{constant_time, digest, pbkdf2};
 use ring::error::Unspecified;
 
 /// Registrars provie a way to interact with clients.
@@ -262,6 +262,45 @@ impl PasswordPolicy for SHA256Policy {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Pbkdf2 {
+    iterations: u32,
+}
+
+impl Default for Pbkdf2 {
+    fn default() -> Self {
+        Self::static_default().clone()
+    }
+}
+
+impl Pbkdf2 {
+    fn static_default() -> &'static Self {
+        &Pbkdf2 {
+            iterations: 100_000,
+        }
+    }
+
+    fn salt(&self, user_identifier: &[u8]) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(user_identifier.len());
+        vec.extend_from_slice(user_identifier);
+        vec
+    }
+}
+
+impl PasswordPolicy for Pbkdf2 {
+    fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
+        let salt = self.salt(client_id.as_bytes());
+        let mut output = [0; 64];
+        pbkdf2::derive(&digest::SHA256, self.iterations, salt.as_slice(), passphrase, &mut output[..]);
+        output.to_vec()
+    }
+
+    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified> {
+        let salt = self.salt(client_id.as_bytes());
+        pbkdf2::verify(&digest::SHA256, self.iterations, salt.as_slice(), passphrase, stored)
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                             Standard Implementations of Registrars                            //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -290,7 +329,7 @@ impl ClientMap {
     fn current_policy<'a>(policy: &'a Option<Box<PasswordPolicy>>) -> &'a PasswordPolicy {
         policy
             .as_ref().map(|boxed| &**boxed)
-            .unwrap_or(&SHA256Policy)
+            .unwrap_or(Pbkdf2::static_default())
     }
 }
 
