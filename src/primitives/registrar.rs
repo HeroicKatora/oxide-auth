@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use url::Url;
 use ring::{constant_time, digest, pbkdf2};
 use ring::error::Unspecified;
+use rand;
 
 /// Registrars provie a way to interact with clients.
 ///
@@ -240,7 +241,9 @@ pub trait PasswordPolicy: Send + Sync {
 /// be replaced with argon2 in a future commit which also enables better configurability, such as
 /// supplying a secret key to argon2. This will probably be combined with a slight rework of the
 /// exact semantics of `Client` and `Client::check_authentication`.
-#[deprecated(since="0.1.0-alpha.1", note="Should be replaced with argon2 as soon as possible")]
+#[deprecated(since="0.1.0-alpha.1",
+             note="Should be replaced with argon2 as soon as possible. Will be remove in 0.4")]
+#[allow(dead_code)]
 struct SHA256Policy;
 
 #[allow(deprecated)]
@@ -281,23 +284,35 @@ impl Pbkdf2 {
     }
 
     fn salt(&self, user_identifier: &[u8]) -> Vec<u8> {
-        let mut vec = Vec::with_capacity(user_identifier.len());
+        let mut vec = Vec::with_capacity(user_identifier.len() + 64);
+        let rnd_salt: [u8; 16] = rand::random();
         vec.extend_from_slice(user_identifier);
+        vec.extend_from_slice(&rnd_salt[..]);
         vec
     }
 }
 
 impl PasswordPolicy for Pbkdf2 {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
-        let salt = self.salt(client_id.as_bytes());
-        let mut output = [0; 64];
-        pbkdf2::derive(&digest::SHA256, self.iterations, salt.as_slice(), passphrase, &mut output[..]);
-        output.to_vec()
+        let mut output = Vec::with_capacity(64);
+        output.resize(64, 0);
+        output.append(&mut self.salt(client_id.as_bytes()));
+        {
+            let (output, salt) = output.split_at_mut(64);
+            pbkdf2::derive(&digest::SHA256, self.iterations, salt, passphrase,
+                output);
+        }
+        output
     }
 
-    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified> {
-        let salt = self.salt(client_id.as_bytes());
-        pbkdf2::verify(&digest::SHA256, self.iterations, salt.as_slice(), passphrase, stored)
+    fn check(&self, _client_id: &str /* Was interned */, passphrase: &[u8], stored: &[u8])
+    -> Result<(), Unspecified> {
+        if stored.len() < 64 {
+            return Err(Unspecified)
+        }
+
+        let (verifier, salt) = stored.split_at(64);
+        pbkdf2::verify(&digest::SHA256, self.iterations, salt, passphrase, verifier)
     }
 }
 
