@@ -44,12 +44,12 @@ impl PkceSetup {
     fn test_correct_access(&mut self, auth_request: CraftedRequest, access_request: CraftedRequest) {
         use code_grant::extensions::Pkce;
 
-        let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
         let pkce_extension = Pkce::required();
 
         match AuthorizationFlow::new(&self.registrar, &mut self.authorizer)
                 .with_extension(&pkce_extension)
-                .handle(auth_request, &pagehandler) {
+                .handle(auth_request)
+                .complete(Allow(EXAMPLE_OWNER_ID.to_string())) {
             Ok(ref _response) => (),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
@@ -65,12 +65,12 @@ impl PkceSetup {
     fn test_failed_verification(&mut self, auth_request: CraftedRequest, access_request: CraftedRequest) {
         use code_grant::extensions::Pkce;
 
-        let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
         let pkce_extension = Pkce::required();
 
         match AuthorizationFlow::new(&self.registrar, &mut self.authorizer)
                 .with_extension(&pkce_extension)
-                .handle(auth_request, &pagehandler) {
+                .handle(auth_request)
+                .complete(Allow(EXAMPLE_OWNER_ID.to_string())) {
             Ok(ref _response) => (),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }

@@ -34,7 +34,7 @@
 //!
 //!     // Create a router and bind the relevant pages
 //!     let mut router = Router::new();
-//!     router.get("/authorize", ohandler.authorize(handle_get), "authorize");
+//!     router.get("/authorize", ohandler.authorize(MethodAuthorizer(handle_get)), "authorize");
 //!     router.post("/authorize", ohandler.authorize(IronOwnerAuthorizer(handle_post)),
 //!         "authorize");
 //!     router.post("/token", ohandler.token(), "token");
@@ -57,7 +57,7 @@
 //!
 //! /// This should display a page to the user asking for his permission to proceed.
 //! /// You can use the Response in Ok to achieve this.
-//! fn handle_get(_: &mut Request, auth: &PreGrant) -> Result<(Authentication, Response), OAuthError> {
+//! fn handle_get(_: &mut Request, auth: &PreGrant) -> OwnerAuthorization<Response> {
 //!     unimplemented!();
 //! }
 //!
@@ -92,13 +92,12 @@ extern crate urlencoded;
 
 use code_grant::prelude::*;
 use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow, OwnerAuthorizer, WebRequest, WebResponse};
-pub use code_grant::frontend::{Authentication, OAuthError, QueryParameter, MultiValueQuery};
+pub use code_grant::frontend::{OwnerAuthorization, OAuthError, QueryParameter, MultiValueQuery};
 pub use code_grant::prelude::{PreGrant, Scope};
 
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 use std::ops::DerefMut;
-use std::marker::PhantomData;
 
 use self::iron::{BeforeMiddleware, Handler, IronResult, IronError, Plugin, Url as IronUrl};
 use self::iron::headers::{Authorization as AuthHeader, ContentType};
@@ -131,11 +130,11 @@ pub struct IronGranter<R, A, I> where
 /// Only holds handles to authorization relevant objects. An additional external handler is used
 /// to communicate with the owner authorization process.
 pub struct IronAuthorizer<PH, R, A> where
-    PH: GenericOwnerAuthorizer + Send + Sync,
+    PH: Copy + Send + Sync + for <'l, 'a, 'b: 'a> OwnerAuthorizer<&'l mut Request<'a, 'b>>,
     R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static,
 {
-    page_handler: Box<PH>,
+    page_handler: PH,
     registrar: Arc<Mutex<R>>,
     authorizer: Arc<Mutex<A>>,
 }
@@ -159,22 +158,26 @@ pub struct IronGuard<I> where
     issuer: Arc<Mutex<I>>,
 }
 
+/// An extension for a response, to indicate the resource owners authorization.
+///
+/// Iron Handlers can double as OwnerAuthorizer. This allows interoperability with other iron
+/// libraries. On top of that, one can use the standard middleware facilities to quickly stick
+/// together other handlers.
+///
+/// The handler can use the attached `PreGrant` extension to inspect the details of the requesting
+/// party. Errors are signalled via an error from the handler, in all other cases the handler must
+/// attach a `SimpleAuthorization` extension to its response.
+pub enum SimpleAuthorization {
+    /// Signals that the authorization was denied by the owner.
+    Denied,
+
+    /// The resource owner allowed the request.
+    Allowed(String),
+}
+
 impl typemap::Key for PreGrant { type Value = PreGrant; }
 
-impl typemap::Key for Authentication { type Value = Authentication; }
-
-/// An owner authorizer for iron requests specifically.
-///
-/// This bridges between the owner authorizer of the general frontend, whose lifetime is limited to
-/// the lifetime of the request, and the configured iron frontend, whose owner authorizer needs
-/// to be valid for multiple request lifetimes and `Send` + `Sync` `'static`.
-///
-/// Two notable implementations exist, one for general functions with the correct parameters and
-/// one for encapsulating `Handler` implementations.
-pub trait GenericOwnerAuthorizer: Send + Sync + 'static {
-    /// Derive a response to the grant request from the web request and internal state.
-    fn get_owner_authorization(&self, &mut Request, &PreGrant) -> IronResult<(Authentication, Response)>;
-}
+impl typemap::Key for SimpleAuthorization { type Value = SimpleAuthorization; }
 
 /// Wraps an `Handler` for use as an `GenericOwnerAuthorizer`.
 ///
@@ -193,67 +196,98 @@ pub trait GenericOwnerAuthorizer: Send + Sync + 'static {
 /// #
 /// # use iron::{IronError, IronResult, Plugin, Request, Response};
 /// # use urlencoded::UrlEncodedQuery;
-/// # use oxide_auth::code_grant::frontend::Authentication;
-/// use oxide_auth::frontends::iron::{IronOwnerAuthorizer, GenericOwnerAuthorizer};
+/// use oxide_auth::frontends::iron::{IronOwnerAuthorizer, SimpleAuthorization};
 ///
 /// fn iron_handler(req: &mut Request) -> IronResult<Response> {
 ///     let query = req.get::<UrlEncodedQuery>()
 ///         .map_err(|ue| IronError::new(ue, iron::status::BadRequest))?;
+///     let mut response = Response::with(iron::status::Ok);
 ///     if query.contains_key("deny") {
-///         req.extensions.insert::<Authentication>(Authentication::Failed);
+///         response.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
 ///
 ///     // Obviously should be replaced with real user authentication, signed cookies or macroons
 ///     } else if let Some(user) = query.get("user_id") {
 ///         if user.len() == 1 {
-///             req.extensions.insert::<Authentication>(
-///                 Authentication::Authenticated(user[1].clone()));
+///             response.extensions.insert::<SimpleAuthorization>(
+///                 SimpleAuthorization::Allowed(user[1].clone()));
 ///         } else {
-///             req.extensions.insert::<Authentication>(Authentication::Failed);
+///             response.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
 ///         }
 ///     } else {
-///         req.extensions.insert::<Authentication>(Authentication::Failed);
+///         response.extensions.insert::<SimpleAuthorization>(SimpleAuthorization::Denied);
 ///     }
-///     Ok(Response::with(iron::status::Ok))
+///     Ok(response)
 /// }
 ///
-/// const iron_owner_authorizer: &GenericOwnerAuthorizer = &IronOwnerAuthorizer(iron_handler);
-/// # fn main() {}
+/// fn main() {
+///     // …
+///     let iron_owner_authorizer = IronOwnerAuthorizer(iron_handler);
+///     // …
+/// }
 /// ```
-pub struct IronOwnerAuthorizer<A: Handler>(pub A);
+#[derive(Clone, Copy)]
+pub struct IronOwnerAuthorizer<A: Copy + Handler>(pub A);
 
-impl GenericOwnerAuthorizer for Handler {
-    fn get_owner_authorization(&self, req: &mut Request, auth: &PreGrant)
-    -> IronResult<(Authentication, Response)> {
+
+/// Wraps a simple method as an owner authorizer for iron.
+///
+/// This is useful for global authorization methods.
+///
+/// ```rust
+/// # extern crate oxide_auth;
+/// # extern crate urlencoded;
+/// # extern crate iron;
+/// #
+/// # use iron::{IronError, IronResult, Plugin, Request, Response};
+/// # use urlencoded::UrlEncodedQuery;
+/// use oxide_auth::frontends::iron::{MethodAuthorizer, OwnerAuthorization, PreGrant};
+///
+/// fn handle_get(_: &mut Request, grant: &PreGrant) -> OwnerAuthorization<Response> {
+///     let text = format!(
+///         "<html>'{}' (at {}) is requesting permission for '{}'
+///         <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
+///             <input type=\"submit\" value=\"Accept\">
+///         </form>
+///         <form action=\"authorize?response_type=code&client_id={}&deny=1\" method=\"post\">
+///             <input type=\"submit\" value=\"Deny\">
+///         </form>
+///         </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
+///     let response = Response::with((iron::status::Ok, iron::modifiers::Header(iron::headers::ContentType::html()), text));
+///     OwnerAuthorization::InProgress(response)
+/// }
+///
+/// fn main() {
+///     // …
+///     let method_authorizer = MethodAuthorizer(handle_get);
+///     // …
+/// }
+///
+#[derive(Clone, Copy)]
+pub struct MethodAuthorizer<F: Copy>(pub F);
+
+impl<'s, 'l, 'a, 'b, H: Copy + Handler> OwnerAuthorizer<&'l mut Request<'a, 'b>> for IronOwnerAuthorizer<H> {
+    fn check_authorization(self, req: &'l mut Request<'a, 'b>, auth: &PreGrant)
+    -> OwnerAuthorization<Response> {
         req.extensions.insert::<PreGrant>(auth.clone());
-        let response = self.handle(req)?;
-        match req.extensions.get::<Authentication>() {
-            None => return Ok((Authentication::Failed, Response::with((status::InternalServerError, "No authentication response")))),
-            Some(v) => return Ok((v.clone(), response)),
+        let response = match self.0.handle(req) {
+            Ok(response) => response,
+            Err(error) => return OwnerAuthorization::Error(error),
         };
+        match response.extensions.get::<SimpleAuthorization>() {
+            None => panic!("No authentication response"),
+            Some(&SimpleAuthorization::Allowed(ref owner))
+                => OwnerAuthorization::Authorized(owner.clone()),
+            Some(&SimpleAuthorization::Denied)
+                => OwnerAuthorization::Denied,
+        }
     }
 }
 
-impl<F> GenericOwnerAuthorizer for F
-    where F :Fn(&mut Request, &PreGrant) -> Result<(Authentication, Response), OAuthError> + Send + Sync + 'static {
-    fn get_owner_authorization(&self, req: &mut Request, auth: &PreGrant)
-    -> IronResult<(Authentication, Response)> {
-        self(req, auth).map_err(|o| o.into())
-    }
-}
-
-impl<A: Handler> GenericOwnerAuthorizer for IronOwnerAuthorizer<A> {
-    fn get_owner_authorization(&self, req: &mut Request, auth: &PreGrant)
-    -> IronResult<(Authentication, Response)> {
-        (&self.0 as &Handler).get_owner_authorization(req, auth)
-    }
-}
-
-struct SpecificOwnerAuthorizer<'l, 'a, 'b: 'a>(&'l GenericOwnerAuthorizer, PhantomData<Request<'a, 'b>>);
-
-impl<'l, 'a, 'b: 'a, 'r> OwnerAuthorizer<&'r mut Request<'a, 'b>> for SpecificOwnerAuthorizer<'l, 'a, 'b> {
-    fn get_owner_authorization(&self, req: &mut &'r mut Request<'a, 'b>, auth: &PreGrant)
-    -> IronResult<(Authentication, Response)> {
-        self.0.get_owner_authorization(req, auth)
+impl<'l, 'a, 'b, F: Copy> OwnerAuthorizer<&'l mut Request<'a, 'b>> for MethodAuthorizer<F>
+where F: FnOnce(&'l mut Request<'a, 'b>, &PreGrant) -> OwnerAuthorization<Response> {
+    fn check_authorization(self, req: &'l mut Request<'a, 'b>, auth: &PreGrant)
+    -> OwnerAuthorization<Response> {
+        self.0(req, auth)
     }
 }
 
@@ -339,11 +373,14 @@ impl<R, A, I> IronGranter<R, A, I> where
     }
 
     /// Create an authorization code endpoint.
-    pub fn authorize<H: GenericOwnerAuthorizer + Send + Sync>(&self, page_handler: H) -> IronAuthorizer<H, R, A> {
+    pub fn authorize<Handler>(&self, page_handler: Handler) -> IronAuthorizer<Handler, R, A>
+    where
+        Handler: Copy + Send + Sync + for <'l, 'a, 'b: 'a> OwnerAuthorizer<&'l mut Request<'a, 'b>>, {
         IronAuthorizer {
             authorizer: self.authorizer.clone(),
-            page_handler: Box::new(page_handler),
-            registrar: self.registrar.clone() }
+            page_handler: page_handler,
+            registrar: self.registrar.clone()
+        }
     }
 
     /// Create an access token endpoint.
@@ -351,7 +388,8 @@ impl<R, A, I> IronGranter<R, A, I> where
         IronTokenRequest {
             registrar: self.registrar.clone(),
             authorizer: self.authorizer.clone(),
-            issuer: self.issuer.clone() }
+            issuer: self.issuer.clone()
+        }
     }
 
     /// Create a BeforeMiddleware capable of guarding other resources.
@@ -382,7 +420,7 @@ impl From<OAuthError> for IronError {
 }
 
 impl<PH, R, A> Handler for IronAuthorizer<PH, R, A> where
-    PH: GenericOwnerAuthorizer + Send + Sync + 'static,
+    PH: Copy + Send + Sync + 'static + for <'l, 'a, 'b: 'a> OwnerAuthorizer<&'l mut Request<'a, 'b>>,
     R: Registrar + Send + 'static,
     A: Authorizer + Send + 'static
 {
@@ -392,8 +430,9 @@ impl<PH, R, A> Handler for IronAuthorizer<PH, R, A> where
         let authorization_flow = AuthorizationFlow::new(
             locked_registrar.deref_mut(), locked_authorizer.deref_mut());
 
-        let handler = SpecificOwnerAuthorizer(self.page_handler.as_ref(), PhantomData);
-        authorization_flow.handle(request, &handler)
+        authorization_flow
+            .handle(request)
+            .complete(self.page_handler)
     }
 }
 
@@ -429,5 +468,6 @@ impl<I> BeforeMiddleware for IronGuard<I> where
 pub mod prelude {
     pub use url::Url;
     pub use code_grant::prelude::*;
-    pub use super::{IronGranter, IronOwnerAuthorizer, PreGrant, Authentication, OAuthError};
+    pub use super::{IronGranter, OAuthError, OwnerAuthorization, PreGrant};
+    pub use super::{IronOwnerAuthorizer, MethodAuthorizer, SimpleAuthorization};
 }

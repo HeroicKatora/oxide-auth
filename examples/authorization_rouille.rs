@@ -14,7 +14,7 @@ mod main {
 
     use support::rouille::dummy_client;
     use support::open_in_browser;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
     use std::thread;
 
     /// Example of a main function of a rouille server supporting oauth.
@@ -35,14 +35,14 @@ mod main {
 
         // Bearer tokens are signed (but not encrypted) using a passphrase.
         let passphrase = "This is a super secret phrase";
-        let bearer_tokens = Mutex::new(TokenSigner::new_from_passphrase(passphrase, None));
+        let bearer_tokens = Arc::new(TokenSigner::new_from_passphrase(passphrase, None));
 
         // Create the main server instance
         let server = Server::new(("localhost", 8020), move |request| {
             router!(request,
                 (GET) ["/"] => {
-                    let mut issuer = bearer_tokens.lock().unwrap();
-                    if let Err(_) = AccessFlow::new(&mut*issuer, &vec!["default".parse().unwrap()])
+                    let mut issuer = &*bearer_tokens;
+                    if let Err(_) = AccessFlow::new(&mut issuer, &vec!["default".parse().unwrap()])
                         .handle(request)
                     { // Does not have the proper authorization token
 let text = "<html>
@@ -60,21 +60,21 @@ here</a> to begin the authorization process.
                     let mut registrar = clients.lock().unwrap();
                     let mut authorizer = authorization_codes.lock().unwrap();
                     AuthorizationFlow::new(&mut*registrar, &mut*authorizer)
-                        .handle(request, &handle_get)
+                        .handle(request).complete(&handle_get)
                         .unwrap_or_else(|_| Response::empty_400())
                 },
                 (POST) ["/authorize"] => {
                     let mut registrar = clients.lock().unwrap();
                     let mut authorizer = authorization_codes.lock().unwrap();
                     AuthorizationFlow::new(&mut*registrar, &mut*authorizer)
-                        .handle(request, &handle_post)
+                        .handle(request).complete(&handle_post)
                         .unwrap_or_else(|_| Response::empty_400())
                 },
                 (POST) ["/token"] => {
                     let mut authorizer = authorization_codes.lock().unwrap();
-                    let mut issuer = bearer_tokens.lock().unwrap();
+                    let mut issuer = &*bearer_tokens;
                     let mut registrar = clients.lock().unwrap();
-                    GrantFlow::new(&mut*registrar, &mut*authorizer, &mut*issuer)
+                    GrantFlow::new(&mut*registrar, &mut*authorizer, &mut issuer)
                         .handle(request)
                         .unwrap_or_else(|_| Response::empty_400())
                 },
@@ -103,7 +103,7 @@ here</a> to begin the authorization process.
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.
-    fn handle_get(_: &Request, grant: &PreGrant) -> Result<(Authentication, Response), OAuthError> {
+    fn handle_get(_: &Request, grant: &PreGrant) -> OwnerAuthorization<Response> {
         let text = format!(
             "<html>'{}' (at {}) is requesting permission for '{}'
             <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
@@ -114,17 +114,17 @@ here</a> to begin the authorization process.
             </form>
             </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
         let response = Response::html(text);
-        Ok((Authentication::InProgress, response))
+        OwnerAuthorization::InProgress(response)
     }
 
     /// Handle form submission by a user, completing the authorization flow. The resource owner
     /// either accepted or denied the request.
-    fn handle_post(request: &Request, _: &PreGrant) -> Result<(Authentication, Response), OAuthError> {
+    fn handle_post(request: &Request, _: &PreGrant) -> OwnerAuthorization<Response> {
         // No real user authentication is done here, in production you SHOULD use session keys or equivalent
         if let Some(_) = request.get_param("deny") {
-            Ok((Authentication::Failed, Response::empty_400()))
+            OwnerAuthorization::Denied
         } else {
-            Ok((Authentication::Authenticated("dummy user".to_string()), Response::empty_400()))
+            OwnerAuthorization::Authorized("dummy user".to_string())
         }
     }
 }

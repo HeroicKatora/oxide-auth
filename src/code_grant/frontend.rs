@@ -29,7 +29,7 @@
 //! # use std::collections::HashMap;
 //! # use std::vec::Vec;
 //! use oxide_auth::code_grant::frontend::{OAuthError, QueryParameter, WebRequest, WebResponse};
-//! use oxide_auth::code_grant::frontend::{IssuerRef, GrantFlow};
+//! use oxide_auth::code_grant::frontend::{GrantFlow};
 //! use oxide_auth::primitives::prelude::*;
 //! use url::Url;
 //! struct MyRequest { /* user defined */ }
@@ -75,20 +75,21 @@
 //! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
 
 use std::borrow::Cow;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::error;
+use std::marker::PhantomData;
 use std::fmt;
 use std::str::from_utf8;
 
 use primitives::authorizer::Authorizer;
-use primitives::issuer::Issuer;
-use primitives::registrar::{Registrar, PreGrant};
+use primitives::issuer::{Issuer, IssuedToken};
+use primitives::grant::Grant;
+use primitives::registrar::{ClientUrl, BoundClient, Registrar, RegistrarError, RegisteredClient, PreGrant};
 use primitives::scope::Scope;
-use super::backend::{AccessTokenRequest, CodeRequest, CodeError, IssuerError};
-use super::backend::{AccessError, GuardRequest};
-use super::extensions::{AccessTokenExtension, CodeExtension};
 
-pub use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
+use super::backend::*;
+use super::extensions::{AccessTokenExtension, CodeExtension};
 
 use url::Url;
 use base64;
@@ -106,16 +107,18 @@ struct AuthorizationParameter<'a> {
 }
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
-#[derive(Clone)]
-pub enum Authentication {
+pub enum OwnerAuthorization<Response: WebResponse> {
     /// The owner did not authorize the client.
-    Failed,
+    Denied,
 
     /// The owner has not yet decided, i.e. the returned page is a form for the user.
-    InProgress,
+    InProgress(Response),
 
     /// Authorization was granted by the specified user.
-    Authenticated(String),
+    Authorized(String),
+
+    /// An error occurred while checking authorization.
+    Error(Response::Error),
 }
 
 struct AccessTokenParameter<'a> {
@@ -182,6 +185,15 @@ pub enum QueryParameter<'a> {
     MultiValue(MultiValueQuery<'a>),
 }
 
+/// An error occuring during authorization, convertible to the redirect url with which to respond.
+pub struct ErrorRedirect(ErrorUrl);
+
+impl Into<Url> for ErrorRedirect {
+    fn into(self) -> Url {
+        self.0.into()
+    }
+}
+
 /// Abstraction of web requests with several different abstractions and constructors needed by this
 /// frontend. It is assumed to originate from an HTTP request, as defined in the scope of the rfc,
 /// but theoretically other requests are possible.
@@ -223,7 +235,7 @@ pub trait WebResponse where Self: Sized {
     /// Construct a redirect for the error. Here the response may choose to augment the error with
     /// additional information (such as help websites, description strings), hence the default
     /// implementation which does not do any of that.
-    fn redirect_error(target: ErrorUrl) -> Result<Self, Self::Error> {
+    fn redirect_error(target: ErrorRedirect) -> Result<Self, Self::Error> {
         Self::redirect(target.into())
     }
 
@@ -231,15 +243,15 @@ pub trait WebResponse where Self: Sized {
     fn as_client_error(self) -> Result<Self, Self::Error>;
     /// Set the response status to 401
     fn as_unauthorized(self) -> Result<Self, Self::Error>;
-    /// Add an Authorization header
+    /// Add an `WWW-Authenticate` header
     fn with_authorization(self, kind: &str) -> Result<Self, Self::Error>;
 }
 
-/// Some instance which can decide the owners approval based on the request.
+/// Conveniently checks the authorization from a request.
 pub trait OwnerAuthorizer<Request: WebRequest> {
-    /// Has the owner granted authorization to the client indicated in the `PreGrant`?
-    fn get_owner_authorization(&self, &mut Request, &PreGrant)
-      -> Result<(Authentication, <Request as WebRequest>::Response), <Request as WebRequest>::Error>;
+    /// Ensure that a user (resource owner) is currently authenticated (for example via a session
+    /// cookie) and determine if he has agreed to the presented grants.
+    fn check_authorization(self, Request, pre_grant: &PreGrant) -> OwnerAuthorization<Request::Response>;
 }
 
 impl<'a> QueryParameter<'a> {
@@ -336,7 +348,7 @@ impl<'l, W: WebRequest> From<&'l mut W> for AuthorizationParameter<'l> {
     }
 }
 
-impl<'l> CodeRequest for AuthorizationParameter<'l> {
+impl<'l> authorization::CodeRequest for AuthorizationParameter<'l> {
     fn valid(&self) -> bool {
         self.valid
     }
@@ -384,17 +396,50 @@ impl<'l> AuthorizationParameter<'l> {
     }
 }
 
+struct AuthorizationPrimitives<'a> {
+    registrar: Cell<&'a Registrar>,
+    authorizer: Cell<Option<&'a mut Authorizer>>,
+}
+
 /// All relevant methods for handling authorization code requests.
 pub struct AuthorizationFlow<'a> {
-    backend: CodeRef<'a>,
+    primitives: AuthorizationPrimitives<'a>,
     extensions: Vec<&'a CodeExtension>,
+}
+
+/// A processed authentication request that is waiting for authorization by the resource owner.
+pub struct PendingAuthorization<'a, Req: WebRequest> {
+    primitives: AuthorizationPrimitives<'a>,
+    request: AuthorizationRequest,
+    phantom: PhantomData<Req>,
+}
+
+/// Result type from processing an authentication request.
+pub enum AuthorizationResult<'a, Request: WebRequest> {
+    /// No error happened during processing and the resource owner can decide over the grant.
+    Pending {
+        /// The request passed in.
+        request: Request,
+
+        /// A utility struct with which the request can be decided.
+        pending: PendingAuthorization<'a, Request>
+    },
+
+    /// The request was faulty, e.g. wrong client data.
+    Failed(Request::Response),
+
+    /// An internal error happened during the request.
+    Error(Request::Error),
 }
 
 impl<'a> AuthorizationFlow<'a> {
     /// Initiate an authorization code token flow.
     pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
         AuthorizationFlow {
-            backend: CodeRef::with(registrar, authorizer),
+            primitives: AuthorizationPrimitives {
+                registrar: Cell::new(registrar),
+                authorizer: Cell::new(Some(authorizer)),
+            },
             extensions: Vec::new(),
         }
     }
@@ -406,43 +451,116 @@ impl<'a> AuthorizationFlow<'a> {
     }
 
     /// React to an authorization code request, handling owner approval with a specified handler.
-    pub fn handle<Req>(self, mut request: Req, page_handler: &OwnerAuthorizer<Req>)
-    -> Result<Req::Response, Req::Error> where
+    pub fn handle<Req>(self, mut request: Req)
+    -> AuthorizationResult<'a, Req> where
         Req: WebRequest,
     {
         let negotiated = {
             let urldecoded = AuthorizationParameter::from(&mut request);
-            let negotiated = match self.backend.negotiate(&urldecoded, self.extensions.as_slice()) {
-                Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
-                Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
-                Ok(v) => v,
-            };
-
-            negotiated
+            match authorization_code(&self.primitives, &urldecoded, self.extensions.as_slice()) {
+                Err(CodeError::Ignore)
+                    => return AuthorizationResult::Error(OAuthError::InternalCodeError().into()),
+                Err(CodeError::Redirect(url))
+                    => return AuthorizationResult::from_fail(
+                        Req::Response::redirect_error(ErrorRedirect(url))),
+                Ok(negotiated) => negotiated,
+            }
         };
 
-        let authorization = match page_handler.get_owner_authorization(&mut request, negotiated.pre_grant())? {
-            (Authentication::Failed, _)
-                => negotiated.deny(),
-            (Authentication::InProgress, response)
-                => return Ok(response),
-            (Authentication::Authenticated(owner), _)
-                => negotiated.authorize(owner.into()),
-        };
+        AuthorizationResult::Pending {
+            request,
+            pending: PendingAuthorization {
+                primitives: self.primitives,
+                request: negotiated,
+                phantom: PhantomData,
+            }
+        }
+    }
+}
 
-        let redirect_to = match authorization {
-           Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
-           Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
-           Ok(v) => v,
-       };
+impl<'a, Request: WebRequest> AuthorizationResult<'a, Request> {
+    /// Utility method which can be used instead of matching to decide the request.
+    pub fn complete<F>(self, f: F) -> Result<Request::Response, Request::Error>
+    where F: OwnerAuthorizer<Request> {
+        match self {
+            AuthorizationResult::Pending {
+                request,
+                pending,
+            } => match f.check_authorization(request, pending.request.pre_grant()) {
+                OwnerAuthorization::InProgress(response) => Ok(response),
+                OwnerAuthorization::Authorized(owner) => pending.authenticated(owner),
+                OwnerAuthorization::Denied => pending.deny(),
+                OwnerAuthorization::Error(error) => Err(error),
+            },
+            AuthorizationResult::Failed(response) => Ok(response),
+            AuthorizationResult::Error(err) => Err(err),
+        }
+    }
 
-        Req::Response::redirect(redirect_to)
+    fn from_fail(source: Result<Request::Response, Request::Error>) -> Self {
+        match source {
+            Ok(response) => AuthorizationResult::Failed(response),
+            Err(error) => AuthorizationResult::Error(error),
+        }
+    }
+}
+
+impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
+    /// Denies the request, the client is not allowed access.
+    pub fn deny(self) -> Result<Req::Response, Req::Error> {
+        let authorization = self.request.deny();
+        match authorization {
+            Err(CodeError::Ignore)
+                => return Err(OAuthError::InternalCodeError().into()),
+            Err(CodeError::Redirect(url))
+                => return Req::Response::redirect_error(ErrorRedirect(url)),
+            Ok(redirect_to) => Req::Response::redirect(redirect_to),
+       }
+    }
+
+    /// Postpones the decision over the request, to display data to the resource owner.
+    ///
+    /// This should happen at least once for each request unless the resource owner has already
+    /// acknowledged and pre-approved a specific grant.  The response can also be used to determine
+    /// the resource owner, if no login has been detected or if multiple accounts are allowed to
+    /// be logged in at the same time.
+    pub fn in_progress(self, response: Req::Response) -> Req::Response {
+        response
+    }
+
+    /// Tells the system that the resource owner with the given id has approved the grant.
+    pub fn authenticated(self, owner: String) -> Result<Req::Response, Req::Error> {
+        let authorization = self.request.authorize(&self.primitives, owner.into());
+        match authorization {
+            Err(CodeError::Ignore)
+                => return Err(OAuthError::InternalCodeError().into()),
+            Err(CodeError::Redirect(url))
+                => return Req::Response::redirect_error(ErrorRedirect(url)),
+            Ok(redirect_to) => Req::Response::redirect(redirect_to),
+        }
+    }
+}
+
+impl<'a> AuthorizationEndpoint for AuthorizationPrimitives<'a> {
+    fn bound_redirect<'s>(&'s self, bound: ClientUrl<'s>) -> Result<BoundClient<'s>, RegistrarError> {
+        self.registrar
+            .get()
+            .bound_redirect(bound)
+    }
+
+    fn authorize(&self, grant: Grant) -> Result<String, ()> {
+        match self.authorizer.replace(None) {
+            Some(authorizer) => authorizer.authorize(grant),
+            None => unreachable!("This function should only be invoked once!"),
+        }
     }
 }
 
 /// All relevant methods for granting access token from authorization codes.
 pub struct GrantFlow<'a> {
-    backend: IssuerRef<'a>,
+    registrar: Cell<&'a Registrar>,
+    authorizer: Cell<Option<&'a mut Authorizer>>,
+    issuer: Cell<Option<&'a mut Issuer>>,
     extensions: Vec<&'a AccessTokenExtension>,
 }
 
@@ -516,7 +634,9 @@ impl<'a> GrantFlow<'a> {
     /// Initiate an access token flow.
     pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer, issuer: &'a mut Issuer) -> Self {
         GrantFlow {
-            backend: IssuerRef::with(registrar, authorizer, issuer),
+            registrar: Cell::new(registrar),
+            authorizer: Cell::new(Some(authorizer)),
+            issuer: Cell::new(Some(issuer)),
             extensions: Vec::new(),
         }
     }
@@ -571,13 +691,13 @@ impl<'a> GrantFlow<'a> {
     }
 
     /// Construct a response containing the access token or an error message.
-    pub fn handle<Req>(mut self, mut request: Req)
+    pub fn handle<Req>(self, mut request: Req)
     -> Result<Req::Response, Req::Error> where Req: WebRequest
     {
         let params = GrantFlow::create_valid_params(&mut request)
             .unwrap_or(AccessTokenParameter::invalid());
 
-        match self.backend.use_code(&params, self.extensions.as_slice()) {
+        match access_token(&self, &params, self.extensions.as_slice()) {
             Err(IssuerError::Invalid(json_data))
                 => return Req::Response::json(&json_data.to_json())?.as_client_error(),
             Err(IssuerError::Unauthorized(json_data, scheme))
@@ -587,9 +707,32 @@ impl<'a> GrantFlow<'a> {
     }
 }
 
+impl<'a> AccessTokenEndpoint for GrantFlow<'a> {
+    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        self.registrar
+            .get()
+            .client(client_id)
+    }
+
+    fn extract(&self, code: &str) -> Option<Grant> {
+        match self.authorizer.replace(None) {
+            Some(authorizer) => authorizer.extract(code),
+            None => unreachable!("This function should only be invoked once!"),
+        }
+    }
+
+    fn issue(&self, grant: Grant) -> Result<IssuedToken, ()> {
+        match self.issuer.replace(None) {
+            Some(issuer) => issuer.issue(grant),
+            None => unreachable!("This function should only be invoked once!"),
+        }
+    }
+}
+
 /// All relevant methods for checking authorization for access to a resource.
 pub struct AccessFlow<'a> {
-    backend: GuardRef<'a>,
+    issuer: Cell<Option<&'a mut Issuer>>,
+    scopes: &'a [Scope],
 }
 
 impl<'l> GuardRequest for GuardParameter<'l> {
@@ -615,7 +758,8 @@ impl<'a> AccessFlow<'a> {
     /// Initiate an access to a protected resource
     pub fn new(issuer: &'a mut Issuer, scopes: &'a [Scope]) -> Self {
         AccessFlow {
-            backend: GuardRef::with(issuer, scopes)
+            issuer: Cell::new(Some(issuer)),
+            scopes,
         }
     }
 
@@ -644,12 +788,25 @@ impl<'a> AccessFlow<'a> {
         let params = AccessFlow::create_valid_params(&mut request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
-        self.backend.protect(&params).map_err(|err| {
+        protect(self, &params).map_err(|err| {
             match err {
                 AccessError::InvalidRequest => OAuthError::InternalAccessError(),
                 AccessError::AccessDenied => OAuthError::AccessDenied,
             }.into()
         })
+    }
+}
+
+impl<'a> GuardEndpoint for AccessFlow<'a> {
+    fn scopes(&self) -> &[Scope] {
+        self.scopes
+    }
+
+    fn recover_token(&self, id: &str) -> Option<Grant> {
+        match self.issuer.replace(None) {
+            Some(issuer) => issuer.recover_token(id),
+            None => unreachable!("This function should only be invoked once!"),
+        }
     }
 }
 

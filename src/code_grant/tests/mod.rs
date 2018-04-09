@@ -66,7 +66,7 @@ impl WebResponse for CraftedResponse {
         Ok(CraftedResponse::Json(data.to_string()))
     }
 
-    fn redirect_error(target: ErrorUrl) -> Result<Self, OAuthError> {
+    fn redirect_error(target: ErrorRedirect) -> Result<Self, OAuthError> {
         Ok(CraftedResponse::RedirectFromError(target.into()))
     }
 
@@ -95,16 +95,30 @@ struct Allow(String);
 struct Deny;
 
 impl OwnerAuthorizer<CraftedRequest> for Allow {
-    fn get_owner_authorization(&self, _: &mut CraftedRequest, _: &PreGrant)
-    -> Result<(Authentication, CraftedResponse), OAuthError> {
-        Ok((Authentication::Authenticated(self.0.clone()), CraftedResponse::Text("".to_string())))
+    fn check_authorization(self, _: CraftedRequest, _: &PreGrant)
+    -> OwnerAuthorization<CraftedResponse> {
+        OwnerAuthorization::Authorized(self.0.clone())
     }
 }
 
 impl OwnerAuthorizer<CraftedRequest> for Deny {
-    fn get_owner_authorization(&self, _: &mut CraftedRequest, _: &PreGrant)
-    -> Result<(Authentication, CraftedResponse), OAuthError> {
-        Ok((Authentication::Failed, CraftedResponse::Text("".to_string())))
+    fn check_authorization(self, _: CraftedRequest, _: &PreGrant)
+    -> OwnerAuthorization<CraftedResponse> {
+        OwnerAuthorization::Denied
+    }
+}
+
+impl<'l> OwnerAuthorizer<CraftedRequest> for &'l Allow {
+    fn check_authorization(self, _: CraftedRequest, _: &PreGrant)
+    -> OwnerAuthorization<CraftedResponse> {
+        OwnerAuthorization::Authorized(self.0.clone())
+    }
+}
+
+impl<'l> OwnerAuthorizer<CraftedRequest> for &'l Deny {
+    fn check_authorization(self, _: CraftedRequest, _: &PreGrant)
+    -> OwnerAuthorization<CraftedResponse> {
+        OwnerAuthorization::Denied
     }
 }
 

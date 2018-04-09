@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
@@ -13,12 +13,12 @@ license = "MIT"
 
 
 [dependencies]
-actix = { version = "0.4.5", optional = true }
-actix-web = { version = "0.3.3", optional = true }
+actix = { version = "0.5.5", optional = true }
+actix-web = { version = "0.4.10", optional = true }
 base64 = "^0.9"
 chrono = "^0.4"
-iron = { version = "^0.5", optional = true }
-futures = { version = "0.1.18", optional = true }
+iron = { version = "^0.6", optional = true }
+futures = { version = "^0.1", optional = true }
 lazy_static = { version = "1.0", optional = true }
 serde = "^1.0"
 serde_derive = "^1.0"
@@ -29,7 +29,7 @@ ring = "^0.12"
 rouille = { version = "^2.0", optional = true }
 rmp-serde = "^0.13"
 url = "^1.6"
-urlencoded = { version = "^0.5", optional = true }
+urlencoded = { version = "^0.6", optional = true }
 
 [features]
 default = ["actix-frontend"]
@@ -38,5 +38,5 @@ rouille-frontend = ["rouille", "serde_urlencoded"]
 actix-frontend = ["actix", "actix-web", "lazy_static", "futures"]
 
 [dev-dependencies]
-router = "^0.5"
+router = "^0.6"
 reqwest = "^0.8"

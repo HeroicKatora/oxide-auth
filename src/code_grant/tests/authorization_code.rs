@@ -32,8 +32,9 @@ impl AuthorizationSetup {
     }
 
     fn test_silent_error(&mut self, request: CraftedRequest) {
-        let pagehandler = Allow(EXAMPLE_OWNER_ID.to_string());
-        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer).handle(request, &pagehandler) {
+        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer)
+            .handle(request)
+            .complete(Allow(EXAMPLE_OWNER_ID.to_string())) {
             Ok(CraftedResponse::Redirect(url))
                 => panic!("Redirection without client id {:?}", url),
             Ok(resp) => panic!("Response without client id {:?}", resp),
@@ -41,8 +42,11 @@ impl AuthorizationSetup {
         };
     }
 
-    fn test_error_redirect (&mut self, request: CraftedRequest, pagehandler: &OwnerAuthorizer<CraftedRequest>) {
-        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer).handle(request, pagehandler) {
+    fn test_error_redirect<P>(&mut self, request: CraftedRequest, pagehandler: P)
+    where P: OwnerAuthorizer<CraftedRequest> {
+        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer)
+            .handle(request)
+            .complete(pagehandler) {
             Ok(CraftedResponse::RedirectFromError(ref url))
             if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some()
                 => (),
@@ -120,7 +124,7 @@ fn auth_request_error_denied() {
         auth: None,
     };
 
-    AuthorizationSetup::new().test_error_redirect(denied_request, &Deny);
+    AuthorizationSetup::new().test_error_redirect(denied_request, Deny);
 }
 
 #[test]
@@ -136,7 +140,7 @@ fn auth_request_error_unsupported_method() {
     };
 
     AuthorizationSetup::new().test_error_redirect(unsupported_method,
-        &Allow(EXAMPLE_OWNER_ID.to_string()));
+        Allow(EXAMPLE_OWNER_ID.to_string()));
 }
 
 #[test]
@@ -153,5 +157,5 @@ fn auth_request_error_malformed_scope() {
     };
 
     AuthorizationSetup::new().test_error_redirect(malformed_scope,
-        &Allow(EXAMPLE_OWNER_ID.to_string()));
+        Allow(EXAMPLE_OWNER_ID.to_string()));
 }
