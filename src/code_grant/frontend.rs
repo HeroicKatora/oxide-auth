@@ -75,7 +75,7 @@
 //! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
 
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::error;
 use std::marker::PhantomData;
@@ -396,8 +396,8 @@ impl<'l> AuthorizationParameter<'l> {
 }
 
 struct AuthorizationPrimitives<'a> {
-    registrar: RefCell<&'a Registrar>,
-    authorizer: RefCell<&'a mut Authorizer>,
+    registrar: Cell<&'a Registrar>,
+    authorizer: Cell<Option<&'a mut Authorizer>>,
 }
 
 /// All relevant methods for handling authorization code requests.
@@ -436,8 +436,8 @@ impl<'a> AuthorizationFlow<'a> {
     pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
         AuthorizationFlow {
             primitives: AuthorizationPrimitives {
-                registrar: RefCell::new(registrar),
-                authorizer: RefCell::new(authorizer),
+                registrar: Cell::new(registrar),
+                authorizer: Cell::new(Some(authorizer)),
             },
             extensions: Vec::new(),
         }
@@ -543,22 +543,23 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
 impl<'a> AuthorizationEndpoint for AuthorizationPrimitives<'a> {
     fn bound_redirect<'s>(&'s self, bound: ClientUrl<'s>) -> Result<BoundClient<'s>, RegistrarError> {
         self.registrar
-            .borrow()
+            .get()
             .bound_redirect(bound)
     }
 
     fn authorize(&self, grant: Grant) -> Result<String, ()> {
-        self.authorizer
-            .borrow_mut()
-            .authorize(grant)
+        match self.authorizer.replace(None) {
+            Some(authorizer) => authorizer.authorize(grant),
+            None => unreachable!("This function should only be invoked once!"),
+        }
     }
 }
 
 /// All relevant methods for granting access token from authorization codes.
 pub struct GrantFlow<'a> {
-    registrar: RefCell<&'a Registrar>,
-    authorizer: RefCell<&'a mut Authorizer>,
-    issuer: RefCell<&'a mut Issuer>,
+    registrar: Cell<&'a Registrar>,
+    authorizer: Cell<Option<&'a mut Authorizer>>,
+    issuer: Cell<Option<&'a mut Issuer>>,
     extensions: Vec<&'a AccessTokenExtension>,
 }
 
@@ -632,9 +633,9 @@ impl<'a> GrantFlow<'a> {
     /// Initiate an access token flow.
     pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer, issuer: &'a mut Issuer) -> Self {
         GrantFlow {
-            registrar: RefCell::new(registrar),
-            authorizer: RefCell::new(authorizer),
-            issuer: RefCell::new(issuer),
+            registrar: Cell::new(registrar),
+            authorizer: Cell::new(Some(authorizer)),
+            issuer: Cell::new(Some(issuer)),
             extensions: Vec::new(),
         }
     }
@@ -708,26 +709,28 @@ impl<'a> GrantFlow<'a> {
 impl<'a> AccessTokenEndpoint for GrantFlow<'a> {
     fn client(&self, client_id: &str) -> Option<RegisteredClient> {
         self.registrar
-            .borrow()
+            .get()
             .client(client_id)
     }
 
     fn extract(&self, code: &str) -> Option<Grant> {
-        self.authorizer
-            .borrow_mut()
-            .extract(code)
+        match self.authorizer.replace(None) {
+            Some(authorizer) => authorizer.extract(code),
+            None => unreachable!("This function should only be invoked once!"),
+        }
     }
 
     fn issue(&self, grant: Grant) -> Result<IssuedToken, ()> {
-        self.issuer
-            .borrow_mut()
-            .issue(grant)
+        match self.issuer.replace(None) {
+            Some(issuer) => issuer.issue(grant),
+            None => unreachable!("This function should only be invoked once!"),
+        }
     }
 }
 
 /// All relevant methods for checking authorization for access to a resource.
 pub struct AccessFlow<'a> {
-    issuer: RefCell<&'a mut Issuer>,
+    issuer: Cell<Option<&'a mut Issuer>>,
     scopes: &'a [Scope],
 }
 
@@ -754,7 +757,7 @@ impl<'a> AccessFlow<'a> {
     /// Initiate an access to a protected resource
     pub fn new(issuer: &'a mut Issuer, scopes: &'a [Scope]) -> Self {
         AccessFlow {
-            issuer: RefCell::new(issuer),
+            issuer: Cell::new(Some(issuer)),
             scopes,
         }
     }
@@ -799,9 +802,10 @@ impl<'a> GuardEndpoint for AccessFlow<'a> {
     }
 
     fn recover_token(&self, id: &str) -> Option<Grant> {
-        self.issuer
-            .borrow()
-            .recover_token(id)
+        match self.issuer.replace(None) {
+            Some(issuer) => issuer.recover_token(id),
+            None => unreachable!("This function should only be invoked once!"),
+        }
     }
 }
 
