@@ -123,7 +123,7 @@ here</a> to begin the authorization process.
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.
-    fn handle_get(_: &HttpRequest<State>, grant: &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
+    fn handle_get(_: &HttpRequest<State>, grant: &PreGrant) -> OwnerAuthorization<HttpResponse> {
         let text = format!(
             "<html>'{}' (at {}) is requesting permission for '{}'
             <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
@@ -137,19 +137,17 @@ here</a> to begin the authorization process.
             .content_type("text/html")
             .body(text)
             .unwrap();
-        Ok((Authentication::InProgress, response))
+        OwnerAuthorization::InProgress(response)
     }
 
     /// Handle form submission by a user, completing the authorization flow. The resource owner
     /// either accepted or denied the request.
-    fn handle_post(request: &HttpRequest<State>, _: &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
+    fn handle_post(request: &HttpRequest<State>, _: &PreGrant) -> OwnerAuthorization<HttpResponse> {
         // No real user authentication is done here, in production you SHOULD use session keys or equivalent
         if let Some(_) = request.query().get("deny") {
-            Ok((Authentication::Failed,
-                HttpResponse::Unauthorized().finish().unwrap()))
+            OwnerAuthorization::Denied
         } else {
-            Ok((Authentication::Authenticated("dummy user".to_string()),
-                HttpResponse::Unauthorized().finish().unwrap()))
+            OwnerAuthorization::Authorized("dummy user".to_string())
         }
     }
 }
