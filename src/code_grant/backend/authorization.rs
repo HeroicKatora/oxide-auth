@@ -6,7 +6,7 @@ use chrono::{Duration, Utc};
 use code_grant::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
 use code_grant::extensions::CodeExtension;
 use primitives::registrar::{BoundClient, ClientUrl, RegistrarError, PreGrant};
-use primitives::grant::{Extensions, Grant, GrantExtension};
+use primitives::grant::{Extensions, Grant};
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait CodeRequest {

@@ -8,7 +8,7 @@ use code_grant::error::{AccessTokenError, AccessTokenErrorType, AccessTokenError
 use code_grant::extensions::AccessTokenExtension;
 use primitives::issuer::IssuedToken;
 use primitives::grant::{Extensions, Grant};
-use primitives::registrar::{RegisteredClient, RegistrarError};
+use primitives::registrar::RegisteredClient;
 
 /// Trait based retrieval of parameters necessary for access token request handling.
 pub trait AccessTokenRequest {

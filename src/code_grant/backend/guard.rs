@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use chrono::{Utc, Duration};
+use chrono::Utc;
 
 use primitives::grant::Grant;
 use primitives::scope::Scope;

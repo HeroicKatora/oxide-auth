@@ -690,7 +690,7 @@ impl<'a> GrantFlow<'a> {
     }
 
     /// Construct a response containing the access token or an error message.
-    pub fn handle<Req>(mut self, mut request: Req)
+    pub fn handle<Req>(self, mut request: Req)
     -> Result<Req::Response, Req::Error> where Req: WebRequest
     {
         let params = GrantFlow::create_valid_params(&mut request)
