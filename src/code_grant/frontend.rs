@@ -75,6 +75,7 @@
 //! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error;
 use std::marker::PhantomData;
@@ -82,14 +83,13 @@ use std::fmt;
 use std::str::from_utf8;
 
 use primitives::authorizer::Authorizer;
-use primitives::issuer::Issuer;
-use primitives::registrar::{Registrar, PreGrant};
+use primitives::issuer::{Issuer, IssuedToken};
+use primitives::grant::Grant;
+use primitives::registrar::{ClientUrl, BoundClient, Registrar, RegistrarError, RegisteredClient, PreGrant};
 use primitives::scope::Scope;
-use super::backend::{AccessTokenRequest, AuthorizationRequest, CodeRequest, CodeError, IssuerError};
-use super::backend::{AccessError, GuardRequest};
-use super::extensions::{AccessTokenExtension, CodeExtension};
 
-pub use super::backend::{CodeRef, ErrorUrl, IssuerRef, GuardRef};
+use super::backend::*;
+use super::extensions::{AccessTokenExtension, CodeExtension};
 
 use url::Url;
 use base64;
@@ -339,7 +339,7 @@ impl<'l, W: WebRequest> From<&'l mut W> for AuthorizationParameter<'l> {
     }
 }
 
-impl<'l> CodeRequest for AuthorizationParameter<'l> {
+impl<'l> authorization::CodeRequest for AuthorizationParameter<'l> {
     fn valid(&self) -> bool {
         self.valid
     }
@@ -387,15 +387,21 @@ impl<'l> AuthorizationParameter<'l> {
     }
 }
 
+struct AuthorizationPrimitives<'a> {
+    registrar: RefCell<&'a Registrar>,
+    authorizer: RefCell<&'a mut Authorizer>,
+}
+
 /// All relevant methods for handling authorization code requests.
 pub struct AuthorizationFlow<'a> {
-    backend: CodeRef<'a>,
+    primitives: AuthorizationPrimitives<'a>,
     extensions: Vec<&'a CodeExtension>,
 }
 
 /// A processed authentication request that is waiting for authorization by the resource owner.
 pub struct PendingAuthorization<'a, Req: WebRequest> {
-    request: AuthorizationRequest<'a>,
+    primitives: AuthorizationPrimitives<'a>,
+    request: AuthorizationRequest,
     phantom: PhantomData<Req>,
 }
 
@@ -421,7 +427,10 @@ impl<'a> AuthorizationFlow<'a> {
     /// Initiate an authorization code token flow.
     pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
         AuthorizationFlow {
-            backend: CodeRef::with(registrar, authorizer),
+            primitives: AuthorizationPrimitives {
+                registrar: RefCell::new(registrar),
+                authorizer: RefCell::new(authorizer),
+            },
             extensions: Vec::new(),
         }
     }
@@ -439,7 +448,7 @@ impl<'a> AuthorizationFlow<'a> {
     {
         let negotiated = {
             let urldecoded = AuthorizationParameter::from(&mut request);
-            match self.backend.negotiate(&urldecoded, self.extensions.as_slice()) {
+            match authorization_code(&self.primitives, &urldecoded, self.extensions.as_slice()) {
                 Err(CodeError::Ignore)
                     => return AuthorizationResult::Error(OAuthError::InternalCodeError().into()),
                 Err(CodeError::Redirect(url))
@@ -451,6 +460,7 @@ impl<'a> AuthorizationFlow<'a> {
         AuthorizationResult::Pending {
             request,
             pending: PendingAuthorization {
+                primitives: self.primitives,
                 request: negotiated,
                 phantom: PhantomData,
             }
@@ -508,7 +518,7 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
 
     /// Tells the system that the resource owner with the given id has approved the grant.
     pub fn authenticated(self, owner: String) -> Result<Req::Response, Req::Error> {
-        let authorization = self.request.authorize(owner.into());
+        let authorization = self.request.authorize(&self.primitives, owner.into());
         match authorization {
            Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
            Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
@@ -517,9 +527,25 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
     }
 }
 
+impl<'a> AuthorizationEndpoint for AuthorizationPrimitives<'a> {
+    fn bound_redirect<'s>(&'s self, bound: ClientUrl<'s>) -> Result<BoundClient<'s>, RegistrarError> {
+        self.registrar
+            .borrow()
+            .bound_redirect(bound)
+    }
+
+    fn authorize(&self, grant: Grant) -> Result<String, ()> {
+        self.authorizer
+            .borrow_mut()
+            .authorize(grant)
+    }
+}
+
 /// All relevant methods for granting access token from authorization codes.
 pub struct GrantFlow<'a> {
-    backend: IssuerRef<'a>,
+    registrar: RefCell<&'a Registrar>,
+    authorizer: RefCell<&'a mut Authorizer>,
+    issuer: RefCell<&'a mut Issuer>,
     extensions: Vec<&'a AccessTokenExtension>,
 }
 
@@ -593,7 +619,9 @@ impl<'a> GrantFlow<'a> {
     /// Initiate an access token flow.
     pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer, issuer: &'a mut Issuer) -> Self {
         GrantFlow {
-            backend: IssuerRef::with(registrar, authorizer, issuer),
+            registrar: RefCell::new(registrar),
+            authorizer: RefCell::new(authorizer),
+            issuer: RefCell::new(issuer),
             extensions: Vec::new(),
         }
     }
@@ -654,7 +682,7 @@ impl<'a> GrantFlow<'a> {
         let params = GrantFlow::create_valid_params(&mut request)
             .unwrap_or(AccessTokenParameter::invalid());
 
-        match self.backend.use_code(&params, self.extensions.as_slice()) {
+        match access_token(&self, &params, self.extensions.as_slice()) {
             Err(IssuerError::Invalid(json_data))
                 => return Req::Response::json(&json_data.to_json())?.as_client_error(),
             Err(IssuerError::Unauthorized(json_data, scheme))
@@ -664,9 +692,30 @@ impl<'a> GrantFlow<'a> {
     }
 }
 
+impl<'a> AccessTokenEndpoint for GrantFlow<'a> {
+    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        self.registrar
+            .borrow()
+            .client(client_id)
+    }
+
+    fn extract(&self, code: &str) -> Option<Grant> {
+        self.authorizer
+            .borrow_mut()
+            .extract(code)
+    }
+
+    fn issue(&self, grant: Grant) -> Result<IssuedToken, ()> {
+        self.issuer
+            .borrow_mut()
+            .issue(grant)
+    }
+}
+
 /// All relevant methods for checking authorization for access to a resource.
 pub struct AccessFlow<'a> {
-    backend: GuardRef<'a>,
+    issuer: RefCell<&'a mut Issuer>,
+    scopes: &'a [Scope],
 }
 
 impl<'l> GuardRequest for GuardParameter<'l> {
@@ -692,7 +741,8 @@ impl<'a> AccessFlow<'a> {
     /// Initiate an access to a protected resource
     pub fn new(issuer: &'a mut Issuer, scopes: &'a [Scope]) -> Self {
         AccessFlow {
-            backend: GuardRef::with(issuer, scopes)
+            issuer: RefCell::new(issuer),
+            scopes,
         }
     }
 
@@ -721,12 +771,24 @@ impl<'a> AccessFlow<'a> {
         let params = AccessFlow::create_valid_params(&mut request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
-        self.backend.protect(&params).map_err(|err| {
+        protect(self, &params).map_err(|err| {
             match err {
                 AccessError::InvalidRequest => OAuthError::InternalAccessError(),
                 AccessError::AccessDenied => OAuthError::AccessDenied,
             }.into()
         })
+    }
+}
+
+impl<'a> GuardEndpoint for AccessFlow<'a> {
+    fn scopes(&self) -> &[Scope] {
+        self.scopes
+    }
+
+    fn recover_token(&self, id: &str) -> Option<Grant> {
+        self.issuer
+            .borrow()
+            .recover_token(id)
     }
 }
 
