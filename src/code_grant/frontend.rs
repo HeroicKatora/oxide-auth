@@ -185,6 +185,7 @@ pub enum QueryParameter<'a> {
     MultiValue(MultiValueQuery<'a>),
 }
 
+/// An error occuring during authorization, convertible to the redirect url with which to respond.
 pub struct ErrorRedirect(ErrorUrl);
 
 impl Into<Url> for ErrorRedirect {
