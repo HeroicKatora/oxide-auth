@@ -15,7 +15,7 @@
 //! Lets step through those implementations one by one.  As an example request type, let's pretend
 //! that the web interface consists of the following types:
 //!
-//! ```rust
+//! ```
 //! use std::collections::HashMap;
 //! struct ExampleRequest {
 //!     /// The query part of the retrieved uri, conveniently pre-parsed.
@@ -44,10 +44,12 @@
 //!     /// The body sent
 //!     body: Option<String>,
 //! }
+//! # fn main() { }
 //! ```
 //! This is obviously incredibly simplified but will showcase the most valuable features of this
 //! library. Let's implement the required traits:
-//! ```rust
+//!
+//! ```
 //! # use std::collections::HashMap;
 //! # struct ExampleRequest {
 //! #    /// The query part of the retrieved uri, conveniently pre-parsed.

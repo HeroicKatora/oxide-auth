@@ -29,7 +29,7 @@
 //! # use std::collections::HashMap;
 //! # use std::vec::Vec;
 //! use oxide_auth::code_grant::frontend::{OAuthError, QueryParameter, WebRequest, WebResponse};
-//! use oxide_auth::code_grant::frontend::{IssuerRef, GrantFlow};
+//! use oxide_auth::code_grant::frontend::{GrantFlow};
 //! use oxide_auth::primitives::prelude::*;
 //! use url::Url;
 //! struct MyRequest { /* user defined */ }
