@@ -66,7 +66,7 @@ impl WebResponse for CraftedResponse {
         Ok(CraftedResponse::Json(data.to_string()))
     }
 
-    fn redirect_error(target: ErrorUrl) -> Result<Self, OAuthError> {
+    fn redirect_error(target: ErrorRedirect) -> Result<Self, OAuthError> {
         Ok(CraftedResponse::RedirectFromError(target.into()))
     }
 

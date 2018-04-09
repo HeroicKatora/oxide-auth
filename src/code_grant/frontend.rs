@@ -185,6 +185,14 @@ pub enum QueryParameter<'a> {
     MultiValue(MultiValueQuery<'a>),
 }
 
+pub struct ErrorRedirect(ErrorUrl);
+
+impl Into<Url> for ErrorRedirect {
+    fn into(self) -> Url {
+        self.0.into()
+    }
+}
+
 /// Abstraction of web requests with several different abstractions and constructors needed by this
 /// frontend. It is assumed to originate from an HTTP request, as defined in the scope of the rfc,
 /// but theoretically other requests are possible.
@@ -226,7 +234,7 @@ pub trait WebResponse where Self: Sized {
     /// Construct a redirect for the error. Here the response may choose to augment the error with
     /// additional information (such as help websites, description strings), hence the default
     /// implementation which does not do any of that.
-    fn redirect_error(target: ErrorUrl) -> Result<Self, Self::Error> {
+    fn redirect_error(target: ErrorRedirect) -> Result<Self, Self::Error> {
         Self::redirect(target.into())
     }
 
@@ -452,7 +460,8 @@ impl<'a> AuthorizationFlow<'a> {
                 Err(CodeError::Ignore)
                     => return AuthorizationResult::Error(OAuthError::InternalCodeError().into()),
                 Err(CodeError::Redirect(url))
-                    => return AuthorizationResult::from_fail(Req::Response::redirect_error(url)),
+                    => return AuthorizationResult::from_fail(
+                        Req::Response::redirect_error(ErrorRedirect(url))),
                 Ok(negotiated) => negotiated,
             }
         };
@@ -500,9 +509,11 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
     pub fn deny(self) -> Result<Req::Response, Req::Error> {
         let authorization = self.request.deny();
         match authorization {
-           Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
-           Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
-           Ok(redirect_to) => Req::Response::redirect(redirect_to),
+            Err(CodeError::Ignore)
+                => return Err(OAuthError::InternalCodeError().into()),
+            Err(CodeError::Redirect(url))
+                => return Req::Response::redirect_error(ErrorRedirect(url)),
+            Ok(redirect_to) => Req::Response::redirect(redirect_to),
        }
     }
 
@@ -520,10 +531,12 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
     pub fn authenticated(self, owner: String) -> Result<Req::Response, Req::Error> {
         let authorization = self.request.authorize(&self.primitives, owner.into());
         match authorization {
-           Err(CodeError::Ignore) => return Err(OAuthError::InternalCodeError().into()),
-           Err(CodeError::Redirect(url)) => return Req::Response::redirect_error(url),
-           Ok(redirect_to) => Req::Response::redirect(redirect_to),
-       }
+            Err(CodeError::Ignore)
+                => return Err(OAuthError::InternalCodeError().into()),
+            Err(CodeError::Redirect(url))
+                => return Req::Response::redirect_error(ErrorRedirect(url)),
+            Ok(redirect_to) => Req::Response::redirect(redirect_to),
+        }
     }
 }
 
