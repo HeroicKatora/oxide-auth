@@ -3,13 +3,13 @@ extern crate futures;
 
 use code_grant::frontend::{SingleValueQuery, QueryParameter, WebRequest, WebResponse};
 pub use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow};
-pub use code_grant::frontend::{Authentication, OAuthError, OwnerAuthorizer};
+pub use code_grant::frontend::{OAuthError, OwnerAuthorization, OwnerAuthorizer};
 pub use code_grant::prelude::*;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use self::actix_web::{HttpRequest, HttpResponse, StatusCode};
+use self::actix_web::{HttpMessage, HttpRequest, HttpResponse, StatusCode};
 use self::actix_web::dev::UrlEncoded;
 use self::futures::{Async, Poll};
 pub use self::futures::Future;
@@ -48,11 +48,10 @@ impl<State> OAuthRequest<State> {
 
     pub fn access_token(self) -> GrantRequest<State> {
         let OAuthRequest(request) = self;
-        let body = request.urlencoded();
 
         GrantRequest {
-            request: Some(request),
-            body: body,
+            request: Some(request.clone()),
+            body: request.urlencoded(),
         }
     }
 
@@ -71,7 +70,7 @@ pub struct AuthorizationCodeRequest<State> {
 
 pub struct GrantRequest<State> {
     request: Option<HttpRequest<State>>,
-    body: UrlEncoded,
+    body: UrlEncoded<HttpRequest<State>>,
 }
 
 pub struct GuardRequest<State> {
@@ -156,11 +155,13 @@ impl<State> ResolvedRequest<State> {
             Some(Ok(as_str)) => Ok(Some(as_str.to_string())),
             Some(Err(_)) => Err(())
         };
+
         let query = request
             .query()
             .iter()
             .map(|&(ref key, ref val)| (key.clone().into_owned(), val.clone().into_owned()))
             .collect();
+
         ResolvedRequest {
             request: request,
             authorization: authorization,
@@ -179,10 +180,10 @@ impl<State> ResolvedRequest<State> {
 struct ResolvedOwnerAuthorization<A>(A);
 
 impl<A, State> OwnerAuthorizer<ResolvedRequest<State>> for ResolvedOwnerAuthorization<A>
-where A: Fn(&HttpRequest<State>, &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
-    fn get_owner_authorization(&self, request: &mut ResolvedRequest<State>, grant: &PreGrant)
-    -> Result<(Authentication, HttpResponse), OAuthError> {
-        self.0(&request.request, grant)
+where A: Fn(&HttpRequest<State>, &PreGrant) -> OwnerAuthorization<HttpResponse> {
+    fn check_authorization(self, request: ResolvedRequest<State>, pre_grant: &PreGrant)
+    -> OwnerAuthorization<HttpResponse> {
+        self.0(&request.request, pre_grant)
     }
 }
 
@@ -197,7 +198,7 @@ impl<State> Future for AuthorizationCodeRequest<State> {
 }
 
 
-impl<State> Future for GrantRequest<State> {
+impl<State: 'static> Future for GrantRequest<State> {
     type Item = ReadyGrantRequest<State>;
     type Error = OAuthError;
 
@@ -228,8 +229,9 @@ impl<State> Future for GuardRequest<State> {
 impl<State> ReadyAuthorizationCodeRequest<State> {
     pub fn handle<A>(self, flow: AuthorizationFlow, authorizer: A) -> Result<HttpResponse, OAuthError>
     where
-        A: Fn(&HttpRequest<State>, &PreGrant) -> Result<(Authentication, HttpResponse), OAuthError> {
-        flow.handle(self.0, &ResolvedOwnerAuthorization(authorizer))
+        A: Fn(&HttpRequest<State>, &PreGrant) -> OwnerAuthorization<HttpResponse> {
+        flow.handle(self.0)
+            .complete(ResolvedOwnerAuthorization(authorizer))
     }
 
     pub fn state(&self) -> &State {
