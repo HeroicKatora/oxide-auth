@@ -31,10 +31,17 @@ pub trait GuardRequest {
     fn token(&self) -> Option<Cow<str>>;
 }
 
+/// Required functionality to respond to resource requests.
+///
+/// Each method will only be invoked exactly once when processing a correct and authorized request,
+/// and potentially less than once when the request is faulty.  These methods should be implemented
+/// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait GuardEndpoint {
+    /// The list of possible scopes required by the resource endpoint.
     fn scopes(&self) -> &[Scope];
 
-    fn recover_token(&self, &str) -> Option<Grant>;
+    /// Recover the grant corresponding to a bearer token.
+    fn recover_token(&self, bearer: &str) -> Option<Grant>;
 }
 
 /// The result will indicate whether the resource access should be allowed or not.

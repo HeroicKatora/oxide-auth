@@ -29,9 +29,16 @@ pub trait CodeRequest {
     fn extension(&self, &str) -> Option<Cow<str>>;
 }
 
+/// Required functionality to respond to authorization code requests.
+///
+/// Each method will only be invoked exactly once when processing a correct and authorized request,
+/// and potentially less than once when the request is faulty.  These methods should be implemented
+/// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait AuthorizationEndpoint {
+    /// 'Bind' a client and redirect uri from a request to internally approved parameters.
     fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
 
+    /// Generate an authorization code for a given grant.
     fn authorize(&self, Grant) -> Result<String, ()>;
 }
 

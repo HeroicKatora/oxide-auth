@@ -17,25 +17,39 @@ pub trait AccessTokenRequest {
     /// the case, then no other attribute will be queried. This method exists mainly to make
     /// frontends straightforward by not having them handle special cases for malformed requests.
     fn valid(&self) -> bool;
+
     /// The authorization code grant for which an access token is wanted.
     fn code(&self) -> Option<Cow<str>>;
+
     /// User:password of a basic authorization header.
     fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)>;
+
     /// The client_id, optional parameter for public clients.
     fn client_id(&self) -> Option<Cow<str>>;
+
     /// Valid request have the redirect url used to request the authorization code grant.
     fn redirect_uri(&self) -> Option<Cow<str>>;
+
     /// Valid requests have this set to "authorization_code"
     fn grant_type(&self) -> Option<Cow<str>>;
+
     /// Retrieve an additional parameter used in an extension
     fn extension(&self, &str) -> Option<Cow<str>>;
 }
 
+/// Required functionality to respond to access token requests.
+///
+/// Each method will only be invoked exactly once when processing a correct and authorized request,
+/// and potentially less than once when the request is faulty.  These methods should be implemented
+/// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait AccessTokenEndpoint {
+    /// Get the client corresponding to some id.
     fn client(&self, client_id: &str) -> Option<RegisteredClient>;
 
-    fn extract(&self, &str) -> Option<Grant>;
+    /// Extract and remove the grant for an authorization code.
+    fn extract(&self, authorization_code: &str) -> Option<Grant>;
 
+    /// Generate a set of tokens for a grant.
     fn issue(&self, Grant) -> Result<IssuedToken, ()>;
 }
 

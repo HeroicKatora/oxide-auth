@@ -10,8 +10,13 @@
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 
+/// Provides the handling for Access Token Requests
 pub mod accesstoken;
+
+/// Provides the handling for Authorization Code Requests
 pub mod authorization;
+
+/// Provides the handling for Resource Requests
 pub mod guard;
 
 pub use self::authorization::{AuthorizationEndpoint, AuthorizationRequest, CodeRequest, CodeError, ErrorUrl, authorization_code};
