@@ -1,3 +1,4 @@
+extern crate actix;
 extern crate actix_web;
 extern crate futures;
 
@@ -17,6 +18,7 @@ pub use self::futures::Future;
 use url::Url;
 
 mod defer;
+mod primitives;
 
 /// Bundles all oauth related methods under a single type.
 pub trait OAuth {
