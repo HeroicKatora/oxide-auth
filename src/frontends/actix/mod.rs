@@ -10,7 +10,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use self::actix_web::{HttpMessage, HttpRequest, HttpResponse, StatusCode};
-use self::actix_web::dev::UrlEncoded;
+use self::actix_web::dev::*;
 use self::futures::{Async, Poll};
 pub use self::futures::Future;
 use url::Url;
@@ -18,7 +18,7 @@ use url::Url;
 /// Bundles all oauth related methods under a single type.
 pub trait OAuth {
     type State;
-    
+
     fn oauth2(self) -> OAuthRequest<Self::State>;
 }
 
@@ -197,7 +197,6 @@ impl<State> Future for AuthorizationCodeRequest<State> {
         Ok(Async::Ready(ReadyAuthorizationCodeRequest(resolved)))
     }
 }
-
 
 impl<State: 'static> Future for GrantRequest<State> {
     type Item = ReadyGrantRequest<State>;
