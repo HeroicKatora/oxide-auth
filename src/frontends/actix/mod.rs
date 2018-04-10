@@ -10,7 +10,8 @@ pub use code_grant::prelude::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use self::actix_web::{HttpMessage, HttpRequest, HttpResponse, StatusCode};
+use self::actix_web::{HttpMessage, HttpRequest, HttpResponse};
+use self::actix_web::http::StatusCode;
 use self::actix_web::dev::*;
 use self::defer::DeferableComputation;
 use self::futures::{Async, Poll};
@@ -76,7 +77,7 @@ pub struct AuthorizationCodeRequest<State> {
 
 pub struct GrantRequest<State> {
     request: Option<HttpRequest<State>>,
-    body: UrlEncoded<HttpRequest<State>>,
+    body: UrlEncoded<HttpRequest<State>, HashMap<String, String>>,
 }
 
 pub struct GuardRequest<State> {
@@ -116,24 +117,21 @@ impl WebResponse for HttpResponse {
     type Error = OAuthError;
 
     fn redirect(url: Url) -> Result<Self, Self::Error> {
-        HttpResponse::Found()
+        Ok(HttpResponse::Found()
             .header("Location", url.as_str())
-            .finish()
-            .map_err(|_| OAuthError::PrimitiveError)
+            .finish())
     }
 
     fn text(text: &str) -> Result<Self, Self::Error> {
-        HttpResponse::Ok()
+        Ok(HttpResponse::Ok()
             .content_type("text/plain")
-            .body(text.to_owned())
-            .map_err(|_| OAuthError::PrimitiveError)
+            .body(text.to_owned()))
     }
 
     fn json(data: &str) -> Result<Self, Self::Error> {
-        HttpResponse::Ok()
+        Ok(HttpResponse::Ok()
             .content_type("application/json")
-            .body(data.to_owned())
-            .map_err(|_| OAuthError::PrimitiveError)
+            .body(data.to_owned()))
     }
 
     fn as_client_error(mut self) -> Result<Self, Self::Error> {
