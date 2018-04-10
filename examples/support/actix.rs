@@ -13,13 +13,11 @@ pub fn dummy_client(request: HttpRequest) -> HttpResponse {
     if let Some(cause) = request.query().get("error") {
         return HttpResponse::BadRequest()
             .body(format!("Error during owner authorization: {:?}", cause))
-            .unwrap()
     }
 
     let code = match request.query().get("code") {
         None => return HttpResponse::BadRequest()
-            .body("Missing code")
-            .unwrap(),
+            .body("Missing code"),
         Some(code) => code,
     };
 
@@ -36,22 +34,19 @@ pub fn dummy_client(request: HttpRequest) -> HttpResponse {
     let mut token_response = match client.execute(access_token_request) {
         Ok(response) => response,
         Err(_) => return HttpResponse::BadRequest()
-            .body("Could not fetch bearer token")
-            .unwrap(),
+            .body("Could not fetch bearer token"),
     };
     let mut token = String::new();
     token_response.read_to_string(&mut token).unwrap();
     let token_map: HashMap<String, String> = match serde_json::from_str(&token) {
         Ok(token_map) => token_map,
         Err(err) => return HttpResponse::BadRequest()
-            .body(format!("Error unwrapping json response, got {:?} instead", err))
-            .unwrap(),
+            .body(format!("Error unwrapping json response, got {:?} instead", err)),
     };
 
     if token_map.get("error").is_some() || !token_map.get("access_token").is_some() {
         return HttpResponse::BadRequest()
-            .body(token)
-            .unwrap();
+            .body(token);
     }
 
     // Request the page with the oauth token
@@ -63,8 +58,7 @@ pub fn dummy_client(request: HttpRequest) -> HttpResponse {
     let mut page_response = match client.execute(page_request) {
         Ok(response) => response,
         Err(_) => return HttpResponse::BadRequest()
-            .body("Could not access protected resource")
-            .unwrap(),
+            .body("Could not access protected resource"),
     };
     let mut protected_page = String::new();
     page_response.read_to_string(&mut protected_page).unwrap();
@@ -87,5 +81,4 @@ pub fn dummy_client(request: HttpRequest) -> HttpResponse {
     HttpResponse::Ok()
         .content_type("text/html")
         .body(display_page)
-        .unwrap()
 }

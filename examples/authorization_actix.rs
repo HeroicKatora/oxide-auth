@@ -10,7 +10,8 @@ mod main {
     extern crate url;
 
     use super::support::actix::dummy_client;
-    use self::actix_web::*;
+    use self::actix_web::{server, App, Body, HttpRequest, HttpResponse};
+    use self::actix_web::http::Method;
     use self::oxide_auth::frontends::actix::*;
 
     use std::sync::Mutex;
@@ -36,8 +37,8 @@ lazy_static! {
         let sys = actix::System::new("HttpServer");
 
         // Create the main server instance
-        HttpServer::new(
-            || Application::with_state(())
+        server::new(
+            || App::with_state(())
                 .handler("/authorize", |req: HttpRequest<State>| {
                     match *req.method() {
                         Method::GET => req.oauth2().authorization_code()
@@ -48,7 +49,7 @@ lazy_static! {
                                 request.handle(flow, handle_get)
                             })
                             .wait()
-                            .unwrap_or(httpcodes::HTTPBadRequest.with_body(Body::Empty)),
+                            .unwrap_or(HttpResponse::BadRequest().body(Body::Empty)),
                         Method::POST => req.oauth2().authorization_code()
                             .and_then(|request| {
                                 let mut registrar = REGISTRAR.lock().unwrap();
@@ -57,8 +58,8 @@ lazy_static! {
                                 request.handle(flow, handle_post)
                             })
                             .wait()
-                            .unwrap_or(httpcodes::HTTPBadRequest.with_body(Body::Empty)),
-                        _ => httpcodes::HTTPNotFound.with_body(Body::Empty),
+                            .unwrap_or(HttpResponse::BadRequest().body(Body::Empty)),
+                        _ => HttpResponse::NotFound().body(Body::Empty),
                     }
                 })
                 .handler("/token", |req: HttpRequest<State>| {
@@ -71,8 +72,8 @@ lazy_static! {
                                 let flow = GrantFlow::new(&mut *registrar, &mut *authorizer, &mut *issuer);
                                 request.handle(flow)
                             }).wait()
-                            .unwrap_or(httpcodes::HTTPBadRequest.with_body(Body::Empty)),
-                        _ => httpcodes::HTTPNotFound.with_body(Body::Empty),
+                            .unwrap_or(HttpResponse::BadRequest().body(Body::Empty)),
+                        _ => HttpResponse::NotFound().body(Body::Empty),
                     }
                 })
                 .handler("/", |req: HttpRequest<State>| {
@@ -88,7 +89,6 @@ lazy_static! {
                                 HttpResponse::Ok()
                                     .content_type("text/plain")
                                     .body("Hello world!")
-                                    .unwrap()
                             })
                             .wait()
                             .unwrap_or_else(
@@ -102,9 +102,8 @@ here</a> to begin the authorization process.
                                 HttpResponse::Unauthorized()
                                     .content_type("text/html")
                                     .body(text)
-                                    .unwrap()
                             }),
-                        _ => httpcodes::HTTPNotFound.with_body(Body::Empty),
+                        _ => HttpResponse::NotFound().body(Body::Empty),
                     }
                 })
             )
@@ -112,7 +111,7 @@ here</a> to begin the authorization process.
             .expect("Failed to bind to socket")
             .start();
 
-        HttpServer::new(|| Application::new().handler("/endpoint", dummy_client))
+        server::new(|| App::new().handler("/endpoint", dummy_client))
             .bind("localhost:8021")
             .expect("Failed to start dummy client")
             .start();
@@ -135,8 +134,7 @@ here</a> to begin the authorization process.
             </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
         let response = HttpResponse::Ok()
             .content_type("text/html")
-            .body(text)
-            .unwrap();
+            .body(text);
         OwnerAuthorization::InProgress(response)
     }
 
