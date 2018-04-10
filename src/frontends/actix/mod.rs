@@ -11,9 +11,12 @@ use std::collections::HashMap;
 
 use self::actix_web::{HttpMessage, HttpRequest, HttpResponse, StatusCode};
 use self::actix_web::dev::*;
+use self::defer::DeferableComputation;
 use self::futures::{Async, Poll};
 pub use self::futures::Future;
 use url::Url;
+
+mod defer;
 
 /// Bundles all oauth related methods under a single type.
 pub trait OAuth {
