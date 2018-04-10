@@ -18,6 +18,7 @@ use url::Url;
 /// Bundles all oauth related methods under a single type.
 pub trait OAuth {
     type State;
+    
     fn oauth2(self) -> OAuthRequest<Self::State>;
 }
 
@@ -113,21 +114,21 @@ impl WebResponse for HttpResponse {
         HttpResponse::Found()
             .header("Location", url.as_str())
             .finish()
-            .map_err(|_| OAuthError::InternalCodeError())
+            .map_err(|_| OAuthError::PrimitiveError)
     }
 
     fn text(text: &str) -> Result<Self, Self::Error> {
         HttpResponse::Ok()
             .content_type("text/plain")
             .body(text.to_owned())
-            .map_err(|_| OAuthError::InternalCodeError())
+            .map_err(|_| OAuthError::PrimitiveError)
     }
 
     fn json(data: &str) -> Result<Self, Self::Error> {
         HttpResponse::Ok()
             .content_type("application/json")
             .body(data.to_owned())
-            .map_err(|_| OAuthError::InternalCodeError())
+            .map_err(|_| OAuthError::PrimitiveError)
     }
 
     fn as_client_error(mut self) -> Result<Self, Self::Error> {
@@ -142,7 +143,7 @@ impl WebResponse for HttpResponse {
 
     fn with_authorization(mut self, kind: &str) -> Result<Self, Self::Error> {
         self.status_mut().clone_from(&StatusCode::UNAUTHORIZED);
-        let header_content = kind.parse().map_err(|_| OAuthError::InternalCodeError())?;
+        let header_content = kind.parse().map_err(|_| OAuthError::PrimitiveError)?;
         self.headers_mut().insert("WWW-Authenticate", header_content);
         Ok(self)
     }

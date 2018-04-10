@@ -137,6 +137,9 @@ pub enum IssuerError {
 
     /// The client did not properly authorize itself.
     Unauthorized(ErrorDescription, String),
+
+    /// An internal operation did not complete successfully.
+    Internal,
 }
 
 /// Simple wrapper around AccessTokenError to imbue the type with addtional json functionality. In
