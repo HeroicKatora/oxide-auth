@@ -403,13 +403,13 @@ struct AuthorizationPrimitives<'a> {
 
 /// All relevant methods for handling authorization code requests.
 pub struct AuthorizationFlow<'a> {
-    primitives: AuthorizationPrimitives<'a>,
+    primitives: &'a AuthorizationEndpoint,
     extensions: Vec<&'a CodeExtension>,
 }
 
 /// A processed authentication request that is waiting for authorization by the resource owner.
 pub struct PendingAuthorization<'a, Req: WebRequest> {
-    primitives: AuthorizationPrimitives<'a>,
+    primitives: &'a AuthorizationEndpoint,
     request: AuthorizationRequest,
     phantom: PhantomData<Req>,
 }
@@ -434,12 +434,9 @@ pub enum AuthorizationResult<'a, Request: WebRequest> {
 
 impl<'a> AuthorizationFlow<'a> {
     /// Initiate an authorization code token flow.
-    pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
+    pub fn new(endpoint: &'a AuthorizationEndpoint) -> Self {
         AuthorizationFlow {
-            primitives: AuthorizationPrimitives {
-                registrar: Cell::new(registrar),
-                authorizer: Cell::new(Some(authorizer)),
-            },
+            primitives: endpoint,
             extensions: Vec::new(),
         }
     }
@@ -457,7 +454,7 @@ impl<'a> AuthorizationFlow<'a> {
     {
         let negotiated = {
             let urldecoded = AuthorizationParameter::from(&mut request);
-            match authorization_code(&self.primitives, &urldecoded, self.extensions.as_slice()) {
+            match authorization_code(self.primitives, &urldecoded, self.extensions.as_slice()) {
                 Err(CodeError::Ignore)
                     => return AuthorizationResult::Error(OAuthError::DenySilently.into()),
                 Err(CodeError::Redirect(url))
@@ -530,7 +527,7 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
 
     /// Tells the system that the resource owner with the given id has approved the grant.
     pub fn authenticated(self, owner: String) -> Result<Req::Response, Req::Error> {
-        let authorization = self.request.authorize(&self.primitives, owner.into());
+        let authorization = self.request.authorize(self.primitives, owner.into());
         match authorization {
             Err(CodeError::Ignore)
                 => return Err(OAuthError::DenySilently.into()),
