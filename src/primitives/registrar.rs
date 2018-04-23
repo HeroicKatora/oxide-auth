@@ -73,6 +73,7 @@ pub struct PreGrant {
 }
 
 /// Handled responses from a registrar.
+#[derive(Clone)]
 pub enum RegistrarError {
     /// Indicates an entirely unknown client.
     Unregistered,
@@ -92,6 +93,7 @@ pub enum RegistrarError {
 /// There are two types of clients, public and confidential. Public clients operate without proof
 /// of identity while confidential clients are granted additional assertions on their communication
 /// with the servers. They might be allowed more freedom as they are harder to impersonate.
+#[derive(Clone)]
 pub struct Client {
     client_id: String,
     redirect_uri: Url,
@@ -103,6 +105,7 @@ pub struct Client {
 ///
 /// This provides a standard encoding for `Registrars` who wish to store their clients and makes it
 /// possible to test password policies.
+#[derive(Clone)]
 pub struct EncodedClient {
     /// The id of this client. If this is was registered at a `Registrar`, this should be a key
     /// to the instance.
@@ -125,6 +128,7 @@ pub struct RegisteredClient<'a> {
 }
 
 /// Enumeration of the two defined client types.
+#[derive(Clone)]
 pub enum ClientType {
     /// A public client with no authentication information.
     Public,
