@@ -12,7 +12,7 @@ use super::futures::{Async, Future, Poll};
 pub enum DeferredResult<Pending: Future> {
     NotInitialized /* Initial state, not reachable otherwise except panics during poll */,
     Sent(Pending) /* from initialized, going to Errored or Answer */,
-    Errored(Pending::Error) /* Final state*/,
+    Errored(Option<Pending::Error>) /* Final state*/,
     Answer(Pending::Item) /* Final state*/,
 }
 
@@ -27,7 +27,7 @@ pub struct DeferableComputation<Pending: Future> {
 }
 
 #[derive(Clone)]
-pub struct StartedComputation<Pending: Future> where Pending::Error: Clone {
+pub struct StartedComputation<Pending: Future> {
     message: SharedResult<Pending>,
 }
 
@@ -55,7 +55,14 @@ impl<Pending: Future> DeferredResult<Pending> {
 
     fn make_error(&self) -> Option<Pending::Error> where Pending::Error: Clone {
         match *self {
-            DeferredResult::Errored(ref err) => Some(err.clone()),
+            DeferredResult::Errored(ref err) => err.as_ref().map(Clone::clone),
+            _ => None,
+        }
+    }
+
+    fn get_error(&mut self) -> Option<Pending::Error> {
+        match *self {
+            DeferredResult::Errored(ref mut err) => replace(err, None),
             _ => None,
         }
     }
@@ -66,7 +73,7 @@ impl<Pending: Future> DeferredResult<Pending> {
                 match pending.poll() {
                     Ok(Async::NotReady) => (DeferredResult::Sent(pending), Ok(Async::NotReady)),
                     Ok(Async::Ready(value)) => (DeferredResult::Answer(value), Ok(Async::Ready(()))),
-                    Err(error) => (DeferredResult::Errored(error), Ok(Async::Ready(()))),
+                    Err(error) => (DeferredResult::Errored(Some(error)), Ok(Async::Ready(()))),
                 }
             },
             DeferredResult::NotInitialized => (DeferredResult::NotInitialized, Err(WasUninitialized)),
@@ -93,7 +100,7 @@ impl<Pending: Future> DeferableComputation<Pending> {
         self.message.borrow().make_answer()
     }
 
-    pub fn start(self) -> Option<StartedComputation<Pending>> where Pending::Error: Clone {
+    pub fn started(&self) -> Option<StartedComputation<Pending>> {
         if self.message.borrow().is_initialized() {
             Some(StartedComputation {
                 message: self.message.clone(),
@@ -104,7 +111,7 @@ impl<Pending: Future> DeferableComputation<Pending> {
     }
 }
 
-impl<Pending: Future> Future for DeferableComputation<Pending> where Pending::Error: Clone {
+impl<Pending: Future> Future for StartedComputation<Pending> {
     type Item = ();
     type Error = Pending::Error;
 
@@ -113,7 +120,7 @@ impl<Pending: Future> Future for DeferableComputation<Pending> where Pending::Er
             Err(_) => unreachable!("This condition is secured by DeferableComputation::start"),
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Ok(Async::Ready(())) => {
-                if let Some(error) = self.message.borrow().make_error() {
+                if let Some(error) = self.message.borrow_mut().get_error() {
                     Err(error)
                 } else {
                     Ok(Async::Ready(()))
