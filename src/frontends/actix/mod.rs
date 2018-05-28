@@ -4,10 +4,12 @@ extern crate futures;
 
 use self::actix_web::HttpRequest;
 
+mod endpoint;
 mod message;
 mod resolve;
 mod request;
 
+pub use self::endpoint::CodeGrantEndpoint;
 pub use self::request::{AuthorizationCode, AccessToken, Guard};
 
 /// Bundles all oauth related methods under a single type.
