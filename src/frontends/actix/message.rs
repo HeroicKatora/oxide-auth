@@ -1,7 +1,6 @@
-use super::actix::dev::*;
-use super::actix_web::dev::*;
+use super::actix::prelude::Message;
 
-use super::actix_web::{HttpMessage, HttpRequest, HttpResponse};
+use super::actix_web::HttpResponse;
 use super::resolve::ResolvedRequest;
 use code_grant::frontend::OAuthError;
 

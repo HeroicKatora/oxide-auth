@@ -2,7 +2,7 @@ extern crate actix;
 extern crate actix_web;
 extern crate futures;
 
-use self::actix_web::{HttpMessage, HttpRequest};
+use self::actix_web::HttpRequest;
 
 mod message;
 mod resolve;
