@@ -26,26 +26,16 @@ impl<State> OAuth for HttpRequest<State> {
 impl OAuthRequest {
     pub fn authorization_code(self) -> AuthorizationCode {
         let OAuthRequest(request) = self;
-
-        AuthorizationCode {
-            request: Some(request),
-        }
+        AuthorizationCode::new(request)
     }
 
     pub fn access_token(self) -> AccessToken {
         let OAuthRequest(request) = self;
-
-        AccessToken {
-            request: Some(request.clone()),
-            body: request.urlencoded(),
-        }
+        AccessToken::new(request)
     }
 
     pub fn guard(self) -> Guard {
         let OAuthRequest(request) = self;
-
-        Guard {
-            request: Some(request),
-        }
+        Guard::new(request)
     }
 }

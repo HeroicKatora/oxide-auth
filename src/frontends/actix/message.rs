@@ -5,9 +5,9 @@ use super::actix_web::{HttpMessage, HttpRequest, HttpResponse};
 use super::resolve::ResolvedRequest;
 use code_grant::frontend::OAuthError;
 
-pub struct AuthorizationCode(ResolvedRequest);
-pub struct AccessToken(ResolvedRequest);
-pub struct Guard(ResolvedRequest);
+pub struct AuthorizationCode(pub(super) ResolvedRequest);
+pub struct AccessToken(pub(super) ResolvedRequest);
+pub struct Guard(pub(super) ResolvedRequest);
 
 impl Message for AuthorizationCode {
     type Result = Result<HttpResponse, OAuthError>;
