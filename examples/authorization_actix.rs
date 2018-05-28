@@ -6,105 +6,104 @@ extern crate lazy_static;
 mod main {
     extern crate actix;
     extern crate actix_web;
+    extern crate futures;
     extern crate oxide_auth;
     extern crate url;
 
     use super::support::actix::dummy_client;
-    use self::actix_web::{server, App, Body, HttpRequest, HttpResponse};
+    use self::actix::{Actor, Addr, Unsync, Syn};
+    use self::actix_web::{server, App, Body, HttpRequest, HttpResponse, Error as AWError};
     use self::actix_web::http::Method;
+    use self::futures::Future;
     use self::oxide_auth::frontends::actix::*;
-
-    use std::sync::Mutex;
-
-    type State = ();
+    use self::oxide_auth::code_grant::frontend::{OAuthError, OwnerAuthorization};
+    use self::oxide_auth::primitives::prelude::*;
 
     static PASSPHRASE: &str = "This is a super secret phrase";
-lazy_static! {
-    static ref REGISTRAR: Mutex<ClientMap> = {
+    static DENY_TEXT: &str = "<html>
+This page should be accessed via an oauth token from the client in the example. Click
+<a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
+here</a> to begin the authorization process.
+</html>
+";
+
+    /// Example of a main function of a rouille server supporting oauth.
+    pub fn example() {
+        let sys = actix::System::new("HttpServer");
+
         let mut clients  = ClientMap::new();
         // Register a dummy client instance
         let client = Client::public("LocalClient", // Client id
             "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
             "default".parse().unwrap()); // Allowed client scope
         clients.register_client(client);
-        Mutex::new(clients)
-    };
-    static ref AUTHORIZER: Mutex<Storage<RandomGenerator>> = Mutex::new(Storage::new(RandomGenerator::new(16)));
-    static ref ISSUER: Mutex<TokenSigner> = Mutex::new(TokenSigner::new_from_passphrase(&PASSPHRASE, None));
-}
-    /// Example of a main function of a rouille server supporting oauth.
-    pub fn example() {
-        let sys = actix::System::new("HttpServer");
+
+        let authorizer = Storage::new(RandomGenerator::new(16));
+        let issuer = TokenSigner::new_from_passphrase(&PASSPHRASE, None);
+
+        let endpoint: Addr<Syn,_> = CodeGrantEndpoint::new((clients, authorizer, issuer))
+            .with_authorization(|&mut (ref client, ref mut authorizer, _)| {
+                let primitives = AuthorizationPrimitives::new(client, authorizer);
+                AuthorizationFlow::new(&primitives)
+            })
+            .with_grant(|&mut (ref client, ref mut authorizer, ref mut issuer)| {
+                GrantFlow::new(client, authorizer, issuer)
+            })
+            .with_guard(|&mut (_, _, ref mut issuer)| {
+                let scopes = vec!["default".parse().unwrap()];
+                AccessFlow::new(issuer, &scopes)
+            })
+            .start();
 
         // Create the main server instance
         server::new(
-            || App::with_state(())
-                .handler("/authorize", |req: HttpRequest<State>| {
-                    match *req.method() {
-                        Method::GET => req.oauth2().authorization_code()
-                            .and_then(|request| {
-                                let mut registrar = REGISTRAR.lock().unwrap();
-                                let mut authorizer = AUTHORIZER.lock().unwrap();
-                                let flow = AuthorizationFlow::new(&mut *registrar, &mut *authorizer);
-                                request.handle(flow, handle_get)
-                            })
-                            .wait()
-                            .unwrap_or(HttpResponse::BadRequest().body(Body::Empty)),
-                        Method::POST => req.oauth2().authorization_code()
-                            .and_then(|request| {
-                                let mut registrar = REGISTRAR.lock().unwrap();
-                                let mut authorizer = AUTHORIZER.lock().unwrap();
-                                let flow = AuthorizationFlow::new(&mut *registrar, &mut *authorizer);
-                                request.handle(flow, handle_post)
-                            })
-                            .wait()
-                            .unwrap_or(HttpResponse::BadRequest().body(Body::Empty)),
-                        _ => HttpResponse::NotFound().body(Body::Empty),
-                    }
+            || App::new()
+                .route("/authorize", Method::GET, |req: HttpRequest| {
+                    Box::new(req.oauth2()
+                        .authorization_code()
+                        .and_then(|request| endpoint.send(request)
+                            .or_else(|_| Err(OAuthError::AccessDenied))
+                            .and_then(|result| result)
+                        )
+                        .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
+                    ) as Box<Future<Item = HttpResponse, Error = AWError>>
                 })
-                .handler("/token", |req: HttpRequest<State>| {
-                    match *req.method() {
-                        Method::POST => req.oauth2().access_token()
-                            .and_then(|request| {
-                                let mut registrar = REGISTRAR.lock().unwrap();
-                                let mut authorizer = AUTHORIZER.lock().unwrap();
-                                let mut issuer = ISSUER.lock().unwrap();
-                                let flow = GrantFlow::new(&mut *registrar, &mut *authorizer, &mut *issuer);
-                                request.handle(flow)
-                            }).wait()
-                            .unwrap_or(HttpResponse::BadRequest().body(Body::Empty)),
-                        _ => HttpResponse::NotFound().body(Body::Empty),
-                    }
+                .route("/authorize", Method::POST, |req: HttpRequest| {
+                    Box::new(req.oauth2()
+                        .authorization_code()
+                        .and_then(|request| endpoint.send(request)
+                            .or_else(|_| Err(OAuthError::AccessDenied))
+                            .and_then(|result| result)
+                        )
+                        .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
+                    ) as Box<Future<Item = HttpResponse, Error = AWError>>
                 })
-                .handler("/", |req: HttpRequest<State>| {
-                    match *req.method() {
-                        Method::GET => req.oauth2().guard()
-                            .and_then(|guard| {
-                                let mut issuer = ISSUER.lock().unwrap();
-                                let scopes = vec!["default".parse().unwrap()];
-                                let flow = AccessFlow::new(&mut *issuer, scopes.as_slice());
-                                guard.handle(flow)
-                            })
-                            .map(|()| {
-                                HttpResponse::Ok()
-                                    .content_type("text/plain")
-                                    .body("Hello world!")
-                            })
-                            .wait()
-                            .unwrap_or_else(
-                                |_| {
-let text = "<html>
-This page should be accessed via an oauth token from the client in the example. Click
-<a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
-here</a> to begin the authorization process.
-</html>
-";
-                                HttpResponse::Unauthorized()
-                                    .content_type("text/html")
-                                    .body(text)
-                            }),
-                        _ => HttpResponse::NotFound().body(Body::Empty),
-                    }
+                .route("/token", Method::POST, |req: HttpRequest| {
+                    Box::new(req.oauth2()
+                        .access_token()
+                        .and_then(|request| endpoint.send(request)
+                            .or_else(|_| Err(OAuthError::AccessDenied))
+                            .and_then(|result| result)
+                        )
+                        .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
+                    ) as Box<Future<Item = HttpResponse, Error = AWError>>
+                })
+                .route("/", Method::GET, |req: HttpRequest| {
+                    Box::new(req.oauth2()
+                        .guard()
+                        .and_then(|request| endpoint.send(request)
+                            .or_else(|_| Err(OAuthError::AccessDenied))
+                            .and_then(|result| result)
+                        ).map(|()|
+                            HttpResponse::Ok()
+                                .content_type("text/plain")
+                                .body("Hello world!")
+                        ).or_else(|_|
+                            Ok(HttpResponse::Unauthorized()
+                                .content_type("text/html")
+                                .body(DENY_TEXT))
+                        )
+                    ) as Box<Future<Item = HttpResponse, Error = AWError>>
                 })
             )
             .bind("localhost:8020")
@@ -122,7 +121,7 @@ here</a> to begin the authorization process.
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.
-    fn handle_get(_: &HttpRequest<State>, grant: &PreGrant) -> OwnerAuthorization<HttpResponse> {
+    fn handle_get(_: &HttpRequest, grant: &PreGrant) -> OwnerAuthorization<HttpResponse> {
         let text = format!(
             "<html>'{}' (at {}) is requesting permission for '{}'
             <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
@@ -140,7 +139,7 @@ here</a> to begin the authorization process.
 
     /// Handle form submission by a user, completing the authorization flow. The resource owner
     /// either accepted or denied the request.
-    fn handle_post(request: &HttpRequest<State>, _: &PreGrant) -> OwnerAuthorization<HttpResponse> {
+    fn handle_post(request: &HttpRequest, _: &PreGrant) -> OwnerAuthorization<HttpResponse> {
         // No real user authentication is done here, in production you SHOULD use session keys or equivalent
         if let Some(_) = request.query().get("deny") {
             OwnerAuthorization::Denied

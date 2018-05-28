@@ -396,7 +396,7 @@ impl<'l> AuthorizationParameter<'l> {
     }
 }
 
-struct AuthorizationPrimitives<'a> {
+pub struct AuthorizationPrimitives<'a> {
     registrar: Cell<&'a Registrar>,
     authorizer: Cell<Option<&'a mut Authorizer>>,
 }
@@ -534,6 +534,15 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
             Err(CodeError::Redirect(url))
                 => return Req::Response::redirect_error(ErrorRedirect(url)),
             Ok(redirect_to) => Req::Response::redirect(redirect_to),
+        }
+    }
+}
+
+impl<'a> AuthorizationPrimitives<'a> {
+    pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
+        Self {
+            registrar: Cell::new(registrar),
+            authorizer: Cell::new(Some(authorizer)),
         }
     }
 }

@@ -10,7 +10,6 @@ use super::actix_web::{HttpMessage, HttpRequest, HttpResponse};
 use super::actix_web::http::StatusCode;
 
 pub(super) struct ResolvedRequest {
-    request: HttpRequest,
     authorization: Result<Option<String>, ()>,
     query: Option<HashMap<String, String>>,
     body: Option<HashMap<String, String>>,
@@ -31,7 +30,6 @@ impl ResolvedRequest {
             .collect();
 
         ResolvedRequest {
-            request: request,
             authorization: authorization,
             query: Some(query),
             body: None,
