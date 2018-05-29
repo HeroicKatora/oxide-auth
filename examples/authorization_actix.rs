@@ -48,7 +48,7 @@ here</a> to begin the authorization process.
         let endpoint: Addr<Syn,_> = CodeGrantEndpoint::new((clients, authorizer, issuer))
             .with_authorization(|&mut (ref client, ref mut authorizer, _)| {
                 let primitives = AuthorizationPrimitives::new(client, authorizer);
-                AuthorizationFlow::new(&primitives)
+                AuthorizationFlow::new(primitives)
             })
             .with_grant(|&mut (ref client, ref mut authorizer, ref mut issuer)| {
                 GrantFlow::new(client, authorizer, issuer)
