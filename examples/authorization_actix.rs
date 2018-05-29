@@ -1,4 +1,4 @@
-mod support;
+ mod support;
 #[macro_use]
 extern crate lazy_static;
 
@@ -57,41 +57,45 @@ here</a> to begin the authorization process.
 
         // Create the main server instance
         server::new(
-            || App::new()
-                .route("/authorize", Method::GET, |req: HttpRequest| {
+            move || App::with_state(endpoint.clone())
+                .route("/authorize", Method::GET, |req: HttpRequest<_>| {
+                    let endpoint = req.state().clone();
                     Box::new(req.oauth2()
                         .authorization_code()
-                        .and_then(|request| endpoint.send(request)
+                        .and_then(move |request| endpoint.send(request)
                             .or_else(|_| Err(OAuthError::AccessDenied))
-                            .and_then(|result| result)
+                            .and_then(|result| result.and_then(ResolvedResponse::into))
                         )
                         .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
                     ) as Box<Future<Item = HttpResponse, Error = AWError>>
                 })
-                .route("/authorize", Method::POST, |req: HttpRequest| {
+                .route("/authorize", Method::POST, |req: HttpRequest<_>| {
+                    let endpoint = req.state().clone();
                     Box::new(req.oauth2()
                         .authorization_code()
-                        .and_then(|request| endpoint.send(request)
+                        .and_then(move |request| endpoint.send(request)
                             .or_else(|_| Err(OAuthError::AccessDenied))
-                            .and_then(|result| result)
+                            .and_then(|result| result.and_then(ResolvedResponse::into))
                         )
                         .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
                     ) as Box<Future<Item = HttpResponse, Error = AWError>>
                 })
-                .route("/token", Method::POST, |req: HttpRequest| {
+                .route("/token", Method::POST, |req: HttpRequest<_>| {
+                    let endpoint = req.state().clone();
                     Box::new(req.oauth2()
                         .access_token()
-                        .and_then(|request| endpoint.send(request)
+                        .and_then(move |request| endpoint.send(request)
                             .or_else(|_| Err(OAuthError::AccessDenied))
-                            .and_then(|result| result)
+                            .and_then(|result| result.and_then(ResolvedResponse::into))
                         )
                         .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
                     ) as Box<Future<Item = HttpResponse, Error = AWError>>
                 })
-                .route("/", Method::GET, |req: HttpRequest| {
+                .route("/", Method::GET, |req: HttpRequest<_>| {
+                    let endpoint = req.state().clone();
                     Box::new(req.oauth2()
                         .guard()
-                        .and_then(|request| endpoint.send(request)
+                        .and_then(move |request| endpoint.send(request)
                             .or_else(|_| Err(OAuthError::AccessDenied))
                             .and_then(|result| result)
                         ).map(|()|
@@ -117,7 +121,7 @@ here</a> to begin the authorization process.
 
         let _ = sys.run();
     }
-
+/*
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.
@@ -146,7 +150,7 @@ here</a> to begin the authorization process.
         } else {
             OwnerAuthorization::Authorized("dummy user".to_string())
         }
-    }
+    }*/
 }
 
 #[cfg(not(feature = "actix-frontend"))]

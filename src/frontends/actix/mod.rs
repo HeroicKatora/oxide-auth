@@ -11,6 +11,7 @@ mod request;
 
 pub use self::endpoint::CodeGrantEndpoint;
 pub use self::request::{AuthorizationCode, AccessToken, Guard};
+pub use self::resolve::ResolvedResponse;
 pub use code_grant::frontend::{AuthorizationFlow, AuthorizationPrimitives, GrantFlow, AccessFlow};
 
 /// Bundles all oauth related methods under a single type.

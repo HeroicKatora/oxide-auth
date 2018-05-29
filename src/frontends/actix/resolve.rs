@@ -15,6 +15,23 @@ pub(super) struct ResolvedRequest {
     body: Option<HashMap<String, String>>,
 }
 
+enum ResponseContent {
+    Redirect(Url),
+    Json(String),
+    Text(String),
+}
+
+enum ResponseKind {
+    Ok(ResponseContent),
+    ClientError(ResponseContent),
+    Unauthorized(ResponseContent),
+    Authorization(ResponseContent, String),
+}
+
+pub struct ResolvedResponse {
+    inner: ResponseKind,
+}
+
 impl ResolvedRequest {
     pub fn headers_only(request: HttpRequest) -> Self {
         let authorization = match request.headers().get("Authorization").map(|header| header.to_str()) {
@@ -45,7 +62,7 @@ impl ResolvedRequest {
 
 impl WebRequest for ResolvedRequest {
     type Error = OAuthError;
-    type Response = HttpResponse;
+    type Response = ResolvedResponse;
 
      fn query(&mut self) -> Result<QueryParameter, ()> {
          self.query.as_ref().map(|query| QueryParameter::SingleValue(
@@ -68,41 +85,104 @@ impl WebRequest for ResolvedRequest {
      }
 }
 
-impl WebResponse for HttpResponse {
+impl WebResponse for ResolvedResponse {
     type Error = OAuthError;
 
     fn redirect(url: Url) -> Result<Self, Self::Error> {
-        Ok(HttpResponse::Found()
-            .header("Location", url.as_str())
-            .finish())
+        Ok(ResponseKind::Ok(ResponseContent::Redirect(url)).wrap())
     }
 
     fn text(text: &str) -> Result<Self, Self::Error> {
-        Ok(HttpResponse::Ok()
-            .content_type("text/plain")
-            .body(text.to_owned()))
+        Ok(ResponseKind::Ok(ResponseContent::Text(text.to_owned())).wrap())
     }
 
     fn json(data: &str) -> Result<Self, Self::Error> {
-        Ok(HttpResponse::Ok()
-            .content_type("application/json")
-            .body(data.to_owned()))
+        Ok(ResponseKind::Ok(ResponseContent::Json(data.to_owned())).wrap())
     }
 
     fn as_client_error(mut self) -> Result<Self, Self::Error> {
-        self.status_mut().clone_from(&StatusCode::BAD_REQUEST);
-        Ok(self)
+        match self.inner {
+            ResponseKind::Ok(response)
+            | ResponseKind::ClientError(response)
+            | ResponseKind::Unauthorized(response)
+            | ResponseKind::Authorization(response, _)
+            => Ok(ResponseKind::ClientError(response).wrap())
+        }
     }
 
     fn as_unauthorized(mut self) -> Result<Self, Self::Error> {
-        self.status_mut().clone_from(&StatusCode::UNAUTHORIZED);
-        Ok(self)
+        match self.inner {
+            ResponseKind::Ok(response)
+            | ResponseKind::ClientError(response)
+            | ResponseKind::Unauthorized(response)
+            | ResponseKind::Authorization(response, _)
+            => Ok(ResponseKind::Unauthorized(response).wrap())
+        }
     }
 
     fn with_authorization(mut self, kind: &str) -> Result<Self, Self::Error> {
-        self.status_mut().clone_from(&StatusCode::UNAUTHORIZED);
-        let header_content = kind.parse().map_err(|_| OAuthError::PrimitiveError)?;
-        self.headers_mut().insert("WWW-Authenticate", header_content);
-        Ok(self)
+        match self.inner {
+            ResponseKind::Ok(response)
+            | ResponseKind::ClientError(response)
+            | ResponseKind::Unauthorized(response)
+            | ResponseKind::Authorization(response, _)
+            => Ok(ResponseKind::Authorization(response, kind.to_owned()).wrap())
+        }
+    }
+}
+
+impl ResponseContent {
+    fn into(self) -> HttpResponse {
+        match self {
+            ResponseContent::Redirect(url) =>
+                HttpResponse::Found()
+                    .header("Location", url.as_str())
+                    .finish(),
+            ResponseContent::Text(text) =>
+                HttpResponse::Ok()
+                    .content_type("text/plain")
+                    .body(text),
+            ResponseContent::Json(json) =>
+                HttpResponse::Ok()
+                    .content_type("application/json")
+                    .body(json),
+        }
+    }
+}
+
+impl ResponseKind {
+    fn into(self) -> Result<HttpResponse, OAuthError> {
+        Ok(match self {
+            ResponseKind::Ok(response) => response.into(),
+            ResponseKind::ClientError(response) => {
+                let mut response = response.into();
+                response.status_mut().clone_from(&StatusCode::BAD_REQUEST);
+                response
+            },
+            ResponseKind::Unauthorized(response) => {
+                let mut response = response.into();
+                response.status_mut().clone_from(&StatusCode::UNAUTHORIZED);
+                response
+            },
+            ResponseKind::Authorization(response, kind) => {
+                let mut response = response.into();
+                response.status_mut().clone_from(&StatusCode::UNAUTHORIZED);
+                let header_content = kind.parse().map_err(|_| OAuthError::PrimitiveError)?;
+                response.headers_mut().insert("WWW-Authenticate", header_content);
+                response
+            },
+        })
+    }
+
+    fn wrap(self) -> ResolvedResponse {
+        ResolvedResponse {
+            inner: self,
+        }
+    }
+}
+
+impl ResolvedResponse {
+    pub fn into(self) -> Result<HttpResponse, OAuthError> {
+        self.inner.into()
     }
 }
