@@ -100,7 +100,7 @@ impl WebResponse for ResolvedResponse {
         Ok(ResponseKind::Ok(ResponseContent::Json(data.to_owned())).wrap())
     }
 
-    fn as_client_error(mut self) -> Result<Self, Self::Error> {
+    fn as_client_error(self) -> Result<Self, Self::Error> {
         match self.inner {
             ResponseKind::Ok(response)
             | ResponseKind::ClientError(response)
@@ -110,7 +110,7 @@ impl WebResponse for ResolvedResponse {
         }
     }
 
-    fn as_unauthorized(mut self) -> Result<Self, Self::Error> {
+    fn as_unauthorized(self) -> Result<Self, Self::Error> {
         match self.inner {
             ResponseKind::Ok(response)
             | ResponseKind::ClientError(response)
@@ -120,7 +120,7 @@ impl WebResponse for ResolvedResponse {
         }
     }
 
-    fn with_authorization(mut self, kind: &str) -> Result<Self, Self::Error> {
+    fn with_authorization(self, kind: &str) -> Result<Self, Self::Error> {
         match self.inner {
             ResponseKind::Ok(response)
             | ResponseKind::ClientError(response)

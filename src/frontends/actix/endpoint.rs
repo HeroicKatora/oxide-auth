@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow};
 
 use super::actix::{Actor, Context, Handler, MessageResult};

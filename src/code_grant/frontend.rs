@@ -396,7 +396,7 @@ impl<'l> AuthorizationParameter<'l> {
     }
 }
 
-pub struct AuthorizationPrimitives<'a> {
+struct AuthorizationPrimitives<'a> {
     registrar: Cell<&'a Registrar>,
     authorizer: Cell<Option<&'a mut Authorizer>>,
 }
@@ -434,9 +434,9 @@ pub enum AuthorizationResult<'a, Request: WebRequest> {
 
 impl<'a> AuthorizationFlow<'a> {
     /// Initiate an authorization code token flow.
-    pub fn new(endpoint: AuthorizationPrimitives<'a>) -> Self {
+    pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
         AuthorizationFlow {
-            primitives: endpoint,
+            primitives: AuthorizationPrimitives::new(registrar, authorizer),
             extensions: Vec::new(),
         }
     }
@@ -539,7 +539,7 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
 }
 
 impl<'a> AuthorizationPrimitives<'a> {
-    pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
+    fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
         Self {
             registrar: Cell::new(registrar),
             authorizer: Cell::new(Some(authorizer)),
