@@ -1,9 +1,13 @@
 use code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow};
+use code_grant::frontend::{OwnerAuthorizer, OwnerAuthorization, PreGrant};
 
 use super::actix::{Actor, Context, Handler, MessageResult};
-use super::message::{AccessToken, AuthorizationCode, Guard};
+use super::message::{AccessToken, AuthorizationCode, BoxedOwner, Guard};
+use super::resolve::{ResolvedRequest, ResolvedResponse};
 
 pub struct NoHandler;
+
+struct OwnerBoxHandler(BoxedOwner);
 
 pub struct CodeGrantEndpoint<State, Auth=NoHandler, Grant=NoHandler, Access=NoHandler> {
     state: State,
@@ -73,9 +77,9 @@ where
 
     fn handle(&mut self, msg: AuthorizationCode, _: &mut Self::Context) -> Self::Result {
         let flow = (self.authorization)(&mut self.state);
-        let result = flow.handle(msg.0);
-        // TODO attach context to the message to handle this
-        MessageResult(unimplemented!())
+        let pending = flow.handle(msg.request);
+        let result = pending.complete(OwnerBoxHandler(msg.owner));
+        MessageResult(result)
     }
 }
 
@@ -102,5 +106,13 @@ where
     fn handle(&mut self, msg: Guard, _: &mut Self::Context) -> Self::Result {
         let flow = (self.access)(&mut self.state);
         MessageResult(flow.handle(msg.0))
+    }
+}
+
+impl OwnerAuthorizer<ResolvedRequest> for OwnerBoxHandler {
+    fn check_authorization(self, request: ResolvedRequest, pre_grant: &PreGrant)
+        -> OwnerAuthorization<ResolvedResponse>
+    {
+        (self.0)(pre_grant)
     }
 }

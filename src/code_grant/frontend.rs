@@ -85,7 +85,7 @@ use std::str::from_utf8;
 use primitives::authorizer::Authorizer;
 use primitives::issuer::{Issuer, IssuedToken};
 use primitives::grant::Grant;
-use primitives::registrar::{ClientUrl, BoundClient, Registrar, RegistrarError, RegisteredClient, PreGrant};
+use primitives::registrar::{ClientUrl, BoundClient, Registrar, RegistrarError, RegisteredClient};
 use primitives::scope::Scope;
 
 use super::backend::*;
@@ -93,6 +93,8 @@ use super::extensions::{AccessTokenExtension, CodeExtension};
 
 use url::Url;
 use base64;
+
+pub use primitives::registrar::PreGrant;
 
 /// Holds the decode query fragments from the url. This does not hold the excess parameters with a
 /// Cow, as we need to have a mutable reference to it for the authorization handler.

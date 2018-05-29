@@ -1,9 +1,13 @@
 use super::actix::prelude::Message;
 
 use super::resolve::{ResolvedRequest, ResolvedResponse};
-use code_grant::frontend::OAuthError;
+use code_grant::frontend::{OAuthError, OwnerAuthorization, PreGrant};
 
-pub struct AuthorizationCode(pub(super) ResolvedRequest);
+pub type BoxedOwner = Box<(Fn(&PreGrant) -> OwnerAuthorization<ResolvedResponse>) + Send + Sync>;
+pub struct AuthorizationCode {
+    pub(super) request: ResolvedRequest,
+    pub(super) owner: BoxedOwner,
+}
 pub struct AccessToken(pub(super) ResolvedRequest);
 pub struct Guard(pub(super) ResolvedRequest);
 

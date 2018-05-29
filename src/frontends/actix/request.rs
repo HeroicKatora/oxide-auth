@@ -52,9 +52,10 @@ impl Future for AuthorizationCode {
     type Error = OAuthError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        Ok(Async::Ready(message::AuthorizationCode(
-            ResolvedRequest::headers_only(self.request.clone())
-        )))
+        Ok(Async::Ready(message::AuthorizationCode {
+            request: ResolvedRequest::headers_only(self.request.clone()),
+            owner: unimplemented!(),
+        }))
     }
 }
 
