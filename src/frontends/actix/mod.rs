@@ -12,7 +12,7 @@ mod request;
 pub use self::endpoint::CodeGrantEndpoint;
 pub use self::request::{AuthorizationCode, AccessToken, Guard};
 pub use self::resolve::ResolvedResponse;
-pub use code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow};
+pub use code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow, PreGrant, OwnerAuthorization};
 
 /// Bundles all oauth related methods under a single type.
 pub trait OAuth {
@@ -28,9 +28,13 @@ impl<State> OAuth for HttpRequest<State> {
 }
 
 impl OAuthRequest {
-    pub fn authorization_code(self) -> AuthorizationCode {
+    pub fn authorization_code<F>(self, f: F) -> AuthorizationCode
+    where
+        F: Fn(&PreGrant) -> OwnerAuthorization<ResolvedResponse>,
+        F: Sync + Send + 'static
+     {
         let OAuthRequest(request) = self;
-        AuthorizationCode::new(request)
+        AuthorizationCode::new(request, Box::new(f))
     }
 
     pub fn access_token(self) -> AccessToken {

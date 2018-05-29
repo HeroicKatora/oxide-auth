@@ -63,7 +63,7 @@ here</a> to begin the authorization process.
                 .route("/authorize", Method::GET, |req: HttpRequest<_>| {
                     let endpoint = req.state().clone();
                     Box::new(req.oauth2()
-                        .authorization_code()
+                        .authorization_code(handle_get)
                         .and_then(move |request| endpoint.send(request)
                             .or_else(|_| Err(OAuthError::AccessDenied))
                             .and_then(|result| result.and_then(ResolvedResponse::into))
@@ -73,8 +73,9 @@ here</a> to begin the authorization process.
                 })
                 .route("/authorize", Method::POST, |req: HttpRequest<_>| {
                     let endpoint = req.state().clone();
+                    let denied = req.query_string().contains("deny");
                     Box::new(req.oauth2()
-                        .authorization_code()
+                        .authorization_code(move |grant| handle_post(denied, grant))
                         .and_then(move |request| endpoint.send(request)
                             .or_else(|_| Err(OAuthError::AccessDenied))
                             .and_then(|result| result.and_then(ResolvedResponse::into))
@@ -123,11 +124,11 @@ here</a> to begin the authorization process.
 
         let _ = sys.run();
     }
-/*
+
     /// A simple implementation of the first part of an authentication handler. This will
     /// display a page to the user asking for his permission to proceed. The submitted form
     /// will then trigger the other authorization handler which actually completes the flow.
-    fn handle_get(_: &HttpRequest, grant: &PreGrant) -> OwnerAuthorization<HttpResponse> {
+    fn handle_get(grant: &PreGrant) -> OwnerAuthorization<ResolvedResponse> {
         let text = format!(
             "<html>'{}' (at {}) is requesting permission for '{}'
             <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
@@ -137,22 +138,20 @@ here</a> to begin the authorization process.
                 <input type=\"submit\" value=\"Deny\">
             </form>
             </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
-        let response = HttpResponse::Ok()
-            .content_type("text/html")
-            .body(text);
+        let response = ResolvedResponse::html(&text);
         OwnerAuthorization::InProgress(response)
     }
 
     /// Handle form submission by a user, completing the authorization flow. The resource owner
     /// either accepted or denied the request.
-    fn handle_post(request: &HttpRequest, _: &PreGrant) -> OwnerAuthorization<HttpResponse> {
+    fn handle_post(denied: bool, _: &PreGrant) -> OwnerAuthorization<ResolvedResponse> {
         // No real user authentication is done here, in production you SHOULD use session keys or equivalent
-        if let Some(_) = request.query().get("deny") {
+        if denied {
             OwnerAuthorization::Denied
         } else {
             OwnerAuthorization::Authorized("dummy user".to_string())
         }
-    }*/
+    }
 }
 
 #[cfg(not(feature = "actix-frontend"))]

@@ -19,6 +19,7 @@ enum ResponseContent {
     Redirect(Url),
     Json(String),
     Text(String),
+    Html(String),
 }
 
 enum ResponseKind {
@@ -146,6 +147,10 @@ impl ResponseContent {
                 HttpResponse::Ok()
                     .content_type("application/json")
                     .body(json),
+            ResponseContent::Html(html) =>
+                HttpResponse::Ok()
+                    .content_type("text/html")
+                    .body(html),
         }
     }
 }
@@ -182,6 +187,12 @@ impl ResponseKind {
 }
 
 impl ResolvedResponse {
+    pub fn html(content: &str) -> ResolvedResponse {
+        ResolvedResponse {
+            inner: ResponseKind::Ok(ResponseContent::Html(content.to_owned())),
+        }
+    }
+
     pub fn into(self) -> Result<HttpResponse, OAuthError> {
         self.inner.into()
     }

@@ -11,6 +11,7 @@ use super::message;
 
 pub struct AuthorizationCode {
     request: HttpRequest,
+    owner: Option<message::BoxedOwner>,
 }
 
 pub struct AccessToken {
@@ -23,9 +24,10 @@ pub struct Guard {
 }
 
 impl AuthorizationCode {
-    pub(super) fn new(request: HttpRequest) -> Self {
+    pub(super) fn new(request: HttpRequest, owner: message::BoxedOwner) -> Self {
         AuthorizationCode {
             request,
+            owner: Some(owner),
         }
     }
 }
@@ -54,7 +56,7 @@ impl Future for AuthorizationCode {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         Ok(Async::Ready(message::AuthorizationCode {
             request: ResolvedRequest::headers_only(self.request.clone()),
-            owner: unimplemented!(),
+            owner: self.owner.take().unwrap(),
         }))
     }
 }
