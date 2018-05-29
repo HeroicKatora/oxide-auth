@@ -40,6 +40,10 @@ here</a> to begin the authorization process.
 
         let authorizer = Storage::new(RandomGenerator::new(16));
         let issuer = TokenSigner::new_from_passphrase(&PASSPHRASE, None);
+        let scopes = vec!["default".parse().unwrap()].into_boxed_slice();
+
+        // Emulate static initialization for complex type
+        let scopes: &'static _ = Box::leak(scopes);
 
         let endpoint: Addr<Syn,_> = CodeGrantEndpoint::new((clients, authorizer, issuer))
             .with_authorization(|&mut (ref client, ref mut authorizer, _)| {
@@ -49,9 +53,8 @@ here</a> to begin the authorization process.
             .with_grant(|&mut (ref client, ref mut authorizer, ref mut issuer)| {
                 GrantFlow::new(client, authorizer, issuer)
             })
-            .with_guard(|&mut (_, _, ref mut issuer)| {
-                let scopes = vec!["default".parse().unwrap()];
-                AccessFlow::new(issuer, &scopes)
+            .with_guard(move |&mut (_, _, ref mut issuer)| {
+                AccessFlow::new(issuer, scopes)
             })
             .start();
 
