@@ -1,3 +1,4 @@
+//! Provides a configurable actor with the functionality of a code grant frontend.
 use code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow};
 use code_grant::frontend::{OwnerAuthorizer, OwnerAuthorization, PreGrant};
 
@@ -5,10 +6,38 @@ use super::actix::{Actor, Context, Handler, MessageResult};
 use super::message::{AccessToken, AuthorizationCode, BoxedOwner, Guard};
 use super::resolve::{ResolvedRequest, ResolvedResponse};
 
+/// A tag type to signal that no handler for this request type has been configured on the endpoint.
 pub struct NoHandler;
 
 struct OwnerBoxHandler(BoxedOwner);
 
+/// An actor handling OAuth2 code grant requests.
+///
+/// Centrally manages all incoming requests, authorization codes, tokens as well as guarding of
+/// resources.  The specific endpoints need to be derived from the state.
+///
+/// The object doubles as a builder allowing customization of each flow individually before the
+/// actor is started. Typical code looks something like this:
+///
+/// ```no_run
+/// # extern crate actix;
+/// # extern crate oxide_auth;
+/// # use actix::{Actor, Addr, Syn};
+/// # use oxide_auth::frontends::actix::*;
+/// # use oxide_auth::primitives::prelude::*;
+/// # fn main() {
+/// # let (registrar, authorizer, issuer, scope)
+/// #     : (ClientMap, Storage<RandomGenerator>, TokenSigner, &'static[Scope])
+/// #     = unimplemented!();
+/// let handle: Addr<Syn,_> = CodeGrantEndpoint::new(
+///         (registrar, authorizer, issuer, scope)
+///     )
+///     .with_authorization(|state| AuthorizationFlow::new(&state.0, &mut state.1))
+///     .with_grant(|state| GrantFlow::new(&state.0, &mut state.1, &mut state.2))
+///     .with_guard(|state| AccessFlow::new(&mut state.2, state.3))
+///     .start();
+/// # }
+/// ```
 pub struct CodeGrantEndpoint<State, Auth=NoHandler, Grant=NoHandler, Access=NoHandler> {
     state: State,
     authorization: Auth,
@@ -17,6 +46,10 @@ pub struct CodeGrantEndpoint<State, Auth=NoHandler, Grant=NoHandler, Access=NoHa
 }
 
 impl<State> CodeGrantEndpoint<State, NoHandler, NoHandler, NoHandler> {
+    /// Create a new endpoint with some state.
+    ///
+    /// Call `with_authorization`, `with_grant` and `with_guard` before starting the actor to
+    /// configure the actor for handling of the respective requests.
     pub fn new(state: State) -> Self {
         CodeGrantEndpoint {
             state,
@@ -28,6 +61,10 @@ impl<State> CodeGrantEndpoint<State, NoHandler, NoHandler, NoHandler> {
 }
 
 impl<S, A, B, C> CodeGrantEndpoint<S, A, B, C> {
+    /// Configure the authorization handler for the endpoint.
+    ///
+    /// The provided method or closure must construct an authorization flow based on the
+    /// actor's state.  The constructed flow will be used to handle incoming messages.
     pub fn with_authorization<F>(self, f: F) -> CodeGrantEndpoint<S, F, B, C>
         where F: for<'a> Fn(&'a mut S) -> AuthorizationFlow<'a>
     {
@@ -39,6 +76,10 @@ impl<S, A, B, C> CodeGrantEndpoint<S, A, B, C> {
         }
     }
 
+    /// Configure the code grant request handler for the endpoint.
+    ///
+    /// The provided method or closure must construct a code grant flow based on the
+    /// actor's state.  The constructed flow will be used to handle incoming messages.
     pub fn with_grant<F>(self, f: F) -> CodeGrantEndpoint<S, A, F, C>
         where F: for<'a> Fn(&'a mut S) -> GrantFlow<'a>
     {
@@ -50,6 +91,10 @@ impl<S, A, B, C> CodeGrantEndpoint<S, A, B, C> {
         }
     }
 
+    /// Configure the guard request handler for the endpoint.
+    ///
+    /// The provided method or closure must construct a guard flow based on the
+    /// actor's state.  The constructed flow will be used to handle incoming messages.
     pub fn with_guard<F>(self, f: F) -> CodeGrantEndpoint<S, A, B, F>
         where F: for<'a> Fn(&'a mut S) -> AccessFlow<'a>
     {
@@ -110,7 +155,7 @@ where
 }
 
 impl OwnerAuthorizer<ResolvedRequest> for OwnerBoxHandler {
-    fn check_authorization(self, request: ResolvedRequest, pre_grant: &PreGrant)
+    fn check_authorization(self, _: ResolvedRequest, pre_grant: &PreGrant)
         -> OwnerAuthorization<ResolvedResponse>
     {
         (self.0)(pre_grant)
