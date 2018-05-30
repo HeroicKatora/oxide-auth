@@ -29,6 +29,9 @@ enum ResponseKind {
     Authorization(ResponseContent, String),
 }
 
+/// An http response replacement that can be sent as an actix message.
+///
+/// This is the generic answer to oauth authorization code and bearer token requests.
 pub struct ResolvedResponse {
     inner: ResponseKind,
 }
@@ -187,12 +190,14 @@ impl ResponseKind {
 }
 
 impl ResolvedResponse {
+    /// An html response.
     pub fn html(content: &str) -> ResolvedResponse {
         ResolvedResponse {
             inner: ResponseKind::Ok(ResponseContent::Html(content.to_owned())),
         }
     }
 
+    /// Conver the response into an http response.
     pub fn into(self) -> Result<HttpResponse, OAuthError> {
         self.inner.into()
     }

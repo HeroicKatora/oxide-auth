@@ -1,3 +1,8 @@
+//! OAuth requests encapsulated as futures.
+//!
+//! Some requests are dependent on data inside the request body, which is loaded asynchronously
+//! by actix.  In order to provide a uniform interface, all requests are encapsulated into a
+//! future yielding the specific message to be sent to the endpoint.
 use std::collections::HashMap;
 
 use code_grant::frontend::OAuthError;
@@ -9,16 +14,19 @@ use super::futures::{Async, Future, Poll};
 use super::resolve::ResolvedRequest;
 use super::message;
 
+/// The item requests an authorization code, provided by the endpoint with the owners approval.
 pub struct AuthorizationCode {
     request: HttpRequest,
     owner: Option<message::BoxedOwner>,
 }
 
+/// Yields a message that requests a bearer token from the endpoint.
 pub struct AccessToken {
     request: HttpRequest,
     body: UrlEncoded<HttpRequest, HashMap<String, String>>,
 }
 
+/// Produces a message that checks the access rights of the http requests bearer token.
 pub struct Guard {
     request: HttpRequest,
 }
