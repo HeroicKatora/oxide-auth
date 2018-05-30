@@ -7,8 +7,9 @@ use super::scope::Scope;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
-use ring::{constant_time, digest};
+use ring::{constant_time, digest, pbkdf2};
 use ring::error::Unspecified;
+use rand;
 
 /// Registrars provie a way to interact with clients.
 ///
@@ -143,6 +144,7 @@ pub enum ClientType {
 /// A very simple, in-memory hash map of client ids to Client entries.
 pub struct ClientMap {
     clients: HashMap<String, EncodedClient>,
+    password_policy: Option<Box<PasswordPolicy>>,
 }
 
 impl<'a> BoundClient<'a> {
@@ -231,7 +233,7 @@ impl<'a> RegisteredClient<'a> {
 }
 
 /// Determines how passphrases are stored and checked. Most likely you want to use Argon2
-pub trait PasswordPolicy {
+pub trait PasswordPolicy: Send + Sync {
     /// Transform the passphrase so it can be stored in the confidential client.
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8>;
 
@@ -243,7 +245,9 @@ pub trait PasswordPolicy {
 /// be replaced with argon2 in a future commit which also enables better configurability, such as
 /// supplying a secret key to argon2. This will probably be combined with a slight rework of the
 /// exact semantics of `Client` and `Client::check_authentication`.
-#[deprecated(since="0.1.0-alpha.1", note="Should be replaced with argon2 as soon as possible")]
+#[deprecated(since="0.1.0-alpha.1",
+             note="Should be replaced with argon2 as soon as possible. Will be remove in 0.4")]
+#[allow(dead_code)]
 struct SHA256Policy;
 
 #[allow(deprecated)]
@@ -265,6 +269,57 @@ impl PasswordPolicy for SHA256Policy {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Pbkdf2 {
+    iterations: u32,
+}
+
+impl Default for Pbkdf2 {
+    fn default() -> Self {
+        Self::static_default().clone()
+    }
+}
+
+impl Pbkdf2 {
+    fn static_default() -> &'static Self {
+        &Pbkdf2 {
+            iterations: 100_000,
+        }
+    }
+
+    fn salt(&self, user_identifier: &[u8]) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(user_identifier.len() + 64);
+        let rnd_salt: [u8; 16] = rand::random();
+        vec.extend_from_slice(user_identifier);
+        vec.extend_from_slice(&rnd_salt[..]);
+        vec
+    }
+}
+
+impl PasswordPolicy for Pbkdf2 {
+    fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
+        let mut output = Vec::with_capacity(64);
+        output.resize(64, 0);
+        output.append(&mut self.salt(client_id.as_bytes()));
+        {
+            let (output, salt) = output.split_at_mut(64);
+            pbkdf2::derive(&digest::SHA256, self.iterations, salt, passphrase,
+                output);
+        }
+        output
+    }
+
+    fn check(&self, _client_id: &str /* Was interned */, passphrase: &[u8], stored: &[u8])
+    -> Result<(), Unspecified> {
+        if stored.len() < 64 {
+            return Err(Unspecified)
+        }
+
+        let (verifier, salt) = stored.split_at(64);
+        pbkdf2::verify(&digest::SHA256, self.iterations, salt, passphrase, verifier)
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                             Standard Implementations of Registrars                            //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -272,12 +327,28 @@ impl PasswordPolicy for SHA256Policy {
 impl ClientMap {
     /// Create an empty map without any clients in it.
     pub fn new() -> ClientMap {
-        ClientMap { clients: HashMap::new() }
+        ClientMap {
+            clients: HashMap::new(),
+            password_policy: None,
+        }
     }
 
     /// Insert or update the client record.
     pub fn register_client(&mut self, client: Client) {
-        self.clients.insert(client.client_id.clone(), client.encode(&SHA256Policy));
+        let password_policy = Self::current_policy(&self.password_policy);
+        self.clients.insert(client.client_id.clone(), client.encode(password_policy));
+    }
+
+    /// Change how passwords are encoded while stored.
+    pub fn set_password_policy<P: PasswordPolicy + 'static>(&mut self, new_policy: P) {
+        self.password_policy = Some(Box::new(new_policy))
+    }
+
+    // This is not an instance method because it needs to borrow the box but register needs &mut
+    fn current_policy<'a>(policy: &'a Option<Box<PasswordPolicy>>) -> &'a PasswordPolicy {
+        policy
+            .as_ref().map(|boxed| &**boxed)
+            .unwrap_or(Pbkdf2::static_default())
     }
 }
 
@@ -304,8 +375,10 @@ impl Registrar for ClientMap {
     }
 
     fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        let password_policy = Self::current_policy(&self.password_policy);
+
         self.clients.get(client_id).map(|client| {
-            RegisteredClient::new(client, &SHA256Policy)
+            RegisteredClient::new(client, password_policy)
         })
     }
 }
@@ -362,6 +435,8 @@ mod tests {
                 .expect("Registered client not available");
             recovered_client.check_authentication(None)
                 .expect("Authorization of public client has changed");
+            recovered_client.check_authentication(Some(b""))
+                .err().expect("Authorization with password succeeded");
         }
 
         let private_client = Client::confidential(private_id, client_url.parse().unwrap(),
@@ -373,7 +448,9 @@ mod tests {
             let recovered_client = registrar.client(private_id)
                 .expect("Registered client not available");
             recovered_client.check_authentication(Some(private_passphrase))
-                .expect("Authorization of private client has changed");
+                .expect("Authorization with right password did not succeed");
+            recovered_client.check_authentication(Some(b"Not the private passphrase"))
+                .err().expect("Authorization succeed with wrong password");
         }
     }
 
