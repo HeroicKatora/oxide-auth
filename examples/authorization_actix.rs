@@ -1,6 +1,4 @@
  mod support;
-#[macro_use]
-extern crate lazy_static;
 
 #[cfg(feature = "actix-frontend")]
 mod main {
@@ -11,7 +9,7 @@ mod main {
     extern crate url;
 
     use super::support::actix::dummy_client;
-    use self::actix::{Actor, Addr, Unsync, Syn};
+    use self::actix::{Actor, Addr, Syn};
     use self::actix_web::{server, App, Body, HttpRequest, HttpResponse, Error as AWError};
     use self::actix_web::http::Method;
     use self::futures::Future;
