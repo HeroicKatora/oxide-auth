@@ -7,9 +7,9 @@ extern crate router;
 extern crate url;
 extern crate urlencoded;
 
-use self::iron::prelude::*;
-use self::oxide_auth::frontends::iron::prelude::*;
-use self::urlencoded::UrlEncodedQuery;
+use iron::prelude::*;
+use oxide_auth::frontends::iron::prelude::*;
+use urlencoded::UrlEncodedQuery;
 use support::iron::dummy_client;
 use support::open_in_browser;
 use std::collections::HashMap;
@@ -100,7 +100,7 @@ impl iron::middleware::AfterMiddleware for HelpfulAuthorizationError {
         if !err.error.is::<OAuthError>() {
             return Err(err);
         }
-        use main::iron::modifier::Modifier;
+        use iron::modifier::Modifier;
         let mut response = err.response;
         let text =
             "<html>
