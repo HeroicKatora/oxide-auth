@@ -85,7 +85,7 @@ use std::str::from_utf8;
 use primitives::authorizer::Authorizer;
 use primitives::issuer::{Issuer, IssuedToken};
 use primitives::grant::Grant;
-use primitives::registrar::{ClientUrl, BoundClient, Registrar, RegistrarError, RegisteredClient, PreGrant};
+use primitives::registrar::{ClientUrl, BoundClient, Registrar, RegistrarError, RegisteredClient};
 use primitives::scope::Scope;
 
 use super::backend::*;
@@ -93,6 +93,8 @@ use super::extensions::{AccessTokenExtension, CodeExtension};
 
 use url::Url;
 use base64;
+
+pub use primitives::registrar::PreGrant;
 
 /// Holds the decode query fragments from the url. This does not hold the excess parameters with a
 /// Cow, as we need to have a mutable reference to it for the authorization handler.
@@ -436,10 +438,7 @@ impl<'a> AuthorizationFlow<'a> {
     /// Initiate an authorization code token flow.
     pub fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
         AuthorizationFlow {
-            primitives: AuthorizationPrimitives {
-                registrar: Cell::new(registrar),
-                authorizer: Cell::new(Some(authorizer)),
-            },
+            primitives: AuthorizationPrimitives::new(registrar, authorizer),
             extensions: Vec::new(),
         }
     }
@@ -459,7 +458,7 @@ impl<'a> AuthorizationFlow<'a> {
             let urldecoded = AuthorizationParameter::from(&mut request);
             match authorization_code(&self.primitives, &urldecoded, self.extensions.as_slice()) {
                 Err(CodeError::Ignore)
-                    => return AuthorizationResult::Error(OAuthError::InternalCodeError().into()),
+                    => return AuthorizationResult::Error(OAuthError::DenySilently.into()),
                 Err(CodeError::Redirect(url))
                     => return AuthorizationResult::from_fail(
                         Req::Response::redirect_error(ErrorRedirect(url))),
@@ -511,7 +510,7 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
         let authorization = self.request.deny();
         match authorization {
             Err(CodeError::Ignore)
-                => return Err(OAuthError::InternalCodeError().into()),
+                => return Err(OAuthError::DenySilently.into()),
             Err(CodeError::Redirect(url))
                 => return Req::Response::redirect_error(ErrorRedirect(url)),
             Ok(redirect_to) => Req::Response::redirect(redirect_to),
@@ -533,10 +532,19 @@ impl<'a, Req: WebRequest> PendingAuthorization<'a, Req> {
         let authorization = self.request.authorize(&self.primitives, owner.into());
         match authorization {
             Err(CodeError::Ignore)
-                => return Err(OAuthError::InternalCodeError().into()),
+                => return Err(OAuthError::DenySilently.into()),
             Err(CodeError::Redirect(url))
                 => return Req::Response::redirect_error(ErrorRedirect(url)),
             Ok(redirect_to) => Req::Response::redirect(redirect_to),
+        }
+    }
+}
+
+impl<'a> AuthorizationPrimitives<'a> {
+    fn new(registrar: &'a Registrar, authorizer: &'a mut Authorizer) -> Self {
+        Self {
+            registrar: Cell::new(registrar),
+            authorizer: Cell::new(Some(authorizer)),
         }
     }
 }
@@ -702,6 +710,8 @@ impl<'a> GrantFlow<'a> {
                 => return Req::Response::json(&json_data.to_json())?.as_client_error(),
             Err(IssuerError::Unauthorized(json_data, scheme))
                 => return Req::Response::json(&json_data.to_json())?.as_unauthorized()?.with_authorization(&scheme),
+            Err(IssuerError::Internal)
+                => Err(OAuthError::PrimitiveError.into()),
             Ok(token) => Req::Response::json(&token.to_json()),
         }
     }
@@ -783,16 +793,16 @@ impl<'a> AccessFlow<'a> {
     }
 
     /// Indicate if the access is allowed or denied via a result.
-    pub fn handle<R: 'a>(&self, mut request: R)
+    pub fn handle<R>(&self, mut request: R)
     -> Result<(), R::Error> where R: WebRequest {
         let params = AccessFlow::create_valid_params(&mut request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
         protect(self, &params).map_err(|err| {
             match err {
-                AccessError::InvalidRequest => OAuthError::InternalAccessError(),
-                AccessError::AccessDenied => OAuthError::AccessDenied,
-            }.into()
+                AccessError::InvalidRequest => OAuthError::AccessDenied.into(),
+                AccessError::AccessDenied => OAuthError::AccessDenied.into(),
+            }
         })
     }
 }
@@ -816,17 +826,17 @@ impl<'a> GuardEndpoint for AccessFlow<'a> {
 /// body, unexpected parameters, or security relevant required parameters.
 #[derive(Debug)]
 pub enum OAuthError {
-    /// Some unexpected, internal error occured-
-    InternalCodeError(),
-
-    /// Access should be silently denied, without providing further explanation.
+    /// Deny authorization to the client by essentially dropping the request.
     ///
     /// For example, this response is given when an incorrect client has been provided in the
     /// authorization request in order to avoid potential indirect denial of service vulnerabilities.
-    InternalAccessError(),
+    DenySilently,
 
-    /// No authorization has been granted.
+    /// Authorization to access the resource has not been granted.
     AccessDenied,
+
+    /// One of the primitives used to complete the operation failed.
+    PrimitiveError,
 }
 
 impl fmt::Display for OAuthError {

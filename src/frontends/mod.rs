@@ -181,6 +181,8 @@
 //! may want to provide additional wrappers.
 //!
 
+#[cfg(feature = "actix-frontend")]
+pub mod actix;
 #[cfg(feature = "iron-frontend")]
 pub mod iron;
 #[cfg(feature = "rouille-frontend")]
