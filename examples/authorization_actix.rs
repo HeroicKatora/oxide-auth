@@ -131,11 +131,9 @@ pub fn main() {
 fn handle_get(grant: &PreGrant) -> OwnerAuthorization<ResolvedResponse> {
     let text = format!(
         "<html>'{}' (at {}) is requesting permission for '{}'
-        <form action=\"authorize?response_type=code&client_id={}\" method=\"post\">
-            <input type=\"submit\" value=\"Accept\">
-        </form>
-        <form action=\"authorize?response_type=code&client_id={}&deny=1\" method=\"post\">
-            <input type=\"submit\" value=\"Deny\">
+        <form method=\"post\">
+            <input type=\"submit\" value=\"Accept\" formaction=\"authorize?response_type=code&client_id={}\">
+            <input type=\"submit\" value=\"Deny\" formaction=\"authorize?response_type=code&client_id={}&deny=1\">
         </form>
         </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
     let response = ResolvedResponse::html(&text);
