@@ -8,6 +8,9 @@ About
 
 Example
 -------------
+
+> cargo run --example authorization_actix
+
 In the [example folder] you can find an [interactive example]. This configures a server, registers a public client and initializes a resource requiring an authorization token. A client is also activated which can be used to access the resource. The example assumes the user to be the validated resource owner, who can deny or allow the request by the client.
 
 Additional
