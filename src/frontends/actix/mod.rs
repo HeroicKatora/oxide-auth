@@ -5,12 +5,13 @@ extern crate futures;
 use self::actix_web::HttpRequest;
 
 mod endpoint;
-mod message;
+pub mod message;
 mod resolve;
-mod request;
+pub mod request;
+
+use self::request::{AuthorizationCode, AccessToken, Guard};
 
 pub use self::endpoint::CodeGrantEndpoint;
-pub use self::request::{AuthorizationCode, AccessToken, Guard};
 pub use self::resolve::ResolvedResponse;
 pub use code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow, PreGrant, OwnerAuthorization};
 
