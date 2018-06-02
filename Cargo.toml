@@ -4,7 +4,7 @@ version = "0.4.0-preview.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
-description = "A OAuth2 server library, for use in combination with iron or other frontends, featuring a set of configurable and pluggable backends."
+description = "A OAuth2 server library, for actix, gotham or other libraries, featuring a set of configurable and pluggable backends."
 readme = "Readme.md"
 
 keywords = ["oauth", "server", "oauth2"]

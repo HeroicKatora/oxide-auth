@@ -5,7 +5,7 @@ A OAuth2 server library, for use in combination with [actix] or other frontends,
 About
 --------------
 `oxide-auth` aims at providing a comprehensive and extensible interface to managing oauth2
-tokens on a server. While the core package is agnostic of the used frontend, an optional actix
+tokens on a server. While the core package is agnostic of the used frontend, an optional actix and a gotham
 adaptor is provided with the default configuration. Through an interface designed with traits,
 the frontend is as easily pluggable as the backend.
 
