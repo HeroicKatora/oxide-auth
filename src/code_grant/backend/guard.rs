@@ -1,20 +1,63 @@
 use std::borrow::Cow;
+use std::fmt;
 
 use chrono::Utc;
 
 use primitives::grant::Grant;
 use primitives::scope::Scope;
 
+
+/// Gives additional information about the reason for an access failure.
+///
+/// According to [rfc6750], this should not be returned if the client has not provided any
+/// authentication information.
+///
+/// [rfc6750]: https://tools.ietf.org/html/rfc6750#section-3.1
+pub struct AccessError {
+    pub code: Option<ErrorCode>,
+}
+
 /// Indicates the reason for access failure.
-pub enum AccessError {
+#[derive(Clone, Copy)]
+pub enum ErrorCode {
     /// The request did not have enough authorization data or was otherwise malformed.
     InvalidRequest,
 
     /// The provided authorization did not grant sufficient priviledges.
-    AccessDenied,
+    InsufficientScope,
+
+    /// The token is expired, revoked, malformed or otherwise does not meet expectations.
+    InvalidToken,
 }
 
-type AccessResult<T> = Result<T, AccessError>;
+/// Additional information provided for the WWW-Authenticate header.
+pub struct Authenticate {
+    /// Information about which realm the credentials correspond to.
+    pub realm: Option<String>,
+
+    /// The required scope to access the resource.
+    pub scope: Option<Scope>,
+}
+
+pub enum GuardError {
+    /// The client tried to access a resource but was not able to.
+    AccessDenied {
+        error: AccessError,
+        authenticate: Authenticate,
+    },
+
+    /// The client did not provide any bearer authentication.
+    NoAuthentication {
+        authenticate: Authenticate,
+    },
+
+    /// The request itself was malformed.
+    InvalidRequest {
+        authenticate: Authenticate,
+    },
+}
+
+type AccessResult<T> = Result<T, GuardError>;
 
 /// Required request methods for deciding on the rights to access a protected resource.
 pub trait GuardRequest {
@@ -23,6 +66,7 @@ pub trait GuardRequest {
     /// the case, then no other attribute will be queried. This method exists mainly to make
     /// frontends straightforward by not having them handle special cases for malformed requests.
     fn valid(&self) -> bool;
+
     /// The authorization used in the request.
     ///
     /// Expects the complete `Authorization` HTTP-header, including the qualification as `Bearer`.
@@ -47,24 +91,118 @@ pub trait GuardEndpoint {
 /// The result will indicate whether the resource access should be allowed or not.
 pub fn protect(handler: &GuardEndpoint, req: &GuardRequest)
 -> AccessResult<()> {
+    let authenticate = Authenticate {
+        realm: None,
+        scope: handler.scopes().get(0).cloned(),
+    };
+
     if !req.valid() {
-        return Err(AccessError::InvalidRequest)
+        return Err(GuardError::InvalidRequest {
+            authenticate
+        });
     }
 
-    let token = req.token()
-        .ok_or(AccessError::AccessDenied)?;
-    let grant = handler.recover_token(&token)
-        .ok_or(AccessError::AccessDenied)?;
+    let token = req.token().ok_or(GuardError::NoAuthentication {
+        authenticate,
+    })?;
+
+    let grant = handler.recover_token(&token).ok_or(GuardError::AccessDenied {
+        error: AccessError {
+            code: Some(ErrorCode::InvalidRequest),
+        },
+        authenticate,
+    })?;
 
     if grant.until < Utc::now() {
-        return Err(AccessError::AccessDenied);
+        return Err(GuardError::AccessDenied {
+            error: AccessError {
+                code: Some(ErrorCode::InvalidToken),
+            },
+            authenticate,
+        });
     }
 
     // Test if any of the possible allowed scopes is included in the grant
     if !handler.scopes().iter()
         .any(|resource_scope| resource_scope.allow_access(&grant.scope)) {
-        return Err(AccessError::AccessDenied);
+        return Err(GuardError::AccessDenied {
+            error: AccessError {
+                code: Some(ErrorCode::InsufficientScope),
+            },
+            authenticate,
+        });
     }
 
     return Ok(())
+}
+
+impl ErrorCode {
+    fn description(self) -> &'static str {
+        match self {
+            ErrorCode::InvalidRequest => "invalid_request",
+            ErrorCode::InsufficientScope => "insufficient_scope",
+            ErrorCode::InvalidToken => "invalid_token",
+        }
+    }
+}
+
+struct BearerHeader {
+    content: String,
+    first_option: bool,
+}
+
+impl BearerHeader {
+    fn new() -> Self {
+        BearerHeader {
+            content: "Bearer".to_string(),
+            first_option: true,
+        }
+    }
+
+    fn add_option(&mut self, args: fmt::Arguments) {
+        if self.first_option {
+            self.content.push(' ');
+        } else {
+            self.content.push(',');
+        }
+        fmt::write(&mut self.content, args).unwrap();
+    }
+
+    fn finalize(self) -> String {
+        self.content
+    }
+}
+
+impl Authenticate {
+    fn extend_header(self, header: &mut BearerHeader) {
+        self.realm.map(|realm| header.add_option(format_args!("realm=\"{}\"", realm)));
+        self.scope.map(|scope| header.add_option(format_args!("scope=\"{}\"", scope)));
+    }
+}
+
+impl AccessError {
+    fn extend_header(self, header: &mut BearerHeader) {
+        self.code.map(|code| header.add_option(format_args!("error=\"{}\"", code.description())));
+        // self.scope.map(|scope| header.add_option(format_args!("scope=\"{}\"", scope)));
+    }
+}
+
+impl GuardError {
+    /// Convert the guard error into the content used in an WWW-Authenticate header.
+    pub fn www_authenticate(self) -> String {
+        let mut header = BearerHeader::new();
+        match self {
+            GuardError::AccessDenied { error, authenticate, } => {
+                error.extend_header(&mut header);
+                authenticate.extend_header(&mut header);
+            },
+            GuardError::NoAuthentication { authenticate, } => {
+                authenticate.extend_header(&mut header);
+            },
+            GuardError::InvalidRequest { authenticate, } => {
+                authenticate.extend_header(&mut header);
+            },
+        }
+        header.finalize()
+    }
 }
