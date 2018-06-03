@@ -798,12 +798,9 @@ impl<'a> AccessFlow<'a> {
         let params = AccessFlow::create_valid_params(&mut request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
-        protect(self, &params).map_err(|err| {
-            match err {
-                AccessError::InvalidRequest => OAuthError::AccessDenied.into(),
-                AccessError::AccessDenied => OAuthError::AccessDenied.into(),
-            }
-        })
+        protect(self, &params).map_err(|err| OAuthError::AccessDenied {
+            www_authenticate: Some(err.www_authenticate()),
+        }).map_err(Into::into)
     }
 }
 
@@ -833,10 +830,17 @@ pub enum OAuthError {
     DenySilently,
 
     /// Authorization to access the resource has not been granted.
-    AccessDenied,
+    AccessDenied {
+        www_authenticate: Option<String>,
+    },
 
     /// One of the primitives used to complete the operation failed.
     PrimitiveError,
+
+    /// The incoming request was malformed.
+    ///
+    /// This implies that it did not change any internal state.
+    InvalidRequest,
 }
 
 impl fmt::Display for OAuthError {

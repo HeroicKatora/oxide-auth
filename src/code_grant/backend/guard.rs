@@ -102,16 +102,22 @@ pub fn protect(handler: &GuardEndpoint, req: &GuardRequest)
         });
     }
 
-    let token = req.token().ok_or(GuardError::NoAuthentication {
-        authenticate,
-    })?;
+    let token = match req.token() {
+        Some(token) => token,
+        None => return Err(GuardError::NoAuthentication {
+            authenticate,
+        }),
+    };
 
-    let grant = handler.recover_token(&token).ok_or(GuardError::AccessDenied {
-        error: AccessError {
-            code: Some(ErrorCode::InvalidRequest),
-        },
-        authenticate,
-    })?;
+    let grant = match handler.recover_token(&token) {
+        Some(grant) => grant,
+        None => return Err(GuardError::AccessDenied {
+            error: AccessError {
+                code: Some(ErrorCode::InvalidRequest),
+            },
+            authenticate,
+        }),
+    };
 
     if grant.until < Utc::now() {
         return Err(GuardError::AccessDenied {

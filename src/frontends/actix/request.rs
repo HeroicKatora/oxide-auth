@@ -78,7 +78,7 @@ impl Future for AccessToken {
             Ok(Async::Ready(body)) => Ok(Async::Ready(message::AccessToken(
                 ResolvedRequest::with_body(self.request.clone(), body)))),
             Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(_err) => Err(OAuthError::AccessDenied),
+            Err(_err) => Err(OAuthError::InvalidRequest),
         }
     }
 }
