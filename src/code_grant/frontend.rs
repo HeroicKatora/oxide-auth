@@ -799,7 +799,7 @@ impl<'a> AccessFlow<'a> {
             .unwrap_or_else(|| GuardParameter::invalid());
 
         protect(self, &params).map_err(|err| OAuthError::AccessDenied {
-            www_authenticate: Some(err.www_authenticate()),
+            www_authenticate: err.www_authenticate(),
         }).map_err(Into::into)
     }
 }
@@ -831,7 +831,7 @@ pub enum OAuthError {
 
     /// Authorization to access the resource has not been granted.
     AccessDenied {
-        www_authenticate: Option<String>,
+        www_authenticate: String,
     },
 
     /// One of the primitives used to complete the operation failed.
@@ -841,6 +841,23 @@ pub enum OAuthError {
     ///
     /// This implies that it did not change any internal state.
     InvalidRequest,
+}
+
+impl OAuthError {
+    /// Create a response for the request that produced this error.
+    ///
+    /// After inspecting the error returned from the library API and doing any necessary logging,
+    /// this methods allows easily turning the error into a template (or complete) response to the
+    /// client.  It takes care of setting the necessary headers.
+    pub fn response<W: WebResponse>(self) -> W {
+        match self {
+            OAuthError::DenySilently | OAuthError::InvalidRequest => W::text("")
+                .and_then(|response| response.as_client_error()),
+            OAuthError::AccessDenied { www_authenticate } => W::text("")
+                .and_then(|response| response.with_authorization(&www_authenticate)),
+            OAuthError::PrimitiveError => unimplemented!("Internal server error instead"),
+        }.unwrap_or(unimplemented!("Internal server error instead"))
+    }
 }
 
 impl fmt::Display for OAuthError {
