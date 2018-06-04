@@ -13,12 +13,13 @@ use primitives::scope::Scope;
 /// authentication information.
 ///
 /// [rfc6750]: https://tools.ietf.org/html/rfc6750#section-3.1
-pub struct AccessError {
+#[derive(Debug)]
+pub struct AccessFailure {
     pub code: Option<ErrorCode>,
 }
 
 /// Indicates the reason for access failure.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum ErrorCode {
     /// The request did not have enough authorization data or was otherwise malformed.
     InvalidRequest,
@@ -31,6 +32,7 @@ pub enum ErrorCode {
 }
 
 /// Additional information provided for the WWW-Authenticate header.
+#[derive(Debug)]
 pub struct Authenticate {
     /// Information about which realm the credentials correspond to.
     pub realm: Option<String>,
@@ -39,10 +41,11 @@ pub struct Authenticate {
     pub scope: Option<Scope>,
 }
 
-pub enum GuardError {
+#[derive(Debug)]
+pub enum AccessError {
     /// The client tried to access a resource but was not able to.
     AccessDenied {
-        error: AccessError,
+        failure: AccessFailure,
         authenticate: Authenticate,
     },
 
@@ -57,7 +60,7 @@ pub enum GuardError {
     },
 }
 
-type AccessResult<T> = Result<T, GuardError>;
+type AccessResult<T> = Result<T, AccessError>;
 
 /// Required request methods for deciding on the rights to access a protected resource.
 pub trait GuardRequest {
@@ -97,22 +100,22 @@ pub fn protect(handler: &GuardEndpoint, req: &GuardRequest)
     };
 
     if !req.valid() {
-        return Err(GuardError::InvalidRequest {
+        return Err(AccessError::InvalidRequest {
             authenticate
         });
     }
 
     let token = match req.token() {
         Some(token) => token,
-        None => return Err(GuardError::NoAuthentication {
+        None => return Err(AccessError::NoAuthentication {
             authenticate,
         }),
     };
 
     let grant = match handler.recover_token(&token) {
         Some(grant) => grant,
-        None => return Err(GuardError::AccessDenied {
-            error: AccessError {
+        None => return Err(AccessError::AccessDenied {
+            failure: AccessFailure {
                 code: Some(ErrorCode::InvalidRequest),
             },
             authenticate,
@@ -120,8 +123,8 @@ pub fn protect(handler: &GuardEndpoint, req: &GuardRequest)
     };
 
     if grant.until < Utc::now() {
-        return Err(GuardError::AccessDenied {
-            error: AccessError {
+        return Err(AccessError::AccessDenied {
+            failure: AccessFailure {
                 code: Some(ErrorCode::InvalidToken),
             },
             authenticate,
@@ -131,8 +134,8 @@ pub fn protect(handler: &GuardEndpoint, req: &GuardRequest)
     // Test if any of the possible allowed scopes is included in the grant
     if !handler.scopes().iter()
         .any(|resource_scope| resource_scope.allow_access(&grant.scope)) {
-        return Err(GuardError::AccessDenied {
-            error: AccessError {
+        return Err(AccessError::AccessDenied {
+            failure: AccessFailure {
                 code: Some(ErrorCode::InsufficientScope),
             },
             authenticate,
@@ -186,26 +189,25 @@ impl Authenticate {
     }
 }
 
-impl AccessError {
+impl AccessFailure {
     fn extend_header(self, header: &mut BearerHeader) {
         self.code.map(|code| header.add_option(format_args!("error=\"{}\"", code.description())));
-        // self.scope.map(|scope| header.add_option(format_args!("scope=\"{}\"", scope)));
     }
 }
 
-impl GuardError {
+impl AccessError {
     /// Convert the guard error into the content used in an WWW-Authenticate header.
     pub fn www_authenticate(self) -> String {
         let mut header = BearerHeader::new();
         match self {
-            GuardError::AccessDenied { error, authenticate, } => {
-                error.extend_header(&mut header);
+            AccessError::AccessDenied { failure, authenticate, } => {
+                failure.extend_header(&mut header);
                 authenticate.extend_header(&mut header);
             },
-            GuardError::NoAuthentication { authenticate, } => {
+            AccessError::NoAuthentication { authenticate, } => {
                 authenticate.extend_header(&mut header);
             },
-            GuardError::InvalidRequest { authenticate, } => {
+            AccessError::InvalidRequest { authenticate, } => {
                 authenticate.extend_header(&mut header);
             },
         }

@@ -798,8 +798,8 @@ impl<'a> AccessFlow<'a> {
         let params = AccessFlow::create_valid_params(&mut request)
             .unwrap_or_else(|| GuardParameter::invalid());
 
-        protect(self, &params).map_err(|err| OAuthError::AccessDenied {
-            www_authenticate: err.www_authenticate(),
+        protect(self, &params).map_err(|error| OAuthError::AccessDenied {
+            error,
         }).map_err(Into::into)
     }
 }
@@ -831,7 +831,7 @@ pub enum OAuthError {
 
     /// Authorization to access the resource has not been granted.
     AccessDenied {
-        www_authenticate: String,
+        error: AccessError,
     },
 
     /// One of the primitives used to complete the operation failed.
@@ -853,8 +853,8 @@ impl OAuthError {
         match self {
             OAuthError::DenySilently | OAuthError::InvalidRequest => W::text("")
                 .and_then(|response| response.as_client_error()),
-            OAuthError::AccessDenied { www_authenticate } => W::text("")
-                .and_then(|response| response.with_authorization(&www_authenticate)),
+            OAuthError::AccessDenied { error } => W::text("")
+                .and_then(|response| response.with_authorization(&error.www_authenticate())),
             OAuthError::PrimitiveError => unimplemented!("Internal server error instead"),
         }.unwrap_or(unimplemented!("Internal server error instead"))
     }
