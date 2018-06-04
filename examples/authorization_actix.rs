@@ -64,8 +64,8 @@ pub fn main() {
                 Box::new(req.oauth2()
                     .authorization_code(handle_get)
                     .and_then(move |request| endpoint.send(request)
-                        .or_else(|_| Err(OAuthError::InvalidRequest))
-                        .and_then(|result| result.and_then(ResolvedResponse::into))
+                        .map_err(|_| OAuthError::InvalidRequest)
+                        .and_then(|result| result.map(Into::into))
                     )
                     .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
@@ -76,8 +76,8 @@ pub fn main() {
                 Box::new(req.oauth2()
                     .authorization_code(move |grant| handle_post(denied, grant))
                     .and_then(move |request| endpoint.send(request)
-                        .or_else(|_| Err(OAuthError::InvalidRequest))
-                        .and_then(|result| result.and_then(ResolvedResponse::into))
+                        .map_err(|_| OAuthError::InvalidRequest)
+                        .and_then(|result| result.map(Into::into))
                     )
                     .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
@@ -87,8 +87,8 @@ pub fn main() {
                 Box::new(req.oauth2()
                     .access_token()
                     .and_then(move |request| endpoint.send(request)
-                        .or_else(|_| Err(OAuthError::InvalidRequest))
-                        .and_then(|result| result.and_then(ResolvedResponse::into))
+                        .map_err(|_| OAuthError::InvalidRequest)
+                        .and_then(|result| result.map(Into::into))
                     )
                     .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
@@ -98,7 +98,7 @@ pub fn main() {
                 Box::new(req.oauth2()
                     .guard()
                     .and_then(move |request| endpoint.send(request)
-                        .or_else(|_| Err(OAuthError::InvalidRequest))
+                        .map_err(|_| OAuthError::InvalidRequest)
                         .and_then(|result| result)
                     ).map(|()|
                         HttpResponse::Ok()

@@ -159,8 +159,8 @@ impl ResponseContent {
 }
 
 impl ResponseKind {
-    fn into(self) -> Result<HttpResponse, OAuthError> {
-        Ok(match self {
+    fn into(self) -> HttpResponse {
+        match self {
             ResponseKind::Ok(response) => response.into(),
             ResponseKind::ClientError(response) => {
                 let mut response = response.into();
@@ -175,11 +175,11 @@ impl ResponseKind {
             ResponseKind::Authorization(response, kind) => {
                 let mut response = response.into();
                 response.status_mut().clone_from(&StatusCode::UNAUTHORIZED);
-                let header_content = kind.parse().map_err(|_| OAuthError::PrimitiveError)?;
+                let header_content = kind.parse().unwrap();
                 response.headers_mut().insert("WWW-Authenticate", header_content);
                 response
             },
-        })
+        }
     }
 
     fn wrap(self) -> ResolvedResponse {
@@ -197,8 +197,14 @@ impl ResolvedResponse {
         }
     }
 
-    /// Conver the response into an http response.
-    pub fn into(self) -> Result<HttpResponse, OAuthError> {
+    /// Convert the response into an http response.
+    pub fn actix_response(self) -> HttpResponse {
         self.inner.into()
+    }
+}
+
+impl From<ResolvedResponse> for HttpResponse {
+    fn from(resolved: ResolvedResponse) -> Self {
+        resolved.actix_response()
     }
 }
