@@ -95,11 +95,17 @@ struct HelpfulAuthorizationError();
 
 impl iron::middleware::AfterMiddleware for HelpfulAuthorizationError {
     fn catch(&self, _: &mut Request, err: iron::IronError) -> IronResult<Response> {
-        if !err.error.is::<OAuthError>() {
-            return Err(err);
-        }
         use iron::modifier::Modifier;
-        let mut response = err.response;
+
+        let IronError { error, response } = err;
+        let oauth_error = match error.downcast::<OAuthError>() {
+            Ok(boxed_err) => boxed_err,
+            Err(error) => return Err(IronError { error, response }),
+        };
+
+        let mut response = oauth_error.response_or_else(||
+            Response::with(iron::status::InternalServerError));
+
         let text =
             "<html>
             This page should be accessed via an oauth token from the client in the example. Click

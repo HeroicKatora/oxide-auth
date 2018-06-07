@@ -354,6 +354,7 @@ impl WebResponse for Response {
     }
 
     fn with_authorization(mut self, kind: &str) -> Result<Self, IronError> {
+        self.status = Some(status::Unauthorized);
         self.headers.set_raw("WWW-Authenticate", vec![kind.as_bytes().to_vec()]);
         Ok(self)
     }
