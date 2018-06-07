@@ -8,7 +8,7 @@ extern crate oxide_auth;
 extern crate url;
 
 use actix::{Actor, Addr, Syn};
-use actix_web::{server, App, Body, HttpRequest, HttpResponse, Error as AWError};
+use actix_web::{server, App, HttpRequest, HttpResponse, Error as AWError};
 use actix_web::http::Method;
 use futures::Future;
 
@@ -67,7 +67,7 @@ pub fn main() {
                         .map_err(|_| OAuthError::InvalidRequest)
                         .and_then(|result| result.map(Into::into))
                     )
-                    .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
+                    .or_else(|err| Ok(ResolvedResponse::response_or_error(err).actix_response()))
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
             })
             .route("/authorize", Method::POST, |req: HttpRequest<_>| {
@@ -79,7 +79,7 @@ pub fn main() {
                         .map_err(|_| OAuthError::InvalidRequest)
                         .and_then(|result| result.map(Into::into))
                     )
-                    .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
+                    .or_else(|err| Ok(ResolvedResponse::response_or_error(err).actix_response()))
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
             })
             .route("/token", Method::POST, |req: HttpRequest<_>| {
@@ -90,7 +90,7 @@ pub fn main() {
                         .map_err(|_| OAuthError::InvalidRequest)
                         .and_then(|result| result.map(Into::into))
                     )
-                    .or_else(|_| Ok(HttpResponse::BadRequest().body(Body::Empty)))
+                    .or_else(|err| Ok(ResolvedResponse::response_or_error(err).actix_response()))
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
             })
             .route("/", Method::GET, |req: HttpRequest<_>| {
@@ -104,12 +104,13 @@ pub fn main() {
                         HttpResponse::Ok()
                             .content_type("text/plain")
                             .body("Hello world!")
-                    ).or_else(|_|
-                        // FIXME: this does not set the headers from the error.
-                        Ok(HttpResponse::Unauthorized()
+                    ).or_else(|error| {
+                        Ok(ResolvedResponse::response_or_error(error)
+                            .actix_response()
+                            .into_builder()
                             .content_type("text/html")
                             .body(DENY_TEXT))
-                    )
+                    })
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
             })
         )
