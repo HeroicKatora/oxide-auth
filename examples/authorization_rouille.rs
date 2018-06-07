@@ -6,7 +6,7 @@ extern crate rouille;
 extern crate oxide_auth;
 extern crate url;
 
-use rouille::{Request, Response, Server};
+use rouille::{Request, Response, ResponseBody, Server};
 use oxide_auth::frontends::rouille::*;
 
 use support::rouille::dummy_client;
@@ -39,16 +39,18 @@ pub fn main() {
         router!(request,
             (GET) ["/"] => {
                 let mut issuer = &*bearer_tokens;
-                if let Err(_) = AccessFlow::new(&mut issuer, &vec!["default".parse().unwrap()])
+                if let Err(err) = AccessFlow::new(&mut issuer, &vec!["default".parse().unwrap()])
                     .handle(request)
                 { // Does not have the proper authorization token
+                    let mut response = err.response_or_else(Response::empty_404);
 let text = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
 here</a> to begin the authorization process.
 </html>
 ";
-                    Response::html(text)
+                    response.data = ResponseBody::from_string(text);
+                    response.with_unique_header("Content-Type", "text/html; charset=utf8")
                 } else { // Allowed to access!
                     Response::text("Hello world!")
                 }
@@ -58,14 +60,14 @@ here</a> to begin the authorization process.
                 let mut authorizer = authorization_codes.lock().unwrap();
                 AuthorizationFlow::new(&mut*registrar, &mut*authorizer)
                     .handle(request).complete(&handle_get)
-                    .unwrap_or_else(|_| Response::empty_400())
+                    .unwrap_or_else(|err| err.response_or_else(Response::empty_404))
             },
             (POST) ["/authorize"] => {
                 let mut registrar = clients.lock().unwrap();
                 let mut authorizer = authorization_codes.lock().unwrap();
                 AuthorizationFlow::new(&mut*registrar, &mut*authorizer)
                     .handle(request).complete(&handle_post)
-                    .unwrap_or_else(|_| Response::empty_400())
+                    .unwrap_or_else(|err| err.response_or_else(Response::empty_404))
             },
             (POST) ["/token"] => {
                 let mut authorizer = authorization_codes.lock().unwrap();
@@ -73,7 +75,7 @@ here</a> to begin the authorization process.
                 let mut registrar = clients.lock().unwrap();
                 GrantFlow::new(&mut*registrar, &mut*authorizer, &mut issuer)
                     .handle(request)
-                    .unwrap_or_else(|_| Response::empty_400())
+                    .unwrap_or_else(|err| err.response_or_else(Response::empty_404))
             },
             _ => Response::empty_404()
         )
