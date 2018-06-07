@@ -27,6 +27,7 @@ enum ResponseKind {
     ClientError(ResponseContent),
     Unauthorized(ResponseContent),
     Authorization(ResponseContent, String),
+    InternalError,
 }
 
 /// An http response replacement that can be sent as an actix message.
@@ -110,7 +111,9 @@ impl WebResponse for ResolvedResponse {
             | ResponseKind::ClientError(response)
             | ResponseKind::Unauthorized(response)
             | ResponseKind::Authorization(response, _)
-            => Ok(ResponseKind::ClientError(response).wrap())
+                => Ok(ResponseKind::ClientError(response).wrap()),
+            ResponseKind::InternalError
+                => Ok(ResponseKind::InternalError.wrap()),
         }
     }
 
@@ -120,7 +123,9 @@ impl WebResponse for ResolvedResponse {
             | ResponseKind::ClientError(response)
             | ResponseKind::Unauthorized(response)
             | ResponseKind::Authorization(response, _)
-            => Ok(ResponseKind::Unauthorized(response).wrap())
+                => Ok(ResponseKind::Unauthorized(response).wrap()),
+            ResponseKind::InternalError
+                => Ok(ResponseKind::InternalError.wrap()),
         }
     }
 
@@ -130,7 +135,9 @@ impl WebResponse for ResolvedResponse {
             | ResponseKind::ClientError(response)
             | ResponseKind::Unauthorized(response)
             | ResponseKind::Authorization(response, _)
-            => Ok(ResponseKind::Authorization(response, kind.to_owned()).wrap())
+                => Ok(ResponseKind::Authorization(response, kind.to_owned()).wrap()),
+            ResponseKind::InternalError
+                => Ok(ResponseKind::InternalError.wrap()),
         }
     }
 }
@@ -179,6 +186,9 @@ impl ResponseKind {
                 response.headers_mut().insert("WWW-Authenticate", header_content);
                 response
             },
+            ResponseKind::InternalError => {
+                HttpResponse::InternalServerError().finish()
+            },
         }
     }
 
@@ -200,6 +210,21 @@ impl ResolvedResponse {
     /// Convert the response into an http response.
     pub fn actix_response(self) -> HttpResponse {
         self.inner.into()
+    }
+
+    /// An instance representing an internal error.
+    ///
+    /// While not created by the usual WebResponse methods, this makes it possible to uniformly
+    /// build a response based on an OAuthError.
+    pub fn internal_error() -> Self {
+        ResolvedResponse {
+            inner: ResponseKind::InternalError,
+        }
+    }
+
+    /// Create a response to the error, using the internal error representation.
+    pub fn response_or_error(error: OAuthError) -> Self {
+        error.response_or_else(Self::internal_error)
     }
 }
 
