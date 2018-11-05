@@ -12,6 +12,18 @@ pub trait GrantExtension {
     fn identifier(&self) -> &'static str;
 }
 
+impl<T: GrantExtension + ?Sized> GrantExtension for Box<T> {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
+    }
+}
+
+impl<'a, T: GrantExtension + ?Sized> GrantExtension for &'a T {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
+    }
+}
+
 /// Wraps the data for an extension as a string with access restrictions.
 ///
 /// This is a generic way for extensions to store their data in a universal, encoded form. It is

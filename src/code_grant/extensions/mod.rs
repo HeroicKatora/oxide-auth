@@ -31,18 +31,6 @@ pub trait AccessTokenExtension: GrantExtension {
         -> Result<Option<Extension>, ()>;
 }
 
-impl<'a> GrantExtension for &'a CodeExtension {
-    fn identifier(&self) -> &'static str {
-        (*self).identifier()
-    }
-}
-
-impl<'a> GrantExtension for &'a AccessTokenExtension {
-    fn identifier(&self) -> &'static str {
-        (*self).identifier()
-    }
-}
-
 mod pkce;
 
 pub use self::pkce::Pkce;

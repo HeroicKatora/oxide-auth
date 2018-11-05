@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::result::Result as StdResult;
 
 use url::Url;
 use chrono::{Duration, Utc};
@@ -6,7 +7,7 @@ use chrono::{Duration, Utc};
 use code_grant::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
 use code_grant::extensions::CodeExtension;
 use primitives::registrar::{BoundClient, ClientUrl, RegistrarError, PreGrant};
-use primitives::grant::{Extensions, GrantExtension, Grant};
+use primitives::grant::{Extensions, GrantExtension, Extension as ExtensionData, Grant};
 
 /// An extension reacting to an initial authorization code request.
 pub trait Extension: GrantExtension {
@@ -20,7 +21,7 @@ pub trait Extension: GrantExtension {
     /// encoded form by returning `Ok(extension_data)` while errors can be signaled via `Err(())`.
     /// Extensions can also store their pure existance by initializing the extension struct without
     /// data. Specifically, the data can be used in a corresponding `AccessTokenExtension`.
-    fn extend_code(&self, &Request) -> ::Result<Option<Extension>, ()>;
+    fn extend_code(&self, &Request) -> StdResult<Option<ExtensionData>, ()>;
 }
 
 /// Interface required from a request to determine the handling in the backend.
@@ -30,16 +31,22 @@ pub trait Request {
     /// the case, then no other attribute will be queried. This method exists mainly to make
     /// frontends straightforward by not having them handle special cases for malformed requests.
     fn valid(&self) -> bool;
+
     /// Identity of the client trying to gain an oauth token.
     fn client_id(&self) -> Option<Cow<str>>;
+
     /// Optionally specifies the requested scope
     fn scope(&self) -> Option<Cow<str>>;
+
     /// Valid request have (one of) the registered redirect urls for this client.
     fn redirect_uri(&self) -> Option<Cow<str>>;
+
     /// Optional parameter the client can use to identify the redirected user-agent.
     fn state(&self) -> Option<Cow<str>>;
+
     /// The method requested, valid requests MUST return `code`
     fn method(&self) -> Option<Cow<str>>;
+
     /// Retrieve an additional parameter used in an extension
     fn extension(&self, &str) -> Option<Cow<str>>;
 }
@@ -51,10 +58,10 @@ pub trait Request {
 /// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait Endpoint {
     /// 'Bind' a client and redirect uri from a request to internally approved parameters.
-    fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> ::Result<BoundClient<'a>, RegistrarError>;
+    fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> StdResult<BoundClient<'a>, RegistrarError>;
 
     /// Generate an authorization code for a given grant.
-    fn authorize(&self, Grant) -> Result<String, ()>;
+    fn authorize(&self, Grant) -> StdResult<String, ()>;
 }
 
 /// Retrieve allowed scope and redirect url from the registrar.
@@ -72,15 +79,15 @@ pub fn authorization_code(
     extensions: &[&Extension])
 -> self::Result<PendingAuthorization> {
     if !request.valid() {
-        return Err(CodeError::Ignore)
+        return Err(Error::Ignore)
     }
 
     // Check preconditions
-    let client_id = request.client_id().ok_or(CodeError::Ignore)?;
+    let client_id = request.client_id().ok_or(Error::Ignore)?;
     let redirect_uri = match request.redirect_uri() {
         None => None,
         Some(ref uri) => {
-            let parsed = Url::parse(&uri).map_err(|_| CodeError::Ignore)?;
+            let parsed = Url::parse(&uri).map_err(|_| Error::Ignore)?;
             Some(Cow::Owned(parsed))
         },
     };
@@ -91,9 +98,9 @@ pub fn authorization_code(
     };
 
     let bound_client = match handler.bound_redirect(client_url) {
-        Err(RegistrarError::Unregistered) => return Err(CodeError::Ignore),
-        Err(RegistrarError::MismatchedRedirect) => return Err(CodeError::Ignore),
-        Err(RegistrarError::UnauthorizedClient) => return Err(CodeError::Ignore),
+        Err(RegistrarError::Unregistered) => return Err(Error::Ignore),
+        Err(RegistrarError::MismatchedRedirect) => return Err(Error::Ignore),
+        Err(RegistrarError::UnauthorizedClient) => return Err(Error::Ignore),
         Ok(pre_grant) => pre_grant,
     };
 
@@ -107,7 +114,7 @@ pub fn authorization_code(
     match request.method() {
         Some(ref method) if method.as_ref() == "code"
             => (),
-        _ => return Err(CodeError::Redirect(prepared_error.with(
+        _ => return Err(Error::Redirect(prepared_error.with(
                 AuthorizationErrorType::UnsupportedResponseType))),
     }
 
@@ -116,7 +123,7 @@ pub fn authorization_code(
     let scope = match scope.map(|scope| scope.as_ref().parse()) {
         None => None,
         Some(Err(_)) =>
-            return Err(CodeError::Redirect(prepared_error.with(
+            return Err(Error::Redirect(prepared_error.with(
                 AuthorizationErrorType::InvalidScope))),
         Some(Ok(scope)) => Some(scope),
     };
@@ -126,7 +133,7 @@ pub fn authorization_code(
     for extension_instance in extensions {
         match extension_instance.extend_code(request) {
             Err(_) =>
-                return Err(CodeError::Redirect(prepared_error.with(
+                return Err(Error::Redirect(prepared_error.with(
                     AuthorizationErrorType::InvalidRequest))),
             Ok(Some(extension)) =>
                 grant_extensions.set(extension_instance, extension),
@@ -151,11 +158,11 @@ pub struct PendingAuthorization {
 
 impl PendingAuthorization {
     /// Denies the request, which redirects to the client for which the request originated.
-    pub fn deny(self) -> CodeResult<Url> {
+    pub fn deny(self) -> Result<Url> {
         let url = self.pre_grant.redirect_uri;
         let error = AuthorizationError::with(AuthorizationErrorType::AccessDenied);
         let error = ErrorUrl::new(url, self.state, error);
-        Err(CodeError::Redirect(error))
+        Err(Error::Redirect(error))
     }
 
     /// Inform the backend about consent from a resource owner. Use negotiated parameters to
@@ -170,7 +177,7 @@ impl PendingAuthorization {
            scope: self.pre_grant.scope,
            until: Utc::now() + Duration::minutes(10),
            extensions: self.extensions,
-       }).map_err(|()| CodeError::Ignore)?;
+       }).map_err(|()| Error::Ignore)?;
 
        url.query_pairs_mut()
            .append_pair("code", grant.as_str())
@@ -207,7 +214,7 @@ pub struct ErrorUrl {
     error: AuthorizationError,
 }
 
-type Result<T> = Result<T, Error>;
+type Result<T> = StdResult<T, Error>;
 
 impl ErrorUrl {
     /// Construct a new error, already fixing the state parameter if it exists.
