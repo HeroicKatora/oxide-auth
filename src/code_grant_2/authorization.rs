@@ -62,6 +62,9 @@ pub trait Endpoint {
 
     /// Generate an authorization code for a given grant.
     fn authorize(&self, Grant) -> StdResult<String, ()>;
+
+    /// The list of extensions of this endpoint.
+    fn extensions(&self) -> Box<Iterator<Item=&Extension>>;
 }
 
 /// Retrieve allowed scope and redirect url from the registrar.
@@ -73,10 +76,7 @@ pub trait Endpoint {
 /// If the client is not registered, the request will otherwise be ignored, if the request has
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
-pub fn authorization_code(
-    handler: &Endpoint,
-    request: &Request,
-    extensions: &[&Extension])
+pub fn authorization_code(handler: &Endpoint, request: &Request)
 -> self::Result<PendingAuthorization> {
     if !request.valid() {
         return Err(Error::Ignore)
@@ -130,13 +130,13 @@ pub fn authorization_code(
 
     let mut grant_extensions = Extensions::new();
 
-    for extension_instance in extensions {
+    for extension_instance in handler.extensions() {
         match extension_instance.extend_code(request) {
             Err(_) =>
                 return Err(Error::Redirect(prepared_error.with(
                     AuthorizationErrorType::InvalidRequest))),
             Ok(Some(extension)) =>
-                grant_extensions.set(extension_instance, extension),
+                grant_extensions.set(&extension_instance, extension),
             Ok(None) => (),
         }
     }
