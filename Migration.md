@@ -28,6 +28,10 @@ registrar due to its entangled lifetimes. Since the return value was needed
 later in the authorization process the non-local borrow hindered simultaneous
 usage of other mutable members, even if those were local.
 
+At the same time, this change implies that the underlying storage of a
+`Registrar` is no longer restricted to `EncodedClient` and can use arbitrary
+data structures.
+
 -----
 
 [WIP] The `code_grant::frontend` flow design has been revamped into a unified
