@@ -3,13 +3,13 @@ extern crate actix_web;
 extern crate serde;
 extern crate serde_json;
 
-use self::reqwest::header::Authorization;
+use self::reqwest::header;
 use self::actix_web::*;
 
 use std::collections::HashMap;
 use std::io::Read;
 
-pub fn dummy_client(request: HttpRequest) -> HttpResponse {
+pub fn dummy_client(request: &HttpRequest) -> HttpResponse {
     if let Some(cause) = request.query().get("error") {
         return HttpResponse::BadRequest()
             .body(format!("Error during owner authorization: {:?}", cause))
@@ -18,7 +18,7 @@ pub fn dummy_client(request: HttpRequest) -> HttpResponse {
     let code = match request.query().get("code") {
         None => return HttpResponse::BadRequest()
             .body("Missing code"),
-        Some(code) => code,
+        Some(code) => code.clone(),
     };
 
     // Construct a request against http://localhost:8020/token, the access token endpoint
@@ -52,7 +52,7 @@ pub fn dummy_client(request: HttpRequest) -> HttpResponse {
     // Request the page with the oauth token
     let page_request = client
         .get("http://localhost:8020/")
-        .header(Authorization("Bearer ".to_string() + token_map.get("access_token").unwrap()))
+        .header(header::AUTHORIZATION, "Bearer ".to_string() + token_map.get("access_token").unwrap())
         .build()
         .unwrap();
     let mut page_response = match client.execute(page_request) {

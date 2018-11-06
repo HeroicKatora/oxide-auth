@@ -25,7 +25,7 @@ pub trait OAuth {
 /// An encapsulated http request providing builder-style access to all oauth request types.
 pub struct OAuthRequest(HttpRequest);
 
-impl<State> OAuth for HttpRequest<State> {
+impl<'a, State> OAuth for &'a HttpRequest<State> {
     fn oauth2(self) -> OAuthRequest {
         OAuthRequest(self.drop_state())
     }

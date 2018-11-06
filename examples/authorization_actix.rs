@@ -7,7 +7,7 @@ extern crate futures;
 extern crate oxide_auth;
 extern crate url;
 
-use actix::{Actor, Addr, Syn};
+use actix::{Actor, Addr};
 use actix_web::{server, App, HttpRequest, HttpResponse, Error as AWError};
 use actix_web::http::Method;
 use futures::Future;
@@ -28,7 +28,7 @@ here</a> to begin the authorization process.
 
 /// Example of a main function of a rouille server supporting oauth.
 pub fn main() {
-    let sys = actix::System::new("HttpServer");
+    let sys = actix::System::new("HttpServerClient");
 
     let mut clients  = ClientMap::new();
     // Register a dummy client instance
@@ -44,7 +44,7 @@ pub fn main() {
     // Emulate static initialization for complex type
     let scopes: &'static _ = Box::leak(scopes);
 
-    let endpoint: Addr<Syn,_> = CodeGrantEndpoint::new((clients, authorizer, issuer))
+    let endpoint: Addr<_> = CodeGrantEndpoint::new((clients, authorizer, issuer))
         .with_authorization(|&mut (ref client, ref mut authorizer, _)| {
             AuthorizationFlow::new(client, authorizer)
         })
@@ -59,30 +59,32 @@ pub fn main() {
     // Create the main server instance
     server::new(
         move || App::with_state(endpoint.clone())
-            .route("/authorize", Method::GET, |req: HttpRequest<_>| {
-                let endpoint = req.state().clone();
-                Box::new(req.oauth2()
-                    .authorization_code(handle_get)
-                    .and_then(move |request| endpoint.send(request)
-                        .map_err(|_| OAuthError::InvalidRequest)
-                        .and_then(|result| result.map(Into::into))
-                    )
-                    .or_else(|err| Ok(ResolvedResponse::response_or_error(err).actix_response()))
-                ) as Box<Future<Item = HttpResponse, Error = AWError>>
+            .resource("/authorize", |r| {
+                r.get().f(|req: &HttpRequest<_>| {
+                    let endpoint = req.state().clone();
+                    Box::new(req.oauth2()
+                        .authorization_code(handle_get)
+                        .and_then(move |request| endpoint.send(request)
+                            .map_err(|_| OAuthError::InvalidRequest)
+                            .and_then(|result| result.map(Into::into))
+                        )
+                        .or_else(|err| Ok(ResolvedResponse::response_or_error(err).actix_response()))
+                    ) as Box<Future<Item = HttpResponse, Error = AWError>>
+                });
+                r.post().f(|req: &HttpRequest<_>| {
+                    let endpoint = req.state().clone();
+                    let denied = req.query_string().contains("deny");
+                    Box::new(req.oauth2()
+                        .authorization_code(move |grant| handle_post(denied, grant))
+                        .and_then(move |request| endpoint.send(request)
+                            .map_err(|_| OAuthError::InvalidRequest)
+                            .and_then(|result| result.map(Into::into))
+                        )
+                        .or_else(|err| Ok(ResolvedResponse::response_or_error(err).actix_response()))
+                    ) as Box<Future<Item = HttpResponse, Error = AWError>>
+                });
             })
-            .route("/authorize", Method::POST, |req: HttpRequest<_>| {
-                let endpoint = req.state().clone();
-                let denied = req.query_string().contains("deny");
-                Box::new(req.oauth2()
-                    .authorization_code(move |grant| handle_post(denied, grant))
-                    .and_then(move |request| endpoint.send(request)
-                        .map_err(|_| OAuthError::InvalidRequest)
-                        .and_then(|result| result.map(Into::into))
-                    )
-                    .or_else(|err| Ok(ResolvedResponse::response_or_error(err).actix_response()))
-                ) as Box<Future<Item = HttpResponse, Error = AWError>>
-            })
-            .route("/token", Method::POST, |req: HttpRequest<_>| {
+            .resource("/token", |r| r.method(Method::POST).f(|req: &HttpRequest<_>| {
                 let endpoint = req.state().clone();
                 Box::new(req.oauth2()
                     .access_token()
@@ -92,8 +94,8 @@ pub fn main() {
                     )
                     .or_else(|err| Ok(ResolvedResponse::response_or_error(err).actix_response()))
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
-            })
-            .route("/", Method::GET, |req: HttpRequest<_>| {
+            }))
+            .resource("/", |r| r.method(Method::GET).f(|req: &HttpRequest<_>| {
                 let endpoint = req.state().clone();
                 Box::new(req.oauth2()
                     .guard()
@@ -112,7 +114,7 @@ pub fn main() {
                             .body(DENY_TEXT))
                     })
                 ) as Box<Future<Item = HttpResponse, Error = AWError>>
-            })
+            }))
         )
         .bind("localhost:8020")
         .expect("Failed to bind to socket")
@@ -123,7 +125,9 @@ pub fn main() {
         .expect("Failed to start dummy client")
         .start();
 
-    sys.handle().spawn_fn(|| Ok(open_in_browser()));
+    actix::System::current().arbiter()
+        .do_send(actix::msgs::Execute::new(
+            || -> Result<(), ()> { Ok(open_in_browser()) }));
     let _ = sys.run();
 }
 

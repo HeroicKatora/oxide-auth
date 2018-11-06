@@ -6,7 +6,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate hyper;
 
-use self::reqwest::header::Authorization;
+use self::reqwest::header;
 use self::hyper::{StatusCode, Response};
 use self::gotham::state::{FromState, State};
 use self::gotham::http::response::create_response;
@@ -63,7 +63,7 @@ pub fn dummy_client(mut state: State) -> (State, Response) {
     // Request the page with the oauth token
     let page_request = client
         .get("http://localhost:8020/")
-        .header(Authorization("Bearer ".to_string() + token_map.get("access_token").unwrap()))
+        .header(header::AUTHORIZATION, "Bearer ".to_string() + token_map.get("access_token").unwrap())
         .build().unwrap();
     let mut page_response = client.execute(page_request).unwrap();
     let mut protected_page = String::new();

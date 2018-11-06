@@ -48,7 +48,7 @@ impl ResolvedRequest {
         let query = request
             .query()
             .iter()
-            .map(|&(ref key, ref val)| (key.clone().into_owned(), val.clone().into_owned()))
+            .map(|(key, val)| (key.clone(), val.clone()))
             .collect();
 
         ResolvedRequest {
