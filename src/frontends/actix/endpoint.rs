@@ -22,14 +22,14 @@ struct OwnerBoxHandler(BoxedOwner);
 /// ```no_run
 /// # extern crate actix;
 /// # extern crate oxide_auth;
-/// # use actix::{Actor, Addr, Syn};
+/// # use actix::{Actor, Addr};
 /// # use oxide_auth::frontends::actix::*;
 /// # use oxide_auth::primitives::prelude::*;
 /// # fn main() {
 /// # let (registrar, authorizer, issuer, scope)
 /// #     : (ClientMap, Storage<RandomGenerator>, TokenSigner, &'static[Scope])
 /// #     = unimplemented!();
-/// let handle: Addr<Syn,_> = CodeGrantEndpoint::new(
+/// let handle: Addr<_> = CodeGrantEndpoint::new(
 ///         (registrar, authorizer, issuer, scope)
 ///     )
 ///     .with_authorization(|state| AuthorizationFlow::new(&state.0, &mut state.1))
