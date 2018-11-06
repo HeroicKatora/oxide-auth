@@ -51,6 +51,26 @@ types are not).
 
 -----
 
+[WIP] The possibility to create a `TokenSigner` instance based on a password
+has been removed. The use of this was discouraged all along but this removes
+another possible security pit fall. Note that you may want to migrate to a
+self-created `ring::hmac::SigningKey` instance, using a randomly generated salt
+and a self-chosen, secure password based key derivation function to derive the
+key bytes. Alternatively, you can now create a `TokenSigner` that uses an
+ephermal key, i.e. the key will change for each program invocation,
+invalidating all issued tokens of other program runs.
+
+Rationale: Password based, low-entropy keys do not provide adequate security.
+While the interface offered the ability to provide a high-entropy salt to
+create a secure signing key, it was easy not to do so (and done in the examples
+against the recommendation of the documentation). The scenario for the
+examples, and by extension maybe the scenario of users, did not rely on
+persistent keys. The new interface should offer high security both for a
+configuration-free setup and a production environment. Relying on the standard
+constructors for `SigningKey` is intended to urge users to correctly use
+high-entropy inputs such as the default rng of standard password hashing
+algorithms.
+
 ## v0.4.0-preview0
 
 Actix is the only fully supported framework for the moment as development begins
