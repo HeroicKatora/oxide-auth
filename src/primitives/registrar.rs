@@ -7,7 +7,7 @@ use super::scope::Scope;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use url::Url;
-use ring::{constant_time, digest, pbkdf2};
+use ring::{digest, pbkdf2};
 use ring::error::Unspecified;
 use rand;
 
@@ -230,34 +230,6 @@ pub trait PasswordPolicy: Send + Sync {
     fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified>;
 }
 
-/// Hashes the passphrase, salting with the client id. This is not optimal for passwords and will
-/// be replaced with argon2 in a future commit which also enables better configurability, such as
-/// supplying a secret key to argon2. This will probably be combined with a slight rework of the
-/// exact semantics of `Client` and `Client::check_authentication`.
-#[deprecated(since="0.1.0-alpha.1",
-             note="Should be replaced with argon2 as soon as possible. Will be remove in 0.4")]
-#[allow(dead_code)]
-struct SHA256Policy;
-
-#[allow(deprecated)]
-impl PasswordPolicy for SHA256Policy {
-    fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
-        // let salt = [0; 16];
-        // ring::rand::SecureRandom
-        let mut context = digest::Context::new(&digest::SHA256);
-        context.update(client_id.as_bytes());
-        context.update(passphrase);
-        context.finish().as_ref().to_vec()
-    }
-
-    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified> {
-        let mut context = digest::Context::new(&digest::SHA256);
-        context.update(client_id.as_bytes());
-        context.update(passphrase);
-        constant_time::verify_slices_are_equal(context.finish().as_ref(), stored)
-    }
-}
-
 #[derive(Clone, Debug)]
 struct Pbkdf2 {
     iterations: u32,
@@ -386,32 +358,6 @@ impl Registrar for ClientMap {
 mod tests {
     use super::*;
 
-    // No checking involved at all. This is a bad idea in a real system.
-    struct NoCheckPolicy;
-
-    impl PasswordPolicy for NoCheckPolicy {
-        fn store(&self, _: &str, _: &[u8]) -> Vec<u8> {
-            Vec::new()
-        }
-
-        fn check(&self, _: &str, _: &[u8], _: &[u8]) -> Result<(), Unspecified> {
-            Ok(())
-        }
-    }
-
-    // Literally save the password. Also a bad idea in a real system.
-    struct PlaintextPolicy;
-
-    impl PasswordPolicy for PlaintextPolicy {
-        fn store(&self, _: &str, passphrase: &[u8]) -> Vec<u8> {
-            passphrase.to_owned()
-        }
-
-        fn check(&self, _: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified> {
-            constant_time::verify_slices_are_equal(passphrase, stored)
-        }
-    }
-
     /// A test suite for registrars which support simple registrations of arbitrary clients
     pub fn simple_test_suite<Reg, RegFn>(registrar: &mut Reg, register: RegFn)
     where
@@ -455,12 +401,13 @@ mod tests {
 
     #[test]
     fn public_client() {
+        let policy = Pbkdf2::default();
         let client = Client::public(
             "ClientId",
             "https://example.com".parse().unwrap(),
             "default".parse().unwrap()
-        ).encode(&NoCheckPolicy);
-        let client = RegisteredClient::new(&client, &NoCheckPolicy);
+        ).encode(&policy);
+        let client = RegisteredClient::new(&client, &policy);
 
         // Providing no authentication data is ok
         assert!(client.check_authentication(None).is_ok());
@@ -470,14 +417,15 @@ mod tests {
 
     #[test]
     fn confidential_client() {
+        let policy = Pbkdf2::default();
         let pass = b"AB3fAj6GJpdxmEVeNCyPoA==";
         let client = Client::confidential(
             "ClientId",
             "https://example.com".parse().unwrap(),
             "default".parse().unwrap(),
             pass
-        ).encode(&PlaintextPolicy);
-        let client = RegisteredClient::new(&client, &PlaintextPolicy);
+        ).encode(&policy);
+        let client = RegisteredClient::new(&client, &policy);
         assert!(client.check_authentication(None).is_err());
         assert!(client.check_authentication(Some(pass)).is_ok());
         assert!(client.check_authentication(Some(b"not the passphrase")).is_err());
