@@ -15,6 +15,7 @@ use primitives::scope::Scope;
 /// [rfc6750]: https://tools.ietf.org/html/rfc6750#section-3.1
 #[derive(Debug)]
 pub struct AccessFailure {
+    /// The standard error code representation.
     pub code: Option<ErrorCode>,
 }
 
@@ -41,21 +42,27 @@ pub struct Authenticate {
     pub scope: Option<Scope>,
 }
 
+/// An error signalling the resource access was not permitted.
 #[derive(Debug)]
 pub enum AccessError {
     /// The client tried to access a resource but was not able to.
     AccessDenied {
+        /// A specific cause for denying access.
         failure: AccessFailure,
+
+        /// Information for the `Authenticate` header in the error response.
         authenticate: Authenticate,
     },
 
     /// The client did not provide any bearer authentication.
     NoAuthentication {
+        /// Information for the `Authenticate` header in the error response.
         authenticate: Authenticate,
     },
 
     /// The request itself was malformed.
     InvalidRequest {
+        /// Information for the `Authenticate` header in the error response.
         authenticate: Authenticate,
     },
 }
