@@ -20,7 +20,19 @@ pub trait Registrar {
     /// Determine the allowed scope and redirection url for the client. The registrar may override
     /// the scope entirely or simply substitute a default scope in case none is given. Redirection
     /// urls should be matched verbatim, not partially.
-    fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
+
+    /// Finish the negotiations with the registrar.
+    ///
+    /// The registrar is responsible for choosing the appropriate scope for the client. In the most
+    /// simple case, it will always choose some default scope for the client, regardless of its
+    /// wish. The standard permits this but requires the client to be notified of the resulting
+    /// scope of the token in such a case, when it retrieves its token via the access token
+    /// request.
+    ///
+    /// Another common strategy is to set a default scope or return the intersection with another
+    /// scope.
+    fn negotiate(&self, BoundClient, _scope: Option<Scope>) -> Result<PreGrant, RegistrarError>;
 
     /// Look up a client id.
     fn client(&self, client_id: &str) -> Option<RegisteredClient>;
@@ -49,12 +61,8 @@ pub struct BoundClient<'a> {
     /// The identifier of the client, moved from the request.
     pub client_id: Cow<'a, str>,
 
-    /// The chosen redirection endpoint url, moved from the request of overwritten.
+    /// The chosen redirection endpoint url, moved from the request or overwritten.
     pub redirect_uri: Cow<'a, Url>,
-
-    /// A reference to the client instance, for authentication and to retrieve additional
-    /// information.
-    pub client: &'a EncodedClient,
 }
 
 /// These are the parameters presented to the resource owner when confirming or denying a grant
@@ -145,25 +153,6 @@ pub enum ClientType {
 pub struct ClientMap {
     clients: HashMap<String, EncodedClient>,
     password_policy: Option<Box<PasswordPolicy>>,
-}
-
-impl<'a> BoundClient<'a> {
-    /// Finish the negotiations with the registrar.
-    ///
-    /// The registrar is responsible for choosing the appropriate scope for the client. In the most
-    /// simple case, it will always choose some default scope for the client, regardless of its
-    /// wish. The standard permits this but requires the client to be notified of the resulting
-    /// scope of the token in such a case, when it retrieves its token via the access token
-    /// request.
-    ///
-    /// Currently, this scope agreement algorithm is the only supported method.
-    pub fn negotiate(self, _scope: Option<Scope>) -> PreGrant {
-        PreGrant {
-            client_id: self.client_id.into_owned(),
-            redirect_uri: self.redirect_uri.into_owned(),
-            scope: self.client.default_scope.clone(),
-        }
-    }
 }
 
 impl Client {
@@ -353,7 +342,7 @@ impl ClientMap {
 }
 
 impl Registrar for ClientMap {
-    fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         let client = match self.clients.get(bound.client_id.as_ref()) {
             None => return Err(RegistrarError::Unregistered),
             Some(stored) => stored
@@ -370,7 +359,17 @@ impl Registrar for ClientMap {
             client_id: bound.client_id,
             redirect_uri: bound.redirect_uri.unwrap_or_else(
                 || Cow::Owned(client.redirect_uri.clone())),
-            client: client
+        })
+    }
+
+    /// Always overrides the scope with a default scope.
+    fn negotiate(&self, bound: BoundClient, _scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        let client = self.clients.get(bound.client_id.as_ref())
+            .expect("Bound client appears to not have been constructed with this registrar");
+        Ok(PreGrant {
+            client_id: bound.client_id.into_owned(),
+            redirect_uri: bound.redirect_uri.into_owned(),
+            scope: client.default_scope.clone(),
         })
     }
 

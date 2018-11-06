@@ -550,10 +550,12 @@ impl<'a> AuthorizationPrimitives<'a> {
 }
 
 impl<'a> AuthorizationEndpoint for AuthorizationPrimitives<'a> {
-    fn bound_redirect<'s>(&'s self, bound: ClientUrl<'s>) -> Result<BoundClient<'s>, RegistrarError> {
-        self.registrar
-            .get()
-            .bound_redirect(bound)
+    fn bound_redirect<'s>(&self, bound: ClientUrl<'s>) -> Result<BoundClient<'s>, RegistrarError> {
+        self.registrar.get().bound_redirect(bound)
+    }
+
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        self.registrar.get().negotiate(bound, scope)
     }
 
     fn authorize(&self, grant: Grant) -> Result<String, ()> {
@@ -831,6 +833,9 @@ pub enum OAuthError {
 
     /// Authorization to access the resource has not been granted.
     AccessDenied {
+        /// The underlying cause for denying access.
+        ///
+        /// The http authorization header is set according to this field.
         error: AccessError,
     },
 

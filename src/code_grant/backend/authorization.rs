@@ -7,6 +7,7 @@ use code_grant::error::{AuthorizationError, AuthorizationErrorExt, Authorization
 use code_grant::extensions::CodeExtension;
 use primitives::registrar::{BoundClient, ClientUrl, RegistrarError, PreGrant};
 use primitives::grant::{Extensions, Grant};
+use primitives::scope::Scope;
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait CodeRequest {
@@ -36,7 +37,10 @@ pub trait CodeRequest {
 /// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait AuthorizationEndpoint {
     /// 'Bind' a client and redirect uri from a request to internally approved parameters.
-    fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
+
+    /// Negotiate the scope that the client should get.
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError>;
 
     /// Generate an authorization code for a given grant.
     fn authorize(&self, Grant) -> Result<String, ()>;
@@ -119,8 +123,11 @@ pub fn authorization_code(
         }
     }
 
+    let pre_grant = handler.negotiate(bound_client, scope)
+        .map_err(|_| CodeError::Redirect(prepared_error.with(AuthorizationErrorType::InvalidScope)))?;
+
     Ok(AuthorizationRequest {
-        pre_grant: bound_client.negotiate(scope),
+        pre_grant,
         state: state.map(|cow| cow.into_owned()),
         extensions: grant_extensions,
     })

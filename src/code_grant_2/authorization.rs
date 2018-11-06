@@ -5,8 +5,7 @@ use url::Url;
 use chrono::{Duration, Utc};
 
 use code_grant::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
-use code_grant::extensions::CodeExtension;
-use primitives::registrar::{BoundClient, ClientUrl, RegistrarError, PreGrant};
+use primitives::registrar::{ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::grant::{Extensions, GrantExtension, Extension as ExtensionData, Grant};
 
 /// An extension reacting to an initial authorization code request.
@@ -58,7 +57,7 @@ pub trait Request {
 /// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait Endpoint {
     /// 'Bind' a client and redirect uri from a request to internally approved parameters.
-    fn bound_redirect<'a>(&'a self, bound: ClientUrl<'a>) -> StdResult<BoundClient<'a>, RegistrarError>;
+    fn registrar(&self) -> &Registrar;
 
     /// Generate an authorization code for a given grant.
     fn authorize(&self, Grant) -> StdResult<String, ()>;
@@ -97,7 +96,7 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
         redirect_uri,
     };
 
-    let bound_client = match handler.bound_redirect(client_url) {
+    let bound_client = match handler.registrar().bound_redirect(client_url) {
         Err(RegistrarError::Unregistered) => return Err(Error::Ignore),
         Err(RegistrarError::MismatchedRedirect) => return Err(Error::Ignore),
         Err(RegistrarError::UnauthorizedClient) => return Err(Error::Ignore),
@@ -141,8 +140,13 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
         }
     }
 
+    let pre_grant = handler.registrar()
+        .negotiate(bound_client, scope)
+        .map_err(|_| Error::Redirect(prepared_error.with(
+                AuthorizationErrorType::InvalidScope)))?;
+
     Ok(PendingAuthorization {
-        pre_grant: bound_client.negotiate(scope),
+        pre_grant,
         state: state.map(|cow| cow.into_owned()),
         extensions: grant_extensions,
     })
