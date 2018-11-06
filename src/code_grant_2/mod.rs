@@ -16,6 +16,6 @@
 /// Provides the handling for Authorization Code Requests
 pub mod authorization;
 
-// Provides the handling for Resource Requests
-// pub mod guard;
+/// Provides the handling for Resource Requests
+pub mod guard;
 

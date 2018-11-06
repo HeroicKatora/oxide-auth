@@ -5,6 +5,7 @@ use url::Url;
 use chrono::{Duration, Utc};
 
 use code_grant::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
+use primitives::authorizer::Authorizer;
 use primitives::registrar::{ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::grant::{Extensions, GrantExtension, Extension as ExtensionData, Grant};
 
@@ -60,7 +61,7 @@ pub trait Endpoint {
     fn registrar(&self) -> &Registrar;
 
     /// Generate an authorization code for a given grant.
-    fn authorize(&self, Grant) -> StdResult<String, ()>;
+    fn authorizer(&self) -> &mut Authorizer;
 
     /// The list of extensions of this endpoint.
     fn extensions(&self) -> Box<Iterator<Item=&Extension>>;
@@ -174,7 +175,7 @@ impl PendingAuthorization {
     pub fn authorize(self, handler: &Endpoint, owner_id: Cow<str>) -> self::Result<Url> {
        let mut url = self.pre_grant.redirect_uri.clone();
 
-       let grant = handler.authorize(Grant {
+       let grant = handler.authorizer().authorize(Grant {
            owner_id: owner_id.into_owned(),
            client_id: self.pre_grant.client_id,
            redirect_uri: self.pre_grant.redirect_uri,

@@ -3,7 +3,7 @@ use std::fmt;
 
 use chrono::Utc;
 
-use primitives::grant::Grant;
+use primitives::issuer::Issuer;
 use primitives::scope::Scope;
 
 
@@ -15,6 +15,7 @@ use primitives::scope::Scope;
 /// [rfc6750]: https://tools.ietf.org/html/rfc6750#section-3.1
 #[derive(Debug)]
 pub struct AccessFailure {
+    /// The standard error code representation.
     pub code: Option<ErrorCode>,
 }
 
@@ -41,29 +42,35 @@ pub struct Authenticate {
     pub scope: Option<Scope>,
 }
 
+/// An error signalling the resource access was not permitted.
 #[derive(Debug)]
-pub enum AccessError {
+pub enum Error {
     /// The client tried to access a resource but was not able to.
     AccessDenied {
+        /// A specific cause for denying access.
         failure: AccessFailure,
+
+        /// Information for the `Authenticate` header in the error response.
         authenticate: Authenticate,
     },
 
     /// The client did not provide any bearer authentication.
     NoAuthentication {
+        /// Information for the `Authenticate` header in the error response.
         authenticate: Authenticate,
     },
 
     /// The request itself was malformed.
     InvalidRequest {
+        /// Information for the `Authenticate` header in the error response.
         authenticate: Authenticate,
     },
 }
 
-type AccessResult<T> = Result<T, AccessError>;
+type Result<T> = std::result::Result<T, Error>;
 
 /// Required request methods for deciding on the rights to access a protected resource.
-pub trait GuardRequest {
+pub trait Request {
     /// Received request might not be encoded correctly. This method gives implementors the chance
     /// to signal that a request was received but its encoding was generally malformed. If this is
     /// the case, then no other attribute will be queried. This method exists mainly to make
@@ -83,38 +90,37 @@ pub trait GuardRequest {
 /// Each method will only be invoked exactly once when processing a correct and authorized request,
 /// and potentially less than once when the request is faulty.  These methods should be implemented
 /// by internally using `primitives`, as it is implemented in the `frontend` module.
-pub trait GuardEndpoint {
+pub trait Endpoint {
     /// The list of possible scopes required by the resource endpoint.
     fn scopes(&self) -> &[Scope];
 
-    /// Recover the grant corresponding to a bearer token.
-    fn recover_token(&self, bearer: &str) -> Option<Grant>;
+    /// Issuer which provides the tokens used for authorization by the client.
+    fn issuer(&self) -> &Issuer;
 }
 
 /// The result will indicate whether the resource access should be allowed or not.
-pub fn protect(handler: &GuardEndpoint, req: &GuardRequest)
--> AccessResult<()> {
+pub fn protect(handler: &Endpoint, req: &Request) -> Result<()> {
     let authenticate = Authenticate {
         realm: None,
         scope: handler.scopes().get(0).cloned(),
     };
 
     if !req.valid() {
-        return Err(AccessError::InvalidRequest {
+        return Err(Error::InvalidRequest {
             authenticate
         });
     }
 
     let token = match req.token() {
         Some(token) => token,
-        None => return Err(AccessError::NoAuthentication {
+        None => return Err(Error::NoAuthentication {
             authenticate,
         }),
     };
 
-    let grant = match handler.recover_token(&token) {
+    let grant = match handler.issuer().recover_token(&token) {
         Some(grant) => grant,
-        None => return Err(AccessError::AccessDenied {
+        None => return Err(Error::AccessDenied {
             failure: AccessFailure {
                 code: Some(ErrorCode::InvalidRequest),
             },
@@ -123,7 +129,7 @@ pub fn protect(handler: &GuardEndpoint, req: &GuardRequest)
     };
 
     if grant.until < Utc::now() {
-        return Err(AccessError::AccessDenied {
+        return Err(Error::AccessDenied {
             failure: AccessFailure {
                 code: Some(ErrorCode::InvalidToken),
             },
@@ -134,7 +140,7 @@ pub fn protect(handler: &GuardEndpoint, req: &GuardRequest)
     // Test if any of the possible allowed scopes is included in the grant
     if !handler.scopes().iter()
         .any(|resource_scope| resource_scope.allow_access(&grant.scope)) {
-        return Err(AccessError::AccessDenied {
+        return Err(Error::AccessDenied {
             failure: AccessFailure {
                 code: Some(ErrorCode::InsufficientScope),
             },
@@ -195,19 +201,19 @@ impl AccessFailure {
     }
 }
 
-impl AccessError {
+impl Error {
     /// Convert the guard error into the content used in an WWW-Authenticate header.
     pub fn www_authenticate(self) -> String {
         let mut header = BearerHeader::new();
         match self {
-            AccessError::AccessDenied { failure, authenticate, } => {
+            Error::AccessDenied { failure, authenticate, } => {
                 failure.extend_header(&mut header);
                 authenticate.extend_header(&mut header);
             },
-            AccessError::NoAuthentication { authenticate, } => {
+            Error::NoAuthentication { authenticate, } => {
                 authenticate.extend_header(&mut header);
             },
-            AccessError::InvalidRequest { authenticate, } => {
+            Error::InvalidRequest { authenticate, } => {
                 authenticate.extend_header(&mut header);
             },
         }
