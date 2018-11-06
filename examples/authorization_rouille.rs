@@ -31,8 +31,7 @@ pub fn main() {
     let authorization_codes = Mutex::new(Storage::new(RandomGenerator::new(16)));
 
     // Bearer tokens are signed (but not encrypted) using a passphrase.
-    let passphrase = "This is a super secret phrase";
-    let bearer_tokens = Arc::new(TokenSigner::new_from_passphrase(passphrase, None));
+    let bearer_tokens = Arc::new(TokenSigner::ephemeral());
 
     // Create the main server instance
     let server = Server::new(("localhost", 8020), move |request| {

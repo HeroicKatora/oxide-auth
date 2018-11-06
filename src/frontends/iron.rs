@@ -15,8 +15,6 @@
 //!
 //! /// Example of a main function of a iron server supporting oauth.
 //! pub fn main() {
-//!     let passphrase = "This is a super secret phrase";
-//!
 //!     // Create the main token instance, a code_granter with an iron frontend.
 //!     let ohandler = IronGranter::new(
 //!         // Stores clients in a simple in-memory hash map.
@@ -24,7 +22,7 @@
 //!         // Authorization tokens are 16 byte random keys to a memory hash map.
 //!         Storage::new(RandomGenerator::new(16)),
 //!         // Bearer tokens are signed (but not encrypted) using a passphrase.
-//!         TokenSigner::new_from_passphrase(passphrase, None));
+//!         TokenSigner::ephemeral());
 //!
 //!     // Register a dummy client instance
 //!     let client = Client::public("LocalClient", // Client id

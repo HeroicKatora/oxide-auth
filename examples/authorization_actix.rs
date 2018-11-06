@@ -18,7 +18,6 @@ use oxide_auth::primitives::prelude::*;
 use support::actix::dummy_client;
 use support::open_in_browser;
 
-static PASSPHRASE: &str = "This is a super secret phrase";
 static DENY_TEXT: &str = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
@@ -38,7 +37,7 @@ pub fn main() {
     clients.register_client(client);
 
     let authorizer = Storage::new(RandomGenerator::new(16));
-    let issuer = TokenSigner::new_from_passphrase(&PASSPHRASE, None);
+    let issuer = TokenSigner::ephemeral();
     let scopes = vec!["default".parse().unwrap()].into_boxed_slice();
 
     // Emulate static initialization for complex type

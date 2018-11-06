@@ -10,8 +10,8 @@ use super::grant::Grant;
 use super::generator::{TokenGenerator, Assertion};
 
 use ring::digest::SHA256;
-use ring::pbkdf2::derive as key_derive;
 use ring::hmac::SigningKey;
+use ring::rand::SystemRandom;
 
 /// Issuers create bearer tokens.
 ///
@@ -100,37 +100,30 @@ pub struct TokenSigner {
 
 impl TokenSigner {
     /// Construct a signing instance from a private signing key.
+    ///
+    /// Security notice: Never use a password alone to construct the signing key. Instead, generate
+    /// a new key using a utility such as `openssl rand` that you then store away securely.
     pub fn new(key: SigningKey) -> TokenSigner {
         TokenSigner { signer: Assertion::new(key) }
     }
 
-    /// Construct a signing instance from a passphrase, deriving a signing key in the process.
+    /// Construct a signing instance whose tokens only live for the program execution.
     ///
-    /// The use of this function is DISCOURAGED.
+    /// Useful for rapid prototyping where tokens need not be stored in a persistent database and
+    /// can be invalidated at any time. This interface is provided with simplicity in mind, using
+    /// the default system random generator (`ring::rand::SystemRandom`). If you want an ephemeral
+    /// key but more customization, adapt the implementation.
     ///
-    /// The salt SHOULD be changed to a self-generated one where possible instead of
-    /// relying on the default one which was generated as 32 random bytes with openssl.
-    /// However, at that point fully switching to private SigningKey instances is possibly
-    /// a better option.
-    pub fn new_from_passphrase(passwd: &str, salt: Option<&[u8]>) -> TokenSigner {
-        // Default salt if none was provided, generated with `openssl rand 32`
-        let salt = salt.unwrap_or(
-            b"\xdf\xcf\xddt\n\xd08a*\xc3\x96\xafj<\x8c\xa7\xaa\x15\xce$\x83ND\xb4\xdf\x98%\xcb\xde\x1f\xf0\x9a"
-        );
-
-        let mut out = Vec::new();
-        out.resize(SHA256.block_len, 0);
-
-        key_derive(
-            &SHA256,
-            // ~32000 iterations, not quite the 10^6 of Lastpass but also more than 1ms on an i5
-            2 << 16,
-            salt,
-            passwd.as_bytes(),
-            out.as_mut_slice());
-        let key = SigningKey::new(&SHA256, out.as_slice());
-
-        TokenSigner { signer: Assertion::new(key) }
+    /// ```
+    /// # use oxide_auth::primitives::issuer::TokenSigner;
+    /// TokenSigner::new(
+    ///     ring::hmac::SigningKey::generate(
+    ///         &ring::digest::SHA256, 
+    ///         &mut ring::rand::SystemRandom::new())
+    ///     .unwrap());
+    /// ```
+    pub fn ephemeral() -> TokenSigner {
+        TokenSigner::new(SigningKey::generate(&SHA256, &mut SystemRandom::new()).unwrap())
     }
 }
 
@@ -203,8 +196,7 @@ pub mod tests {
 
     #[test]
     fn signer_test_suite() {
-        let passwd = "Some secret password";
-        let mut signer = TokenSigner::new_from_passphrase(passwd, None);
+        let mut signer = TokenSigner::ephemeral();
         simple_test_suite(&mut signer);
     }
 

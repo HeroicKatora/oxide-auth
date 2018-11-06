@@ -46,8 +46,6 @@ mod main {
     }
 
     pub fn example() {
-        let passphrase = "This is a super secret phrase";
-
         let mut clients = ClientMap::new();
         // Register a dummy client instance
         let client = Client::public(
@@ -64,7 +62,7 @@ mod main {
             // Authorization tokens are 16 byte random keys to a memory hash map.
             Storage::new(RandomGenerator::new(16)),
             // Bearer tokens are signed (but not encrypted) using a passphrase.
-            TokenSigner::new_from_passphrase(passphrase, None)
+            TokenSigner::ephemeral(),
         );
 
         /// Middleware that will show a helpful message to unauthorized requests

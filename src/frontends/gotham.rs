@@ -21,7 +21,7 @@
 //!      let ohandler = GothamOauthProvider::new(
 //!          ClientMap::new(),
 //!          Storage::new(RandomGenerator::new(16)),
-//!          TokenSigner::new_from_passphrase("foobar", None)
+//!          TokenSigner::ephemeral()
 //!      );
 //!      let (chain, pipelines) = single_pipeline(
 //!          new_pipeline()

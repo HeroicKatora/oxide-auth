@@ -57,7 +57,7 @@ another possible security pit fall. Note that you may want to migrate to a
 self-created `ring::hmac::SigningKey` instance, using a randomly generated salt
 and a self-chosen, secure password based key derivation function to derive the
 key bytes. Alternatively, you can now create a `TokenSigner` that uses an
-ephermal key, i.e. the key will change for each program invocation,
+ephemeral key, i.e. the key will change for each program invocation,
 invalidating all issued tokens of other program runs.
 
 Rationale: Password based, low-entropy keys do not provide adequate security.
