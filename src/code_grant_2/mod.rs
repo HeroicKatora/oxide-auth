@@ -1,4 +1,4 @@
-//! Available backend algorithsm.
+//! Available backend algorithms.
 //!
 //! The backend codifies the requirements from the rfc into types and functions as safely as
 //! possible. It is, in contrast to the frontend, not concrete in the required type but rather
@@ -10,8 +10,8 @@
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 
-// /// Provides the handling for Access Token Requests
-// pub mod accesstoken;
+/// Provides the handling for Access Token Requests
+pub mod accesstoken;
 
 /// Provides the handling for Authorization Code Requests
 pub mod authorization;
