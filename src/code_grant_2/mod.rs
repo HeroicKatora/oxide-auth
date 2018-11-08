@@ -19,3 +19,6 @@ pub mod authorization;
 /// Provides the handling for Resource Requests
 pub mod guard;
 
+/// Polymorphic HTTP wrappers for code grant flows.
+pub mod frontend;
+
