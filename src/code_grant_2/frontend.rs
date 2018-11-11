@@ -88,9 +88,19 @@ use primitives::grant::Grant;
 use primitives::registrar::{ClientUrl, BoundClient, Registrar, RegistrarError, RegisteredClient};
 use primitives::scope::Scope;
 
-use super::accesstoken::{Extension as AccessTokenExtension, Endpoint as AccessTokenEndpoint};
-use super::authorization::{Error as AuthorizationError, ErrorUrl, Extension as AuthorizationExtension, Endpoint as AuthorizationEndpoint};
-use super::guard::{Error as ResourceError, /*Extension as GuardExtension,*/ Endpoint as GuardEndpoint};
+use super::accesstoken::{
+    Extension as AccessTokenExtension,
+    Endpoint as AccessTokenEndpoint,
+    PrimitiveError as AccessTokenPrimitiveError};
+use super::authorization::{
+    Error as AuthorizationError,
+    ErrorUrl,
+    Extension as AuthorizationExtension,
+    Endpoint as AuthorizationEndpoint};
+use super::guard::{
+    Error as ResourceError,
+    /*Extension as GuardExtension,*/
+    Endpoint as GuardEndpoint};
 
 use url::Url;
 use base64;
@@ -128,6 +138,8 @@ pub struct OldQueryParameter<'a> {
 }
 
 /// Allows access to the query parameters in an url or a body.
+///
+/// Use one of the listed implementations below.
 ///
 /// You should generally not have to implement this trait yourself, and if you
 /// do there are additional requirements on your implementation to guarantee
@@ -220,7 +232,7 @@ impl Into<Url> for ErrorRedirect {
 /// but theoretically other requests are possible.
 pub trait WebRequest {
     /// The error generated from access of malformed or invalid requests.
-    type Error: From<OAuthError>;
+    type Error;
 
     /// The corresponding type of Responses returned from this module.
     type Response: WebResponse<Error=Self::Error>;
@@ -243,9 +255,13 @@ pub trait WebRequest {
 }
 
 /// Response representation into which the Request is transformed by the code_grant types.
-pub trait WebResponse where Self: Sized {
+///
+/// Needs `Sized` because it is constructed within the flow, not externally injected and only
+/// modified. Note that this may change in a future version of the api. But currently all popular
+/// web server implementations I know of construct responses within the handler.
+pub trait WebResponse: Sized {
     /// The error generated when trying to construct an unhandled or invalid response.
-    type Error: From<OAuthError>;
+    type Error;
 
     /// A response which will redirect the user-agent to which the response is issued.
     fn redirect(url: Url) -> Result<Self, Self::Error>;
@@ -273,6 +289,69 @@ pub trait WebResponse where Self: Sized {
     fn with_authorization(self, kind: &str) -> Result<Self, Self::Error>;
 }
 
+/// Fuses requests and primitives into a coherent system to give a response.
+///
+/// There are multiple different valid ways to produce responses and react to internal errors for a
+/// single request type. This trait should provide those mechanisms, including trying to recover
+/// from primitive errors where appropriate.
+///
+/// To reduce the number of necessary impls and provide a single interface to a frontend, this
+/// trait defines accessor methods for all possibly needed primitives. Note that not all flows
+/// actually access all primitives. Thus, an implementation does not necessarily have to return
+/// something in `registrar`, `authorizer`, `issuer_mut` but failing to do so will also fail flows
+/// that try to use them.
+pub trait Endpoint<Request: WebRequest> {
+    /// The error typed used as the error representation of each flow.
+    type Error: From<OAuthError> + From<Request::Error>;
+
+    /// A registrar if this endpoint can access one.
+    ///
+    /// Returning `None` will implicate failing any flow that requires a registrar but does not
+    /// have any effect on flows that do not require one.
+    fn registrar(&self) -> Option<&Registrar>;
+    
+    /// An authorizer if this endpoint can access one.
+    ///
+    /// Returning `None` will implicate failing any flow that requires an authorizer but does not
+    /// have any effect on flows that do not require one.
+    fn authorizer_mut(&mut self) -> Option<&mut Authorizer>;
+
+    /// An issuer if this endpoint can access one.
+    ///
+    /// Returning `None` will implicate failing any flow that requires an issuer but does not have
+    /// any effect on flows that do not require one.
+    fn issuer_mut(&mut self) -> Option<&mut Issuer>;
+
+    /// Try to recover from a primitive error during access token flow.
+    ///
+    /// Depending on an endpoints additional information about its primitives or extensions, it may
+    /// try to recover from this error by resetting states and returning a `TryAgain` overall. The
+    /// default implementation returns with an opaque, converted `OAuthError::PrimitiveError`.
+    fn access_token_error(&mut self, _error: AccessTokenPrimitiveError) -> Self::Error {
+        OAuthError::PrimitiveError.into()
+    }
+}
+
+impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
+    type Error = E::Error;
+
+    fn registrar(&self) -> Option<&Registrar> {
+        (**self).registrar()
+    }
+    
+    fn authorizer_mut(&mut self) -> Option<&mut Authorizer> {
+        (**self).authorizer_mut()
+    }
+
+    fn issuer_mut(&mut self) -> Option<&mut Issuer> {
+        (**self).issuer_mut()
+    }
+
+    fn access_token_error(&mut self, error: AccessTokenPrimitiveError) -> Self::Error {
+        (**self).access_token_error(error)
+    }
+}
+
 /// Conveniently checks the authorization from a request.
 pub trait OwnerAuthorizer<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
@@ -281,32 +360,37 @@ pub trait OwnerAuthorizer<Request: WebRequest> {
 }
 
 /// All relevant methods for handling authorization code requests.
-pub struct AuthorizationFlow<'a> {
-    extensions: Vec<&'a AuthorizationExtension>,
+pub struct AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+    endpoint: E,
+    request: R,
 }
 
 /// A processed authentication request that is waiting for authorization by the resource owner.
-pub struct PendingAuthorization<'a, Req: WebRequest> {
-    lf: PhantomData<&'a ()>,
-    phantom: PhantomData<Req>,
+pub struct PendingAuthorization<E, R> where E: Endpoint<R>, R: WebRequest {
+    endpoint: E,
+    phantom: PhantomData<R>,
 }
 
 /// Result type from processing an authentication request.
-pub enum AuthorizationResult<'a, Request: WebRequest> {
+pub enum AuthorizationResult<E, R> where E: Endpoint<R>, R: WebRequest {
     /// No error happened during processing and the resource owner can decide over the grant.
     Pending {
         /// The request passed in.
-        request: Request,
+        request: R,
 
         /// A utility struct with which the request can be decided.
-        pending: PendingAuthorization<'a, Request>
+        pending: PendingAuthorization<E, R>
     },
 
     /// The request was faulty, e.g. wrong client data.
-    Failed(Request::Response),
+    Failed(R::Response),
 
     /// An internal error happened during the request.
-    Error(Request::Error),
+    Error(E::Error),
+}
+
+impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+    
 }
 
 /// All relevant methods for granting access token from authorization codes.
