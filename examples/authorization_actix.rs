@@ -43,15 +43,15 @@ pub fn main() {
     // Emulate static initialization for complex type
     let scopes: &'static _ = Box::leak(scopes);
 
-    let endpoint: Addr<_> = CodeGrantEndpoint::new((clients, authorizer, issuer))
-        .with_authorization(|&mut (ref client, ref mut authorizer, _)| {
+    let endpoint: Addr<_> = CodeGrantEndpoint::new((clients, authorizer, issuer, scopes))
+        .with_authorization(|&mut (ref client, ref mut authorizer, _, _)| {
             AuthorizationFlow::new(client, authorizer)
         })
-        .with_grant(|&mut (ref client, ref mut authorizer, ref mut issuer)| {
+        .with_grant(|&mut (ref client, ref mut authorizer, ref mut issuer, _)| {
             GrantFlow::new(client, authorizer, issuer)
         })
-        .with_guard(move |&mut (_, _, ref mut issuer)| {
-            AccessFlow::new(issuer, scopes)
+        .with_guard(move |&mut (_, _, ref mut issuer, ref mut scope)| {
+            AccessFlow::new(issuer, scope)
         })
         .start();
 
