@@ -48,7 +48,7 @@ pub trait Request {
     fn method(&self) -> Option<Cow<str>>;
 
     /// Retrieve an additional parameter used in an extension
-    fn extension(&self, &str) -> Option<Cow<str>>;
+    fn extension(&self, key: &str) -> Option<Cow<str>>;
 }
 
 /// Required functionality to respond to authorization code requests.
@@ -61,7 +61,7 @@ pub trait Endpoint {
     fn registrar(&self) -> &Registrar;
 
     /// Generate an authorization code for a given grant.
-    fn authorizer(&self) -> &mut Authorizer;
+    fn authorizer(&mut self) -> &mut Authorizer;
 
     /// The list of extensions of this endpoint.
     fn extensions(&self) -> Box<Iterator<Item=&Extension>>;
@@ -172,7 +172,7 @@ impl PendingAuthorization {
 
     /// Inform the backend about consent from a resource owner. Use negotiated parameters to
     /// authorize a client for an owner.
-    pub fn authorize(self, handler: &Endpoint, owner_id: Cow<str>) -> self::Result<Url> {
+    pub fn authorize(self, handler: &mut Endpoint, owner_id: Cow<str>) -> self::Result<Url> {
        let mut url = self.pre_grant.redirect_uri.clone();
 
        let grant = handler.authorizer().authorize(Grant {

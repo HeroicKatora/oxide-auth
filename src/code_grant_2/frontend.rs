@@ -93,10 +93,12 @@ use super::accesstoken::{
     Endpoint as AccessTokenEndpoint,
     PrimitiveError as AccessTokenPrimitiveError};
 use super::authorization::{
+    authorization_code,
     Error as AuthorizationError,
     ErrorUrl,
     Extension as AuthorizationExtension,
-    Endpoint as AuthorizationEndpoint};
+    Endpoint as AuthorizationEndpoint,
+    Request as AuthorizationRequest};
 use super::guard::{
     Error as ResourceError,
     /*Extension as GuardExtension,*/
@@ -173,7 +175,7 @@ pub unsafe trait QueryParameter {
 /// that normalization into memory with unrelated lifetime is always possible.
 ///
 /// Internally a hashmap but this may change due to optimizations.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct NormalizedParameter {
     inner: HashMap<Cow<'static, str>, Cow<'static, str>>,
 }
@@ -242,16 +244,16 @@ pub trait WebRequest {
     /// An Err return value indicates a malformed query or an otherwise
     /// malformed WebRequest. Note that an empty query should result in
     /// `Ok(HashMap::new())` instead of an Err.
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, ()>;
+    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error>;
 
     /// Retrieve the parsed `application/x-form-urlencoded` body of the request.
     ///
     /// An Err value / indicates a malformed body or a different Content-Type.
-    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, ()>;
+    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error>;
 
     /// Contents of the authorization header or none if none exists. An Err value indicates a
     /// malformed header or request.
-    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>;
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error>;
 }
 
 /// Response representation into which the Request is transformed by the code_grant types.
@@ -360,9 +362,22 @@ pub trait OwnerAuthorizer<Request: WebRequest> {
 }
 
 /// All relevant methods for handling authorization code requests.
-pub struct AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
-    endpoint: E,
+struct AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+    endpoint: WrappedAuthorization<E, R>,
     request: R,
+}
+
+struct WrappedAuthorization<E: Endpoint<R>, R: WebRequest>(E, PhantomData<R>);
+
+struct WrappedRequest<'a, R: WebRequest + 'a>{
+    /// Original request.
+    request: PhantomData<R>,
+
+    /// The query in the url.
+    query: Cow<'a, QueryParameter + 'static>,
+
+    /// An error if one occurred.
+    error: Option<R::Error>,
 }
 
 /// A processed authentication request that is waiting for authorization by the resource owner.
@@ -382,7 +397,7 @@ pub enum AuthorizationResult<E, R> where E: Endpoint<R>, R: WebRequest {
         pending: PendingAuthorization<E, R>
     },
 
-    /// The request was faulty, e.g. wrong client data.
+    /// The request was faulty, e.g. wrong client data, but there is a well defined response.
     Failed(R::Response),
 
     /// An internal error happened during the request.
@@ -390,7 +405,104 @@ pub enum AuthorizationResult<E, R> where E: Endpoint<R>, R: WebRequest {
 }
 
 impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
-    
+    fn prepare(endpoint: E, request: R) -> Result<Self, E::Error> {
+        unimplemented!()
+    }
+
+    fn execute(mut self) -> AuthorizationResult<E, R> {
+        let wrapped = WrappedRequest::new(&mut self.request);
+
+        let negotiated = match authorization_code(&self.endpoint, &wrapped) {
+            Err(AuthorizationError::Ignore)
+                => return AuthorizationResult::Error(
+                    OAuthError::DenySilently.into()),
+            Err(AuthorizationError::Redirect(url))
+                => return R::Response::redirect_error(ErrorRedirect(url))
+                    .map(AuthorizationResult::Failed)
+                    .unwrap_or_else(|err| AuthorizationResult::Error(err.into())),
+            Ok(negotiated) => negotiated,
+        };
+
+        unimplemented!()
+        /*
+
+        AuthorizationResult::Pending {
+            request,
+            pending: PendingAuthorization {
+                primitives: self.primitives,
+                request: negotiated,
+                phantom: PhantomData,
+            }
+        }*/
+    }
+}
+
+impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorization<E, R> {
+    fn registrar(&self) -> &Registrar {
+        self.0.registrar().unwrap()
+    }
+
+    fn authorizer(&mut self) -> &mut Authorizer {
+        self.0.authorizer_mut().unwrap()
+    }
+
+    fn extensions(&self) -> Box<Iterator<Item=&AuthorizationExtension>> {
+        // FIXME: forward extensions
+        Box::new(None.into_iter())
+    }
+}
+
+impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
+    pub fn new(request: &'a mut R) -> Self {
+        Self::new_or_fail(request)
+            .unwrap_or_else(Self::from_err)
+    }
+
+    fn new_or_fail(request: &'a mut R) -> Result<Self, R::Error> {
+        Ok(WrappedRequest {
+            request: PhantomData,
+            query: request.query()?,
+            error: None,
+        })
+    }
+
+    fn from_err(err: R::Error) -> Self {
+        WrappedRequest {
+            request: PhantomData,
+            query: Cow::Owned(Default::default()),
+            error: Some(err),
+        }
+    }
+}
+
+impl<'a, R: WebRequest + 'a> AuthorizationRequest for WrappedRequest<'a, R> {
+    fn valid(&self) -> bool {
+        self.error.is_none()
+    }
+
+    fn client_id(&self) -> Option<Cow<str>> {
+        unimplemented!()
+    }
+
+    fn scope(&self) -> Option<Cow<str>> {
+        unimplemented!()
+    }
+
+    fn redirect_uri(&self) -> Option<Cow<str>> {
+        unimplemented!()
+    }
+
+    fn state(&self) -> Option<Cow<str>> {
+        unimplemented!()
+    }
+
+    fn method(&self) -> Option<Cow<str>> {
+        unimplemented!()
+    }
+
+    fn extension(&self, key: &str) -> Option<Cow<str>> {
+        unimplemented!()
+    }
 }
 
 /// All relevant methods for granting access token from authorization codes.
