@@ -423,6 +423,8 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             Ok(negotiated) => negotiated,
         };
 
+        std::mem::drop(wrapped);
+
         unimplemented!()
         /*
 
@@ -481,27 +483,27 @@ impl<'a, R: WebRequest + 'a> AuthorizationRequest for WrappedRequest<'a, R> {
     }
 
     fn client_id(&self) -> Option<Cow<str>> {
-        unimplemented!()
+        self.query.unique_value("client_id")
     }
 
     fn scope(&self) -> Option<Cow<str>> {
-        unimplemented!()
+        self.query.unique_value("scope")
     }
 
     fn redirect_uri(&self) -> Option<Cow<str>> {
-        unimplemented!()
+        self.query.unique_value("redirect_uri")
     }
 
     fn state(&self) -> Option<Cow<str>> {
-        unimplemented!()
+        self.query.unique_value("state")
     }
 
     fn method(&self) -> Option<Cow<str>> {
-        unimplemented!()
+        self.query.unique_value("method")
     }
 
     fn extension(&self, key: &str) -> Option<Cow<str>> {
-        unimplemented!()
+        self.query.unique_value(key)
     }
 }
 
