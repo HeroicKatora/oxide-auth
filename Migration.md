@@ -34,6 +34,18 @@ data structures.
 
 -----
 
+The trait method `redirect_error` has been moved from `WebResponse` to
+`Endpoint`. Its default implementation remains unchanged, simply converting into
+a response and the error into the endpoint error.
+
+Rationale: It is the endpoint that contains the implementation specific logic.
+Since the error can only be enriched with additional information or references
+to other pages before it is converted to a `WebResponse`, this logic is not
+universal for implementations for `WebResponse` but rather needs customization
+from the endpoint.
+
+-----
+
 [WIP] The `code_grant::frontend` flow design has been revamped into a unified
 trait. This replaces the explicit `…Flow` constructors while allowing greater
 customization of errors, especially allowing the frontend to react in a custom

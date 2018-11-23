@@ -275,13 +275,6 @@ pub trait WebResponse: Sized {
     /// Json repsonse data, with media type `aplication/json.
     fn json(data: &str) -> Result<Self, Self::Error>;
 
-    /// Construct a redirect for the error. Here the response may choose to augment the error with
-    /// additional information (such as help websites, description strings), hence the default
-    /// implementation which does not do any of that.
-    fn redirect_error(target: ErrorRedirect) -> Result<Self, Self::Error> {
-        Self::redirect(target.into())
-    }
-
     /// Set the response status to 400
     fn as_client_error(self) -> Result<Self, Self::Error>;
 
@@ -332,6 +325,13 @@ pub trait Endpoint<Request: WebRequest> {
     /// default implementation returns with an opaque, converted `OAuthError::PrimitiveError`.
     fn access_token_error(&mut self, _error: AccessTokenPrimitiveError) -> Self::Error {
         OAuthError::PrimitiveError.into()
+    }
+
+    /// Construct a redirect for the error. Here the response may choose to augment the error with
+    /// additional information (such as help websites, description strings), hence the default
+    /// implementation which does not do any of that.
+    fn redirect_error(&mut self, target: ErrorRedirect) -> Result<Request::Response, Self::Error> {
+        Request::Response::redirect(target.into()).map_err(Into::into)
     }
 }
 
@@ -464,7 +464,7 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
 fn authorization_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: AuthorizationError) -> Result<R::Response, E::Error> {
     match error {
         AuthorizationError::Ignore => Err(OAuthError::DenySilently.into()),
-        AuthorizationError::Redirect(target) => R::Response::redirect_error(ErrorRedirect(target)).map_err(Into::into),
+        AuthorizationError::Redirect(target) => e.redirect_error(ErrorRedirect(target)).map_err(Into::into),
     }
 }
 
