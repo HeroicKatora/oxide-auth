@@ -381,15 +381,22 @@ struct WrappedRequest<'a, R: WebRequest + 'a>{
     error: Option<R::Error>,
 }
 
-/// A processed authentication request that is waiting for authorization by the resource owner.
-pub struct AuthorizationPending<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
+struct AuthorizationPending<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
     endpoint: &'a mut WrappedAuthorization<E, R>,
     pending: Pending,
     request: R,
 }
 
+/// A processed authentication request that is waiting for authorization by the resource owner.
+pub struct AuthorizationPartial<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
+    inner: AuthorizationPartialInner<'a, E, R>,
+
+    /// TODO: offer this in the public api instead of dropping the request.
+    _with_request: Option<Box<FnOnce(R) -> ()>>,
+}
+
 /// Result type from processing an authentication request.
-pub enum AuthorizationResult<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
+enum AuthorizationPartialInner<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
     /// No error happened during processing and the resource owner can decide over the grant.
     Pending {
         /// A utility struct with which the request can be decided.
@@ -450,29 +457,34 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     /// It is expected that the endpoint primitive functions are consistent, i.e. they don't begin
     /// returning `None` after having returned `Some(registrar)` previously for example. If this
     /// invariant is violated, this function may panic.
-    pub fn execute(&mut self, mut request: R) -> AuthorizationResult<E, R> {
+    pub fn execute(&mut self, mut request: R) -> AuthorizationPartial<E, R> {
         let negotiated = authorization_code(
             &self.endpoint,
             &WrappedRequest::new(&mut request));
 
-        match negotiated {
+        let inner = match negotiated {
             Err(err) => match authorization_error(&mut self.endpoint.0, err) {
-                Ok(response) => AuthorizationResult::Failed {
+                Ok(response) => AuthorizationPartialInner::Failed {
                     request,
                     response,
                 },
-                Err(error) => AuthorizationResult::Error {
+                Err(error) => AuthorizationPartialInner::Error {
                     request,
                     error,
                 },
             },
-            Ok(negotiated) => AuthorizationResult::Pending {
+            Ok(negotiated) => AuthorizationPartialInner::Pending {
                 pending: AuthorizationPending {
                     endpoint: &mut self.endpoint,
                     pending: negotiated,
                     request,
                 }
             },
+        };
+
+        AuthorizationPartial {
+            inner,
+            _with_request: None,
         }
     }
 }
@@ -484,9 +496,24 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: Authoriz
     }
 }
 
+impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
+    pub fn finish(self) -> Result<R::Response, E::Error> 
+    where
+        for<'e> &'e E: OwnerAuthorizer<R>
+    {
+        let (_request, result) = match self.inner {
+            AuthorizationPartialInner::Pending { pending, } => pending.finish(),
+            AuthorizationPartialInner::Failed { request, response } => (request, Ok(response)),
+            AuthorizationPartialInner::Error { request, error } => (request, Err(error)),
+        };
+
+        result
+    }
+}
+
 impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// Resolve the pending status using the endpoint to query owner consent.
-    pub fn finish(mut self) -> Result<R::Response, E::Error> 
+    fn finish(mut self) -> (R, Result<R::Response, E::Error>)
     where
         for<'e> &'e E: OwnerAuthorizer<R>
     {
@@ -494,9 +521,9 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
 
         match checked {
             OwnerAuthorization::Denied => self.deny(),
-            OwnerAuthorization::InProgress(resp) => Ok(resp),
+            OwnerAuthorization::InProgress(resp) => self.in_progress(resp),
             OwnerAuthorization::Authorized(who) => self.authorize(who),
-            OwnerAuthorization::Error(err) => Err(err.into()),
+            OwnerAuthorization::Error(err) => (self.request, Err(err.into())),
         }
     }
 
@@ -506,24 +533,28 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// acknowledged and pre-approved a specific grant.  The response can also be used to determine
     /// the resource owner, if no login has been detected or if multiple accounts are allowed to
     /// be logged in at the same time.
-    pub fn in_progress(self, response: R::Response) -> R::Response {
-        response
+    fn in_progress(self, response: R::Response) -> (R, Result<R::Response, E::Error>) {
+        (self.request, Ok(response))
     }
 
     /// Denies the request, the client is not allowed access.
-    pub fn deny(self) -> Result<R::Response, E::Error> {
-        match self.pending.deny() {
+    fn deny(self) -> (R, Result<R::Response, E::Error>) {
+        let result = match self.pending.deny() {
             Ok(url) => R::Response::redirect(url).map_err(Into::into),
             Err(err) => authorization_error(&mut self.endpoint.0, err),
-        }
+        };
+
+        (self.request, result)
     }
 
     /// Tells the system that the resource owner with the given id has approved the grant.
-    pub fn authorize(self, who: String) -> Result<R::Response, E::Error> {
-        match self.pending.authorize(self.endpoint, who.into()) {
+    fn authorize(self, who: String) -> (R, Result<R::Response, E::Error>) {
+        let result = match self.pending.authorize(self.endpoint, who.into()) {
             Ok(url) => R::Response::redirect(url).map_err(Into::into),
             Err(err) => authorization_error(&mut self.endpoint.0, err),
-        }
+        };
+
+        (self.request, result)
     }
 }
 
