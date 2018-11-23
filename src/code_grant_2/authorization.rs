@@ -77,7 +77,7 @@ pub trait Endpoint {
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
 pub fn authorization_code(handler: &Endpoint, request: &Request)
--> self::Result<PendingAuthorization> {
+-> self::Result<Pending> {
     if !request.valid() {
         return Err(Error::Ignore)
     }
@@ -146,7 +146,7 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
         .map_err(|_| Error::Redirect(prepared_error.with(
                 AuthorizationErrorType::InvalidScope)))?;
 
-    Ok(PendingAuthorization {
+    Ok(Pending {
         pre_grant,
         state: state.map(|cow| cow.into_owned()),
         extensions: grant_extensions,
@@ -155,13 +155,13 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
 
 /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
 /// can signal a reponse using this object.
-pub struct PendingAuthorization {
+pub struct Pending {
     pre_grant: PreGrant,
     state: Option<String>,
     extensions: Extensions,
 }
 
-impl PendingAuthorization {
+impl Pending {
     /// Denies the request, which redirects to the client for which the request originated.
     pub fn deny(self) -> Result<Url> {
         let url = self.pre_grant.redirect_uri;
@@ -170,9 +170,11 @@ impl PendingAuthorization {
         Err(Error::Redirect(error))
     }
 
-    /// Inform the backend about consent from a resource owner. Use negotiated parameters to
-    /// authorize a client for an owner.
-    pub fn authorize(self, handler: &mut Endpoint, owner_id: Cow<str>) -> self::Result<Url> {
+    /// Inform the backend about consent from a resource owner.
+    ///
+    /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
+    /// same endpoint as was used to create the pending request.
+    pub fn authorize(self, handler: &mut Endpoint, owner_id: Cow<str>) -> Result<Url> {
        let mut url = self.pre_grant.redirect_uri.clone();
 
        let grant = handler.authorizer().authorize(Grant {

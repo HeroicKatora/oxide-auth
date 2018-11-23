@@ -98,7 +98,8 @@ use super::authorization::{
     ErrorUrl,
     Extension as AuthorizationExtension,
     Endpoint as AuthorizationEndpoint,
-    Request as AuthorizationRequest};
+    Request as AuthorizationRequest,
+    Pending};
 use super::guard::{
     Error as ResourceError,
     /*Extension as GuardExtension,*/
@@ -362,9 +363,9 @@ pub trait OwnerAuthorizer<Request: WebRequest> {
 }
 
 /// All relevant methods for handling authorization code requests.
-struct AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+pub struct AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     endpoint: WrappedAuthorization<E, R>,
-    request: R,
+    request: PhantomData<R>,
 }
 
 struct WrappedAuthorization<E: Endpoint<R>, R: WebRequest>(E, PhantomData<R>);
@@ -381,61 +382,112 @@ struct WrappedRequest<'a, R: WebRequest + 'a>{
 }
 
 /// A processed authentication request that is waiting for authorization by the resource owner.
-pub struct PendingAuthorization<E, R> where E: Endpoint<R>, R: WebRequest {
-    endpoint: E,
-    phantom: PhantomData<R>,
+pub struct AuthorizationPending<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
+    endpoint: &'a mut WrappedAuthorization<E, R>,
+    pending: Pending,
+    request: R,
 }
 
 /// Result type from processing an authentication request.
-pub enum AuthorizationResult<E, R> where E: Endpoint<R>, R: WebRequest {
+pub enum AuthorizationResult<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
     /// No error happened during processing and the resource owner can decide over the grant.
     Pending {
-        /// The request passed in.
-        request: R,
-
         /// A utility struct with which the request can be decided.
-        pending: PendingAuthorization<E, R>
+        pending: AuthorizationPending<'a, E, R>,
     },
 
     /// The request was faulty, e.g. wrong client data, but there is a well defined response.
-    Failed(R::Response),
+    Failed {
+        /// The request passed in.
+        request: R,
+
+        /// Final response to the client.
+        ///
+        /// This should be forwarded unaltered to the client. Modifications and amendments risk
+        /// deviating from the OAuth2 rfc, enabling DoS, or even leaking secrets. Modify with care.
+        response: R::Response,
+    },
 
     /// An internal error happened during the request.
-    Error(E::Error),
+    Error {
+        /// The request passed in.
+        request: R,
+
+        /// Error that happened while handling the request.
+        error: E::Error,
+    },
 }
 
 impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
-    fn prepare(endpoint: E, request: R) -> Result<Self, E::Error> {
-        unimplemented!()
+    pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
+        if endpoint.registrar().is_none() {
+            return Err(OAuthError::PrimitiveError.into());
+        }
+
+        if endpoint.authorizer_mut().is_none() {
+            return Err(OAuthError::PrimitiveError.into());
+        }
+
+        Ok(AuthorizationFlow {
+            endpoint: WrappedAuthorization(endpoint, PhantomData),
+            request: PhantomData,
+        })
     }
 
-    fn execute(mut self) -> AuthorizationResult<E, R> {
-        let wrapped = WrappedRequest::new(&mut self.request);
+    pub fn execute(&mut self, mut request: R) -> AuthorizationResult<E, R> {
+        let negotiated = authorization_code(
+            &self.endpoint,
+            &WrappedRequest::new(&mut request));
 
-        let negotiated = match authorization_code(&self.endpoint, &wrapped) {
-            Err(AuthorizationError::Ignore)
-                => return AuthorizationResult::Error(
-                    OAuthError::DenySilently.into()),
-            Err(AuthorizationError::Redirect(url))
-                => return R::Response::redirect_error(ErrorRedirect(url))
-                    .map(AuthorizationResult::Failed)
-                    .unwrap_or_else(|err| AuthorizationResult::Error(err.into())),
-            Ok(negotiated) => negotiated,
-        };
+        match negotiated {
+            Err(err) => match authorization_error(&mut self.endpoint.0, err) {
+                Ok(response) => AuthorizationResult::Failed {
+                    request,
+                    response,
+                },
+                Err(error) => AuthorizationResult::Error {
+                    request,
+                    error,
+                },
+            },
+            Ok(negotiated) => AuthorizationResult::Pending {
+                pending: AuthorizationPending {
+                    endpoint: &mut self.endpoint,
+                    pending: negotiated,
+                    request,
+                }
+            },
+        }
+    }
+}
 
-        std::mem::drop(wrapped);
+fn authorization_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: AuthorizationError) -> Result<R::Response, E::Error> {
+    match error {
+        AuthorizationError::Ignore => Err(OAuthError::DenySilently.into()),
+        AuthorizationError::Redirect(target) => R::Response::redirect_error(ErrorRedirect(target)).map_err(Into::into),
+    }
+}
 
-        unimplemented!()
-        /*
+impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
+    /// Resolve the pending status using the endpoint to query owner consent.
+    pub fn finish(self) -> Result<R::Response, E::Error> 
+    where
+        for<'e> &'e E: OwnerAuthorizer<R>
+    {
+        let checked = self.endpoint.0.check_authorization(self.request, self.pending.pre_grant());
 
-        AuthorizationResult::Pending {
-            request,
-            pending: PendingAuthorization {
-                primitives: self.primitives,
-                request: negotiated,
-                phantom: PhantomData,
-            }
-        }*/
+        match checked {
+            OwnerAuthorization::Denied => match self.pending.deny() {
+                Ok(url) => R::Response::redirect(url).map_err(Into::into),
+                Err(err) => authorization_error(&mut self.endpoint.0, err),
+            },
+            OwnerAuthorization::InProgress(resp) => Ok(resp),
+            OwnerAuthorization::Authorized(who) => match self.pending.authorize(self.endpoint, who.into()) {
+                Ok(url) => R::Response::redirect(url).map_err(Into::into),
+                Err(err) => authorization_error(&mut self.endpoint.0, err),
+            },
+            OwnerAuthorization::Error(err) => Err(err.into()),
+        }
     }
 }
 
