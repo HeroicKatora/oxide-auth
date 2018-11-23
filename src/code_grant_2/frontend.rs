@@ -359,7 +359,7 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
 pub trait OwnerAuthorizer<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
-    fn check_authorization(self, Request, pre_grant: &PreGrant) -> OwnerAuthorization<Request::Response>;
+    fn check_authorization(self, &mut Request, pre_grant: &PreGrant) -> OwnerAuthorization<Request::Response>;
 }
 
 /// All relevant methods for handling authorization code requests.
@@ -419,6 +419,15 @@ pub enum AuthorizationResult<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebReque
 }
 
 impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+    /// Check that the endpoint supports the necessary operations for handling requests.
+    ///
+    /// Binds the endpoint to a particular type of request that it supports, for many
+    /// implementations this is probably single type anyways.
+    ///
+    /// ## Panics
+    ///
+    /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
+    /// endpoint, in cases that would normally have been caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.registrar().is_none() {
             return Err(OAuthError::PrimitiveError.into());
@@ -434,6 +443,13 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         })
     }
 
+    /// Use the checked endpoint to execute the authorization flow for a request.
+    ///
+    /// ## Panics
+    ///
+    /// It is expected that the endpoint primitive functions are consistent, i.e. they don't begin
+    /// returning `None` after having returned `Some(registrar)` previously for example. If this
+    /// invariant is violated, this function may panic.
     pub fn execute(&mut self, mut request: R) -> AuthorizationResult<E, R> {
         let negotiated = authorization_code(
             &self.endpoint,
@@ -470,23 +486,43 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: Authoriz
 
 impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// Resolve the pending status using the endpoint to query owner consent.
-    pub fn finish(self) -> Result<R::Response, E::Error> 
+    pub fn finish(mut self) -> Result<R::Response, E::Error> 
     where
         for<'e> &'e E: OwnerAuthorizer<R>
     {
-        let checked = self.endpoint.0.check_authorization(self.request, self.pending.pre_grant());
+        let checked = self.endpoint.0.check_authorization(&mut self.request, self.pending.pre_grant());
 
         match checked {
-            OwnerAuthorization::Denied => match self.pending.deny() {
-                Ok(url) => R::Response::redirect(url).map_err(Into::into),
-                Err(err) => authorization_error(&mut self.endpoint.0, err),
-            },
+            OwnerAuthorization::Denied => self.deny(),
             OwnerAuthorization::InProgress(resp) => Ok(resp),
-            OwnerAuthorization::Authorized(who) => match self.pending.authorize(self.endpoint, who.into()) {
-                Ok(url) => R::Response::redirect(url).map_err(Into::into),
-                Err(err) => authorization_error(&mut self.endpoint.0, err),
-            },
+            OwnerAuthorization::Authorized(who) => self.authorize(who),
             OwnerAuthorization::Error(err) => Err(err.into()),
+        }
+    }
+
+    /// Postpones the decision over the request, to display data to the resource owner.
+    ///
+    /// This should happen at least once for each request unless the resource owner has already
+    /// acknowledged and pre-approved a specific grant.  The response can also be used to determine
+    /// the resource owner, if no login has been detected or if multiple accounts are allowed to
+    /// be logged in at the same time.
+    pub fn in_progress(self, response: R::Response) -> R::Response {
+        response
+    }
+
+    /// Denies the request, the client is not allowed access.
+    pub fn deny(self) -> Result<R::Response, E::Error> {
+        match self.pending.deny() {
+            Ok(url) => R::Response::redirect(url).map_err(Into::into),
+            Err(err) => authorization_error(&mut self.endpoint.0, err),
+        }
+    }
+
+    /// Tells the system that the resource owner with the given id has approved the grant.
+    pub fn authorize(self, who: String) -> Result<R::Response, E::Error> {
+        match self.pending.authorize(self.endpoint, who.into()) {
+            Ok(url) => R::Response::redirect(url).map_err(Into::into),
+            Err(err) => authorization_error(&mut self.endpoint.0, err),
         }
     }
 }
