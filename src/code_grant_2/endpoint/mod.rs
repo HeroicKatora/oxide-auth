@@ -1,21 +1,23 @@
-//! General algorithms for frontends.
+//! General algorithms for endpoints.
 //!
-//! The frontend is concerned with executing the abstract behaviours given by the backend in terms
-//! of the actions of the frontend types. This means translating Redirect errors to the correct
-//! Redirect http response for example or optionally sending internal errors to loggers.
+//! An endpoint is concerned with executing the abstract behaviours given by the backend in terms
+//! of the actions of the endpoint types. This means translating Redirect errors to the correct
+//! Redirect http response for example or optionally sending internal errors to loggers. The
+//! frontends, which are the bindings to particular server libraries, can instantiate the endpoint
+//! api or simple reuse existing types.
 //!
 //! To ensure the adherence to the oauth2 rfc and the improve general implementations, some control
-//! flow of incoming packets is specified here instead of the frontend implementations.
-//! Instead, traits are offered to make this compatible with other frontends. In theory, this makes
-//! the frontend pluggable which could improve testing.
+//! flow of incoming packets is specified here instead of the frontend implementations.  Instead,
+//! traits are offered to make this compatible with other endpoints. In theory, this makes
+//! endpoints pluggable which could improve testing.
 //!
-//! Custom frontend
+//! Custom endpoint
 //! ---------------
 //! In order to not place restrictions on the web server library in use, it is possible to
-//! implement a frontend completely with user defined types.
+//! implement an endpoint completely with user defined types.
 //!
 //! This requires custom, related implementations of [`WebRequest`] and [`WebResponse`].
-//! _WARNING_: Custom frontends MUST ensure a secure communication layer with confidential clients.
+//! _WARNING_: Custom endpoints MUST ensure a secure communication layer with confidential clients.
 //! This means using TLS for communication over http (although there are currently discussions to
 //! consider communication to `localhost` as always occuring in a secure context).
 //!
@@ -144,17 +146,16 @@ pub struct OldQueryParameter<'a> {
 ///
 /// Use one of the listed implementations below.
 ///
-/// You should generally not have to implement this trait yourself, and if you
-/// do there are additional requirements on your implementation to guarantee
-/// standard conformance. Therefore the trait is marked as `unsafe`.
+/// You should generally not have to implement this trait yourself, and if you do there are
+/// additional requirements on your implementation to guarantee standard conformance. Therefore the
+/// trait is marked as `unsafe`.
 pub unsafe trait QueryParameter {
     /// Get the **unique** value associated with a key.
     ///
-    /// If there are multiple values, return `None`. This is very important
-    /// to guarantee conformance to the RFC. Afaik it prevents potentially
-    /// subverting validation frontends, order dependent processing, or simple
-    /// confusion between different components who parse the query string from
-    /// different ends.
+    /// If there are multiple values, return `None`. This is very important to guarantee
+    /// conformance to the RFC. Afaik it prevents potentially subverting validation middleware,
+    /// order dependent processing, or simple confusion between different components who parse the
+    /// query string from different ends.
     fn unique_value(&self, key: &str) -> Option<Cow<str>>;
 
     /// Guarantees that one can grab an owned copy.
@@ -163,17 +164,15 @@ pub unsafe trait QueryParameter {
 
 /// The query parameter normal form.
 ///
-/// When a request wants to give access to its query or body parameters by
-/// reference, it can do so by a reference of the particular trait. But when
-/// the representation of the query is not stored in the memory associated with
-/// the request, it needs to be allocated to outlive the borrow on the request.
-/// This allocation may as well perform the minimization/normalization into a
-/// representation actually consumed by the backend. This normal form thus
-/// encapsulates the associated `clone-into-normal form` by various possible
-/// constructors from references [WIP].
+/// When a request wants to give access to its query or body parameters by reference, it can do so
+/// by a reference of the particular trait. But when the representation of the query is not stored
+/// in the memory associated with the request, it needs to be allocated to outlive the borrow on
+/// the request.  This allocation may as well perform the minimization/normalization into a
+/// representation actually consumed by the backend. This normal form thus encapsulates the
+/// associated `clone-into-normal form` by various possible constructors from references [WIP].
 ///
-/// This gives rise to a custom `Cow<QueryParameter>` instance by requiring
-/// that normalization into memory with unrelated lifetime is always possible.
+/// This gives rise to a custom `Cow<QueryParameter>` instance by requiring that normalization into
+/// memory with unrelated lifetime is always possible.
 ///
 /// Internally a hashmap but this may change due to optimizations.
 #[derive(Clone, Debug, Default)]
@@ -230,8 +229,8 @@ impl Into<Url> for ErrorRedirect {
     }
 }
 
-/// Abstraction of web requests with several different abstractions and constructors needed by this
-/// frontend. It is assumed to originate from an HTTP request, as defined in the scope of the rfc,
+/// Abstraction of web requests with several different abstractions and constructors needed by an
+/// endpoint. It is assumed to originate from an HTTP request, as defined in the scope of the rfc,
 /// but theoretically other requests are possible.
 pub trait WebRequest {
     /// The error generated from access of malformed or invalid requests.
@@ -242,9 +241,8 @@ pub trait WebRequest {
 
     /// Retrieve a parsed version of the url query.
     ///
-    /// An Err return value indicates a malformed query or an otherwise
-    /// malformed WebRequest. Note that an empty query should result in
-    /// `Ok(HashMap::new())` instead of an Err.
+    /// An Err return value indicates a malformed query or an otherwise malformed WebRequest. Note
+    /// that an empty query should result in `Ok(HashMap::new())` instead of an Err.
     fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error>;
 
     /// Retrieve the parsed `application/x-form-urlencoded` body of the request.
@@ -291,7 +289,7 @@ pub trait WebResponse: Sized {
 /// single request type. This trait should provide those mechanisms, including trying to recover
 /// from primitive errors where appropriate.
 ///
-/// To reduce the number of necessary impls and provide a single interface to a frontend, this
+/// To reduce the number of necessary impls and provide a single interface to a single trait, this
 /// trait defines accessor methods for all possibly needed primitives. Note that not all flows
 /// actually access all primitives. Thus, an implementation does not necessarily have to return
 /// something in `registrar`, `authorizer`, `issuer_mut` but failing to do so will also fail flows
@@ -537,8 +535,8 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     ///
     /// This should happen at least once for each request unless the resource owner has already
     /// acknowledged and pre-approved a specific grant.  The response can also be used to determine
-    /// the resource owner, if no login has been detected or if multiple accounts are allowed to
-    /// be logged in at the same time.
+    /// the resource owner, if no login has been detected or if multiple accounts are allowed to be
+    /// logged in at the same time.
     fn in_progress(self, response: R::Response) -> (R, Result<R::Response, E::Error>) {
         (self.request, Ok(response))
     }
