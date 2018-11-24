@@ -12,14 +12,34 @@ for param in $@
 do
 	case "$param" in
 		-f) is_force="-f";;
+		--help) ;&
+		-h) { cat << EOF
+usage: release [-f] [-h|--help] <version>
+
+Automates checks and tagging of new releases. Encourages a workflow where
+planned changes are integrated into readme and migration documentation early,
+with WIP markers to help produce complete logs.
+
+  -f		Force usage of version, even if such a tag already exists.
+  -h, --help    Display this help
+  <version>	A semantic version number matching [0-9a-zA-Z.-]*
+  
+EOF
+exit 1; } ;;
 	esac
 done
 
 # Check that the working dir is clean. May comment this out if it produces problems.
 [[ -z $(git status -s) ]] || { echo "Fail: Working directory is not clean"; exit 1; }
 
+# Check that for every author, we have at least name or mail recorded in Contributors.txt
+(git shortlog -se | parallel -C '\t|<' grep -Fq -e '{2}' -e '\<{3}' Contributors.txt) || { echo "Fail: contributor not listed"; exit 1; }
+
 # Check there are no more [WIP] markers in Migrate and Readme
 [[ -z $(grep "WIP" Migration.md Readme.md) ]] || { echo "Fail: Work in progress in documentation"; exit 1; }
+
+# Find a matching header in the changelog
+[[ -z $(grep "# v$new_version" Changes.md) ]] && { echo "Fail: No changelog regarding this release"; exit 1; }
 
 # Test that our version is actually the one in Cargo.toml
 [[ -z $(grep "version = \"$new_version\"" Cargo.toml) ]] && { echo "Fail: Version differs from cargo version"; exit 1; }
