@@ -76,36 +76,34 @@
 //! [`Issuer`]: ../../primitives/issuer/trait.Issuer.html
 //! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
 mod authorization;
+mod accesstoken;
+mod error;
+mod query;
 
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::cell::Cell;
-use std::collections::HashMap;
-use std::error;
 use std::marker::PhantomData;
-use std::fmt;
-use std::str::from_utf8;
 
 use primitives::authorizer::Authorizer;
-use primitives::issuer::{Issuer, IssuedToken};
-use primitives::grant::Grant;
-use primitives::registrar::{ClientUrl, BoundClient, Registrar, RegistrarError, RegisteredClient};
+use primitives::issuer::Issuer;
+use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
 use super::accesstoken::{
     Extension as AccessTokenExtension,
-    Endpoint as AccessTokenEndpoint,
     PrimitiveError as AccessTokenPrimitiveError};
 use super::authorization::ErrorUrl;
 use super::guard::{
-    Error as ResourceError,
     /*Extension as GuardExtension,*/
-    Endpoint as GuardEndpoint};
+    };
 
 use url::Url;
-use base64;
 
 pub use primitives::registrar::PreGrant;
 pub use self::authorization::*;
+pub use self::accesstoken::*;
+pub use self::error::OAuthError;
+pub use self::query::*;
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
 pub enum OwnerConsent<Response: WebResponse> {
@@ -120,84 +118,6 @@ pub enum OwnerConsent<Response: WebResponse> {
 
     /// An error occurred while checking authorization.
     Error(Response::Error),
-}
-
-/// Allows access to the query parameters in an url or a body.
-///
-/// Use one of the listed implementations below.
-///
-/// You should generally not have to implement this trait yourself, and if you do there are
-/// additional requirements on your implementation to guarantee standard conformance. Therefore the
-/// trait is marked as `unsafe`.
-pub unsafe trait QueryParameter {
-    /// Get the **unique** value associated with a key.
-    ///
-    /// If there are multiple values, return `None`. This is very important to guarantee
-    /// conformance to the RFC. Afaik it prevents potentially subverting validation middleware,
-    /// order dependent processing, or simple confusion between different components who parse the
-    /// query string from different ends.
-    fn unique_value(&self, key: &str) -> Option<Cow<str>>;
-
-    /// Guarantees that one can grab an owned copy.
-    fn normalize(&self) -> NormalizedParameter;
-}
-
-/// The query parameter normal form.
-///
-/// When a request wants to give access to its query or body parameters by reference, it can do so
-/// by a reference of the particular trait. But when the representation of the query is not stored
-/// in the memory associated with the request, it needs to be allocated to outlive the borrow on
-/// the request.  This allocation may as well perform the minimization/normalization into a
-/// representation actually consumed by the backend. This normal form thus encapsulates the
-/// associated `clone-into-normal form` by various possible constructors from references [WIP].
-///
-/// This gives rise to a custom `Cow<QueryParameter>` instance by requiring that normalization into
-/// memory with unrelated lifetime is always possible.
-///
-/// Internally a hashmap but this may change due to optimizations.
-#[derive(Clone, Debug, Default)]
-pub struct NormalizedParameter {
-    inner: HashMap<Cow<'static, str>, Cow<'static, str>>,
-}
-
-unsafe impl QueryParameter for NormalizedParameter {
-    fn unique_value(&self, key: &str) -> Option<Cow<str>> {
-        self.inner.get(key).cloned()
-    }
-
-    fn normalize(&self) -> NormalizedParameter {
-        self.clone()
-    }
-}
-
-impl Borrow<QueryParameter> for NormalizedParameter {
-    fn borrow(&self) -> &(QueryParameter + 'static) {
-        self
-    }
-}
-
-impl ToOwned for QueryParameter {
-    type Owned = NormalizedParameter;
-
-    fn to_owned(&self) -> Self::Owned {
-        self.normalize()
-    }
-}
-
-unsafe impl QueryParameter for HashMap<String, String> {
-    fn unique_value(&self, key: &str) -> Option<Cow<str>> {
-        self.get(key).cloned().map(Cow::Owned)
-    }
-
-    fn normalize(&self) -> NormalizedParameter {
-        let inner = self.iter()
-            .map(|(key, val)| (Cow::Owned(key.to_string()), Cow::Owned(val.to_string())))
-            .collect();
-
-        NormalizedParameter {
-            inner,
-        }
-    }
 }
 
 /// An error occuring during authorization, convertible to the redirect url with which to respond.
@@ -362,79 +282,4 @@ pub struct GrantFlow<'a> {
 pub struct AccessFlow<'a> {
     issuer: Cell<Option<&'a mut Issuer>>,
     scopes: &'a [Scope],
-}
-
-/// Errors which should not or need not be communicated to the requesting party but which are of
-/// interest to the server. See the documentation for each enum variant for more documentation on
-/// each as some may have an expected response. These include badly formatted headers or url encoded
-/// body, unexpected parameters, or security relevant required parameters.
-#[derive(Debug)]
-pub enum OAuthError {
-    /// Deny authorization to the client by essentially dropping the request.
-    ///
-    /// For example, this response is given when an incorrect client has been provided in the
-    /// authorization request in order to avoid potential indirect denial of service vulnerabilities.
-    DenySilently,
-
-    /// Authorization to access the resource has not been granted.
-    AccessDenied {
-        /// The underlying cause for denying access.
-        ///
-        /// The http authorization header is set according to this field.
-        error: ResourceError,
-    },
-
-    /// One of the primitives used to complete the operation failed.
-    PrimitiveError,
-
-    /// The incoming request was malformed.
-    ///
-    /// This implies that it did not change any internal state.
-    InvalidRequest,
-}
-
-impl OAuthError {
-    /// Create a response for the request that produced this error.
-    ///
-    /// After inspecting the error returned from the library API and doing any necessary logging,
-    /// this methods allows easily turning the error into a template (or complete) response to the
-    /// client.  It takes care of setting the necessary headers.
-    pub fn response_or<W: WebResponse>(self, internal_error: W) -> W {
-        match self {
-            OAuthError::DenySilently | OAuthError::InvalidRequest => W::text("")
-                .and_then(|response| response.as_client_error()),
-            OAuthError::AccessDenied { error } => W::text("")
-                .and_then(|response| response.with_authorization(&error.www_authenticate())),
-            OAuthError::PrimitiveError => return internal_error,
-        }.unwrap_or(internal_error)
-    }
-
-    /// Create a response for the request that produced this error.
-    ///
-    /// After inspecting the error returned from the library API and doing any necessary logging,
-    /// this methods allows easily turning the error into a template (or complete) response to the
-    /// client.  It takes care of setting the necessary headers.
-    pub fn response_or_else<W, F>(self, internal_error: F) -> W
-        where F: FnOnce() -> W, W: WebResponse
-    {
-        match self {
-            OAuthError::DenySilently | OAuthError::InvalidRequest => W::text("")
-                .and_then(|response| response.as_client_error()),
-            OAuthError::AccessDenied { error } => W::text("")
-                .and_then(|response| response.with_authorization(&error.www_authenticate())),
-            OAuthError::PrimitiveError => return internal_error(),
-        }.unwrap_or_else(|_| internal_error())
-    }
-}
-
-impl fmt::Display for OAuthError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        fmt.write_str("OAuthError")
-    }
-}
-
-impl error::Error for OAuthError {
-    fn description(&self) -> &str {
-        "OAuthError"
-    }
 }
