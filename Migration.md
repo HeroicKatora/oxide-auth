@@ -46,6 +46,13 @@ from the endpoint.
 
 -----
 
+The previous `OwnerAuthorizer` and `OwnerAuthorization` have been renamed to
+`OwnerSolicitor` and `OwnerConsent` to avoid confusion arising from the use of
+'authorization'. Additionally, it has been integrated in the endpoint next to
+other primitives, no frontend actually supported very different usage anyways.
+
+-----
+
 [WIP] The `code_grant::frontend` flow design has been revamped into a unified
 trait. This replaces the explicit `…Flow` constructors while allowing greater
 customization of errors, especially allowing the frontend to react in a custom
@@ -63,14 +70,14 @@ types are not).
 
 -----
 
-[WIP] The possibility to create a `TokenSigner` instance based on a password
-has been removed. The use of this was discouraged all along but this removes
-another possible security pit fall. Note that you may want to migrate to a
-self-created `ring::hmac::SigningKey` instance, using a randomly generated salt
-and a self-chosen, secure password based key derivation function to derive the
-key bytes. Alternatively, you can now create a `TokenSigner` that uses an
-ephemeral key, i.e. the key will change for each program invocation,
-invalidating all issued tokens of other program runs.
+The possibility to create a `TokenSigner` instance based on a password has been
+removed. The use of this was discouraged all along but this removes another
+possible security pit fall. Note that you may want to migrate to a self-created
+`ring::hmac::SigningKey` instance, using a randomly generated salt and a
+self-chosen, secure password based key derivation function to derive the key
+bytes. Alternatively, you can now create a `TokenSigner` that uses an ephemeral
+key, i.e. the key will change for each program invocation, invalidating all
+issued tokens of other program runs.
 
 Rationale: Password based, low-entropy keys do not provide adequate security.
 While the interface offered the ability to provide a high-entropy salt to
