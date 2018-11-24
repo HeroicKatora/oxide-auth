@@ -318,6 +318,12 @@ pub trait Endpoint<Request: WebRequest> {
     /// any effect on flows that do not require one.
     fn issuer_mut(&mut self) -> Option<&mut Issuer>;
 
+    /// Return the system that checks owner consent.
+    ///
+    /// Returning `None` will implicated failing the authorization code flow but does have any
+    /// effect on other flows.
+    fn owner_consent(&mut self) -> Option<&mut OwnerAuthorizer<Request>>;
+
     /// Try to recover from a primitive error during access token flow.
     ///
     /// Depending on an endpoints additional information about its primitives or extensions, it may
@@ -353,13 +359,17 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     fn access_token_error(&mut self, error: AccessTokenPrimitiveError) -> Self::Error {
         (**self).access_token_error(error)
     }
+
+    fn owner_consent(&mut self) -> Option<&mut OwnerAuthorizer<R>> {
+        (**self).owner_consent()
+    }
 }
 
 /// Conveniently checks the authorization from a request.
 pub trait OwnerAuthorizer<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
-    fn check_authorization(self, &mut Request, pre_grant: &PreGrant) -> OwnerAuthorization<Request::Response>;
+    fn check_authorization(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerAuthorization<Request::Response>;
 }
 
 /// All relevant methods for handling authorization code requests.
@@ -497,10 +507,7 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: Authoriz
 }
 
 impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
-    pub fn finish(self) -> Result<R::Response, E::Error> 
-    where
-        for<'e> &'e E: OwnerAuthorizer<R>
-    {
+    pub fn finish(self) -> Result<R::Response, E::Error> {
         let (_request, result) = match self.inner {
             AuthorizationPartialInner::Pending { pending, } => pending.finish(),
             AuthorizationPartialInner::Failed { request, response } => (request, Ok(response)),
@@ -513,11 +520,10 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
 
 impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// Resolve the pending status using the endpoint to query owner consent.
-    fn finish(mut self) -> (R, Result<R::Response, E::Error>)
-    where
-        for<'e> &'e E: OwnerAuthorizer<R>
-    {
-        let checked = self.endpoint.0.check_authorization(&mut self.request, self.pending.pre_grant());
+    fn finish(mut self) -> (R, Result<R::Response, E::Error>) {
+        let checked = self.endpoint
+            .owner_consent()
+            .check_authorization(&mut self.request, self.pending.pre_grant());
 
         match checked {
             OwnerAuthorization::Denied => self.deny(),
@@ -555,6 +561,12 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
         };
 
         (self.request, result)
+    }
+}
+
+impl<E: Endpoint<R>, R: WebRequest> WrappedAuthorization<E, R> {
+    fn owner_consent(&mut self) -> &mut OwnerAuthorizer<R> {
+        self.0.owner_consent().unwrap()
     }
 }
 
