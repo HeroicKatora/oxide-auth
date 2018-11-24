@@ -20,5 +20,5 @@ pub mod authorization;
 pub mod guard;
 
 /// Polymorphic HTTP wrappers for code grant flows.
-pub mod frontend;
+pub mod endpoint;
 
