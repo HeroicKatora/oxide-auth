@@ -34,7 +34,7 @@ pub trait Request {
     fn grant_type(&self) -> Option<Cow<str>>;
 
     /// Retrieve an additional parameter used in an extension
-    fn extension(&self, &str) -> Option<Cow<str>>;
+    fn extension(&self, key: &str) -> Option<Cow<str>>;
 }
 
 /// An extension reacting to an access token request with a provided access token.

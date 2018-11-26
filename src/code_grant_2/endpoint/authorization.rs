@@ -12,12 +12,11 @@ use super::*;
 /// All relevant methods for handling authorization code requests.
 pub struct AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     endpoint: WrappedAuthorization<E, R>,
-    request: PhantomData<R>,
 }
 
 struct WrappedAuthorization<E: Endpoint<R>, R: WebRequest>(E, PhantomData<R>);
 
-struct WrappedRequest<'a, R: WebRequest + 'a>{
+struct WrappedRequest<'a, R: WebRequest + 'a> {
     /// Original request.
     request: PhantomData<R>,
 
@@ -93,7 +92,6 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
 
         Ok(AuthorizationFlow {
             endpoint: WrappedAuthorization(endpoint, PhantomData),
-            request: PhantomData,
         })
     }
 
