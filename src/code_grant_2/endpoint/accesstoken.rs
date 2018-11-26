@@ -51,9 +51,34 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         })
     }
 
-    pub fn execute(&mut self, mut request: R) -> () {
-        unimplemented!()
+    pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
+        let issued = access_token(
+            &mut self.endpoint,
+            &WrappedRequest::new(&mut request));
+
+        let token = match issued {
+            Err(error) => return token_error(&mut self.endpoint.0, error),
+            Ok(token) => token,
+        };
+
+        R::Response::json(&token.to_json())
+            .map_err(Into::into)
     }
+}
+
+fn token_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: TokenError)
+    -> Result<R::Response, E::Error> 
+{
+    Ok(match error {
+        TokenError::Invalid(json) => R::Response
+            ::json(&json.to_json())?
+            .as_client_error()?,
+        TokenError::Unauthorized(json, scheme) => R::Response
+            ::json(&json.to_json())?
+            .with_authorization(&scheme)?,
+        TokenError::Primitive(primitives) => unimplemented!(),
+        TokenError::Internal => return Err(OAuthError::PrimitiveError.into()),
+    })
 }
 
 impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
