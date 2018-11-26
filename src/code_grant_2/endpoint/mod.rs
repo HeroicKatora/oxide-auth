@@ -78,6 +78,7 @@
 mod authorization;
 mod accesstoken;
 mod error;
+mod resource;
 mod query;
 
 use std::borrow::Cow;
@@ -103,6 +104,7 @@ pub use primitives::registrar::PreGrant;
 pub use self::authorization::*;
 pub use self::accesstoken::*;
 pub use self::error::OAuthError;
+pub use self::resource::*;
 pub use self::query::*;
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
@@ -222,6 +224,12 @@ pub trait Endpoint<Request: WebRequest> {
     /// effect on other flows.
     fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<Request>>;
 
+    /// Determine the required scopes for a request.
+    ///
+    /// The client must fulfill any one scope, so returning an empty slice will always deny the
+    /// request.
+    fn scopes(&self, request: &mut Request) -> &[Scope];
+
     /// Try to recover from a primitive error during access token flow.
     ///
     /// Depending on an endpoints additional information about its primitives or extensions, it may
@@ -261,6 +269,10 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<R>> {
         (**self).owner_solicitor()
     }
+
+    fn scopes(&self, request: &mut R) -> &[Scope] {
+        (**self).scopes(request)
+    }
 }
 
 /// Checks consent with the owner of a resource, identified in a request.
@@ -268,18 +280,4 @@ pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
     fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
-}
-
-/// All relevant methods for granting access token from authorization codes.
-pub struct GrantFlow<'a> {
-    registrar: Cell<&'a Registrar>,
-    authorizer: Cell<Option<&'a mut Authorizer>>,
-    issuer: Cell<Option<&'a mut Issuer>>,
-    extensions: Vec<&'a AccessTokenExtension>,
-}
-
-/// All relevant methods for checking authorization for access to a resource.
-pub struct AccessFlow<'a> {
-    issuer: Cell<Option<&'a mut Issuer>>,
-    scopes: &'a [Scope],
 }
