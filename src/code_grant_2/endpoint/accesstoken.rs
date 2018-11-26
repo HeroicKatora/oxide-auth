@@ -1,4 +1,5 @@
 use std::str::from_utf8;
+use std::marker::PhantomData;
 
 use code_grant_2::accesstoken::{
     access_token,
@@ -33,11 +34,44 @@ struct Authorization(String, Vec<u8>);
 
 impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
-        unimplemented!()
+        if endpoint.registrar().is_none() {
+            return Err(OAuthError::PrimitiveError.into());
+        }
+
+        if endpoint.authorizer_mut().is_none() {
+            return Err(OAuthError::PrimitiveError.into());
+        }
+
+        if endpoint.issuer_mut().is_none() {
+            return Err(OAuthError::PrimitiveError.into());
+        }
+
+        Ok(AccessTokenFlow {
+            endpoint: WrappedToken(endpoint, PhantomData),
+        })
     }
 
     pub fn execute(&mut self, mut request: R) -> () {
         unimplemented!()
+    }
+}
+
+impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
+    fn registrar(&self) -> &Registrar {
+        self.0.registrar().unwrap()
+    }
+
+    fn authorizer(&mut self) -> &mut Authorizer {
+        self.0.authorizer_mut().unwrap()
+    }
+
+    fn issuer(&mut self) -> &mut Issuer {
+        self.0.issuer_mut().unwrap()
+    }
+
+    fn extensions(&self) -> Box<Iterator<Item=&TokenExtension>> {
+        // TODO: forward extensions.
+        Box::new(None.into_iter())
     }
 }
 
