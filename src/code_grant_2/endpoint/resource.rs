@@ -14,15 +14,20 @@ pub struct ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
 
 struct WrappedResource<E: Endpoint<R>, R: WebRequest>(E, PhantomData<R>);
 
-struct WrappedRequest<'a, R: WebRequest + 'a> {
+struct WrappedRequest<R: WebRequest> {
     /// Original request.
     request: PhantomData<R>,
 
     /// The authorization token.
-    authorization: Option<&'a str>,
+    authorization: Option<String>,
 
     /// An error if one occurred.
     error: Option<Option<R::Error>>,
+}
+
+struct Scoped<'a, E: 'a, R: 'a> {
+    request: &'a mut R,
+    endpoint: &'a mut E,
 }
 
 impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
@@ -37,9 +42,16 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     }
 
     pub fn execute(&mut self, mut request: R) -> Result<(), E::Error> {
-        let result = protect(
-            &self.endpoint,
-            &WrappedRequest::new(&mut request));
+        let result = {
+            let wrapped = WrappedRequest::new(&mut request);
+
+            let mut scoped = Scoped {
+                request: &mut request,
+                endpoint: &mut self.endpoint.0,
+            };
+
+            protect(&mut scoped, &wrapped)
+        };
 
         result.map_err(|err| match err {
             ResourceError::AccessDenied { .. } => unimplemented!(),
@@ -49,28 +61,47 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     }
 }
 
-impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
-    fn new(request: &'a R) -> Self {
-        unimplemented!()
+impl<R: WebRequest> WrappedRequest<R> {
+    fn new(request: &mut R) -> Self {
+        let token = match request.authheader() {
+            // TODO: this is unecessarily wasteful, we always clone.
+            Ok(Some(token)) => Some(token.into_owned()),
+            Ok(None) => None,
+            Err(error) => return Self::from_error(error),
+        };
+
+        WrappedRequest {
+            request: PhantomData,
+            authorization: token,
+            error: None,
+        }
+    }
+
+    fn from_error(error: R::Error) -> Self {
+        WrappedRequest {
+            request: PhantomData,
+            authorization: None,
+            error: Some(Some(error)),
+        }
     }
 }
 
-impl<E: Endpoint<R>, R: WebRequest> ResourceEndpoint for WrappedResource<E, R> {
-    fn scopes(&self) -> &[Scope] {
-        unimplemented!()
+impl<'a, E: Endpoint<R> + 'a, R: WebRequest + 'a> ResourceEndpoint for Scoped<'a, E, R> {
+    fn scopes(&mut self) -> &[Scope] {
+        self.endpoint.scopes(self.request)
     }
 
-    fn issuer(&self) -> &Issuer {
-        unimplemented!()
+    fn issuer(&mut self) -> &Issuer {
+        self.endpoint.issuer_mut().unwrap()
     }
 }
 
-impl<'a, R: WebRequest + 'a> ResourceRequest for WrappedRequest<'a, R> {
+impl<R: WebRequest> ResourceRequest for WrappedRequest<R> {
     fn valid(&self) -> bool {
         self.error.is_none()
     }
 
     fn token(&self) -> Option<Cow<str>> {
-        self.authorization.clone().map(Cow::Borrowed)
+        self.authorization.as_ref().map(|cow| cow.as_ref()).map(Cow::Borrowed)
     }
 }

@@ -228,7 +228,7 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// The client must fulfill any one scope, so returning an empty slice will always deny the
     /// request.
-    fn scopes(&self, request: &mut Request) -> &[Scope];
+    fn scopes(&mut self, request: &mut Request) -> &[Scope];
 
     /// Try to recover from a primitive error during access token flow.
     ///
@@ -270,7 +270,7 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
         (**self).owner_solicitor()
     }
 
-    fn scopes(&self, request: &mut R) -> &[Scope] {
+    fn scopes(&mut self, request: &mut R) -> &[Scope] {
         (**self).scopes(request)
     }
 }

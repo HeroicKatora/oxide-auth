@@ -92,14 +92,14 @@ pub trait Request {
 /// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait Endpoint {
     /// The list of possible scopes required by the resource endpoint.
-    fn scopes(&self) -> &[Scope];
+    fn scopes(&mut self) -> &[Scope];
 
     /// Issuer which provides the tokens used for authorization by the client.
-    fn issuer(&self) -> &Issuer;
+    fn issuer(&mut self) -> &Issuer;
 }
 
 /// The result will indicate whether the resource access should be allowed or not.
-pub fn protect(handler: &Endpoint, req: &Request) -> Result<()> {
+pub fn protect(handler: &mut Endpoint, req: &Request) -> Result<()> {
     let authenticate = Authenticate {
         realm: None,
         scope: handler.scopes().get(0).cloned(),
