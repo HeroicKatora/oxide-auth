@@ -16,14 +16,6 @@ pub enum OAuthError {
     /// authorization request in order to avoid potential indirect denial of service vulnerabilities.
     DenySilently,
 
-    /// Authorization to access the resource has not been granted.
-    AccessDenied {
-        /// The underlying cause for denying access.
-        ///
-        /// The http authorization header is set according to this field.
-        error: ResourceError,
-    },
-
     /// One of the primitives used to complete the operation failed.
     PrimitiveError,
 
@@ -43,8 +35,6 @@ impl OAuthError {
         match self {
             OAuthError::DenySilently | OAuthError::InvalidRequest => W::text("")
                 .and_then(|response| response.as_client_error()),
-            OAuthError::AccessDenied { error } => W::text("")
-                .and_then(|response| response.with_authorization(&error.www_authenticate())),
             OAuthError::PrimitiveError => return internal_error,
         }.unwrap_or(internal_error)
     }
@@ -60,8 +50,6 @@ impl OAuthError {
         match self {
             OAuthError::DenySilently | OAuthError::InvalidRequest => W::text("")
                 .and_then(|response| response.as_client_error()),
-            OAuthError::AccessDenied { error } => W::text("")
-                .and_then(|response| response.with_authorization(&error.www_authenticate())),
             OAuthError::PrimitiveError => return internal_error(),
         }.unwrap_or_else(|_| internal_error())
     }

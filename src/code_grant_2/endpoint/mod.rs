@@ -96,7 +96,7 @@ use super::accesstoken::{
 use super::authorization::ErrorUrl;
 use super::guard::{
     /*Extension as GuardExtension,*/
-    };
+    Error as ResourceError};
 
 use url::Url;
 
@@ -280,4 +280,30 @@ pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
     fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
+}
+
+/// Lists the differnet reasons for creating a response to the client.
+///
+/// Not all responses indicate failure. A redirect will also occur in the a regular of providing an
+/// access token to the third party client.
+pub enum ResponseKind {
+    /// Authorization to access the resource has not been granted.
+    AccessDenied {
+        /// The underlying cause for denying access.
+        ///
+        /// The http authorization header is to be set according to this field.
+        error: ResourceError,
+    },
+
+    /// Redirect the user-agent to another url.
+    ///
+    /// The endpoint has the opportunity to inspect and modify error information to some extent.
+    /// For example to log an error rate or to provide a pointer to a custom human readable
+    /// explanation page. The response will generally not contain a body.
+    Redirect {
+
+    },
+
+    /// An expected, normal response whose content requires precise semantics.
+    Ok,
 }
