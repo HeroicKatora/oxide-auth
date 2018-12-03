@@ -34,15 +34,26 @@ data structures.
 
 -----
 
-The trait method `redirect_error` has been moved from `WebResponse` to
-`Endpoint`. Its default implementation remains unchanged, simply converting into
-a response and the error into the endpoint error.
+Construction of `WebResponse` instances (e.g. by `redirect_error`) has been 
+removed from `WebResponse`. Instead, a new method `response` has been added to
+`Endpoint` that may inspect the request and kind of response required. All 
+modifier functions such as `client_error`, `json`, etc. have also been reworked
+to instead work on mutable references to the `WebResponse`.
 
 Rationale: It is the endpoint that contains the implementation specific logic.
 Since the error can only be enriched with additional information or references
 to other pages before it is converted to a `WebResponse`, this logic is not
 universal for implementations for `WebResponse` but rather needs customization
 from the endpoint.
+
+[WIP] Endpoints and responses can also rely on call restrictions to these new
+methods. For example, all flows will at most call one `body_` variants of 
+`WebResponse` and `Endpoint::response` will be called at most once per flow
+execution. This could prove useful to high-performance implementations that
+want to recycle response instances and avoiding allocation. It should be 
+possible to use a `&mut _` as a `WebResponse` in an endpoint implementation.
+
+[WIP] These restricted call properties have tests.
 
 -----
 
@@ -53,11 +64,11 @@ other primitives, no frontend actually supported very different usage anyways.
 
 -----
 
-[WIP] The `code_grant::frontend` flow design has been revamped into a unified
-trait. This replaces the explicit `…Flow` constructors while allowing greater
+The `code_grant::frontend` flow design has been revamped into a unified trait.
+This replaces the explicit `…Flow` constructors while allowing greater
 customization of errors, especially allowing the frontend to react in a custom
-manner to `primitive` errors or augment errors of its own type. This should open
-the path to more flexible `future` based implementations.
+manner to `primitive` errors or augment errors of its own type. This should
+open the path to more flexible `future` based implementations.
 
 -----
 
