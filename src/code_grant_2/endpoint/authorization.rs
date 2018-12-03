@@ -137,7 +137,7 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
 fn authorization_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: AuthorizationError) -> Result<R::Response, E::Error> {
     match error {
         AuthorizationError::Ignore => Err(OAuthError::DenySilently.into()),
-        AuthorizationError::Redirect(target) => e.redirect_error(ErrorRedirect(target)).map_err(Into::into),
+        AuthorizationError::Redirect(target) => e.response(ResponseKind::Redirect),
     }
 }
 
@@ -181,7 +181,7 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// Denies the request, the client is not allowed access.
     fn deny(self) -> (R, Result<R::Response, E::Error>) {
         let result = match self.pending.deny() {
-            Ok(url) => R::Response::redirect(url).map_err(Into::into),
+            Ok(url) => self.endpoint.0.response(ResponseKind::Redirect),
             Err(err) => authorization_error(&mut self.endpoint.0, err),
         };
 
@@ -191,7 +191,7 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// Tells the system that the resource owner with the given id has approved the grant.
     fn authorize(self, who: String) -> (R, Result<R::Response, E::Error>) {
         let result = match self.pending.authorize(self.endpoint, who.into()) {
-            Ok(url) => R::Response::redirect(url).map_err(Into::into),
+            Ok(url) => self.endpoint.0.response(ResponseKind::Redirect),
             Err(err) => authorization_error(&mut self.endpoint.0, err),
         };
 

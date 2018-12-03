@@ -159,30 +159,29 @@ pub trait WebRequest {
 
 /// Response representation into which the Request is transformed by the code_grant types.
 ///
-/// Needs `Sized` because it is constructed within the flow, not externally injected and only
-/// modified. Note that this may change in a future version of the api. But currently all popular
-/// web server implementations I know of construct responses within the handler.
-pub trait WebResponse: Sized {
+/// At most one of the methods `body_text`, `body_json` will be called. Some flows will
+/// however not call any of those methods.
+pub trait WebResponse {
     /// The error generated when trying to construct an unhandled or invalid response.
     type Error;
 
+    /// Set the response status to 200.
+    fn ok(&mut self) -> Result<(), Self::Error>;
+
     /// A response which will redirect the user-agent to which the response is issued.
-    fn redirect(url: Url) -> Result<Self, Self::Error>;
+    fn redirect(&mut self, url: Url) -> Result<(), Self::Error>;
+
+    /// Set the response status to 400.
+    fn client_error(&mut self) -> Result<(), Self::Error>;
+
+    /// Set the response status to 401 and add a `WWW-Authenticate` header.
+    fn unauthorized(&mut self, header_value: &str) -> Result<(), Self::Error>;
 
     /// A pure text response with no special media type set.
-    fn text(text: &str) -> Result<Self, Self::Error>;
+    fn body_text(&mut self, text: &str) -> Result<(), Self::Error>;
 
     /// Json repsonse data, with media type `aplication/json.
-    fn json(data: &str) -> Result<Self, Self::Error>;
-
-    /// Set the response status to 400
-    fn as_client_error(self) -> Result<Self, Self::Error>;
-
-    /// Set the response status to 401
-    fn as_unauthorized(self) -> Result<Self, Self::Error>;
-
-    /// Add an `WWW-Authenticate` header
-    fn with_authorization(self, kind: &str) -> Result<Self, Self::Error>;
+    fn body_json(&mut self, data: &str) -> Result<(), Self::Error>;
 }
 
 /// Fuses requests and primitives into a coherent system to give a response.
@@ -239,12 +238,11 @@ pub trait Endpoint<Request: WebRequest> {
         OAuthError::PrimitiveError.into()
     }
 
-    /// Construct a redirect for the error. Here the response may choose to augment the error with
-    /// additional information (such as help websites, description strings), hence the default
-    /// implementation which does not do any of that.
-    fn redirect_error(&mut self, target: ErrorRedirect) -> Result<Request::Response, Self::Error> {
-        Request::Response::redirect(target.into()).map_err(Into::into)
-    }
+    /// Generate a prototype response.
+    ///
+    /// The endpoint can rely on this being called at most once for each flow, if it wants
+    /// to preallocate the response or return a handle on an existing prototype.
+    fn response(&mut self, kind: ResponseKind) -> Result<Request::Response, Self::Error>;
 }
 
 impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
@@ -273,6 +271,10 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     fn scopes(&mut self, request: &mut R) -> &[Scope] {
         (**self).scopes(request)
     }
+
+    fn response(&mut self, kind: ResponseKind) -> Result<R::Response, Self::Error> {
+        (**self).response(kind)
+    }
 }
 
 /// Checks consent with the owner of a resource, identified in a request.
@@ -288,11 +290,11 @@ pub trait OwnerSolicitor<Request: WebRequest> {
 /// access token to the third party client.
 pub enum ResponseKind {
     /// Authorization to access the resource has not been granted.
-    AccessDenied {
+    Unauthorized {
         /// The underlying cause for denying access.
         ///
         /// The http authorization header is to be set according to this field.
-        error: ResourceError,
+        error: Option<ResourceError>,
     },
 
     /// Redirect the user-agent to another url.
@@ -300,9 +302,15 @@ pub enum ResponseKind {
     /// The endpoint has the opportunity to inspect and modify error information to some extent.
     /// For example to log an error rate or to provide a pointer to a custom human readable
     /// explanation page. The response will generally not contain a body.
-    Redirect {
+    Redirect,
 
-    },
+    /// The request did not conform to specification or was otheriwse invalid.
+    ///
+    /// As such, it was not handled further. Some processes still warrant a response body to be
+    /// set in the case of an invalid request, containing additional information for the client.
+    /// For example, an authorized client sending a malformed but authenticated request for an
+    /// access token will receive additional hints on the cause of his mistake.
+    Invalid,
 
     /// An expected, normal response whose content requires precise semantics.
     Ok,

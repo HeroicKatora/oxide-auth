@@ -25,36 +25,6 @@ pub enum OAuthError {
     InvalidRequest,
 }
 
-impl OAuthError {
-    /// Create a response for the request that produced this error.
-    ///
-    /// After inspecting the error returned from the library API and doing any necessary logging,
-    /// this methods allows easily turning the error into a template (or complete) response to the
-    /// client.  It takes care of setting the necessary headers.
-    pub fn response_or<W: WebResponse>(self, internal_error: W) -> W {
-        match self {
-            OAuthError::DenySilently | OAuthError::InvalidRequest => W::text("")
-                .and_then(|response| response.as_client_error()),
-            OAuthError::PrimitiveError => return internal_error,
-        }.unwrap_or(internal_error)
-    }
-
-    /// Create a response for the request that produced this error.
-    ///
-    /// After inspecting the error returned from the library API and doing any necessary logging,
-    /// this methods allows easily turning the error into a template (or complete) response to the
-    /// client.  It takes care of setting the necessary headers.
-    pub fn response_or_else<W, F>(self, internal_error: F) -> W
-        where F: FnOnce() -> W, W: WebResponse
-    {
-        match self {
-            OAuthError::DenySilently | OAuthError::InvalidRequest => W::text("")
-                .and_then(|response| response.as_client_error()),
-            OAuthError::PrimitiveError => return internal_error(),
-        }.unwrap_or_else(|_| internal_error())
-    }
-}
-
 impl fmt::Display for OAuthError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         fmt.write_str("OAuthError")

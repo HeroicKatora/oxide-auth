@@ -61,8 +61,9 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             Ok(token) => token,
         };
 
-        R::Response::json(&token.to_json())
-            .map_err(Into::into)
+        let mut response = self.endpoint.0.response(ResponseKind::Ok)?;
+        response.body_json(&token.to_json())?;
+        Ok(response)
     }
 }
 
@@ -70,12 +71,20 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: TokenError)
     -> Result<R::Response, E::Error> 
 {
     Ok(match error {
-        TokenError::Invalid(json) => R::Response
-            ::json(&json.to_json())?
-            .as_client_error()?,
-        TokenError::Unauthorized(json, scheme) => R::Response
-            ::json(&json.to_json())?
-            .with_authorization(&scheme)?,
+        TokenError::Invalid(json) => {
+            let mut response = e.response(ResponseKind::Invalid)?;
+            response.client_error()?;
+            response.body_json(&json.to_json())?;
+            response
+        },
+        TokenError::Unauthorized(json, scheme) =>{
+            let mut response = e.response(ResponseKind::Unauthorized {
+                error: None,
+            })?;
+            response.unauthorized(&scheme)?;
+            response.body_json(&json.to_json())?;
+            response
+        },
         TokenError::Primitive(primitives) => unimplemented!(),
         TokenError::Internal => return Err(OAuthError::PrimitiveError.into()),
     })
