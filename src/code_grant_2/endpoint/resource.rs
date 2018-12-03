@@ -41,8 +41,8 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         })
     }
 
-    pub fn execute(&mut self, mut request: R) -> Result<(), E::Error> {
-        let result = {
+    pub fn execute(&mut self, mut request: R) -> Result<(), Result<R::Response, E::Error>> {
+        let protected = {
             let wrapped = WrappedRequest::new(&mut request);
 
             let mut scoped = Scoped {
@@ -53,11 +53,24 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             protect(&mut scoped, &wrapped)
         };
 
-        result.map_err(|err| match err {
-            ResourceError::AccessDenied { .. } => unimplemented!(),
-            ResourceError::NoAuthentication { .. } => unimplemented!(),
-            ResourceError::InvalidRequest { .. } => unimplemented!(),
-        })
+        protected.map_err(|err| self.denied(err))
+    }
+
+    fn denied(&mut self, error: ResourceError) -> Result<R::Response, E::Error> {
+        let kind = match &error {
+            ResourceError::AccessDenied { .. } => ResponseKind::Unauthorized {
+                error: None,
+            },
+            ResourceError::NoAuthentication { .. } => ResponseKind::Unauthorized {
+                error: None,
+            },
+            ResourceError::InvalidRequest { .. } => ResponseKind::Invalid,
+        };
+
+        let mut response = self.endpoint.0.response(kind)?;
+        response.unauthorized(&error.www_authenticate())?;
+
+        Ok(response)
     }
 }
 
