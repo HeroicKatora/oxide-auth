@@ -57,28 +57,28 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             &WrappedRequest::new(&mut request));
 
         let token = match issued {
-            Err(error) => return token_error(&mut self.endpoint.0, error),
+            Err(error) => return token_error(&mut self.endpoint.0, &mut request, error),
             Ok(token) => token,
         };
 
-        let mut response = self.endpoint.0.response(ResponseKind::Ok)?;
+        let mut response = self.endpoint.0.response(&mut request, ResponseKind::Ok)?;
         response.body_json(&token.to_json())?;
         Ok(response)
     }
 }
 
-fn token_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: TokenError)
+fn token_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, request: &mut R, error: TokenError)
     -> Result<R::Response, E::Error> 
 {
     Ok(match error {
         TokenError::Invalid(json) => {
-            let mut response = e.response(ResponseKind::Invalid)?;
+            let mut response = e.response(request, ResponseKind::Invalid)?;
             response.client_error()?;
             response.body_json(&json.to_json())?;
             response
         },
         TokenError::Unauthorized(json, scheme) =>{
-            let mut response = e.response(ResponseKind::Unauthorized {
+            let mut response = e.response(request, ResponseKind::Unauthorized {
                 error: None,
             })?;
             response.unauthorized(&scheme)?;

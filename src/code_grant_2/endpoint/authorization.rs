@@ -108,7 +108,7 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             &WrappedRequest::new(&mut request));
 
         let inner = match negotiated {
-            Err(err) => match authorization_error(&mut self.endpoint.0, err) {
+            Err(err) => match authorization_error(&mut self.endpoint.0, &mut request, err) {
                 Ok(response) => AuthorizationPartialInner::Failed {
                     request,
                     response,
@@ -134,13 +134,6 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     }
 }
 
-fn authorization_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, error: AuthorizationError) -> Result<R::Response, E::Error> {
-    match error {
-        AuthorizationError::Ignore => Err(OAuthError::DenySilently.into()),
-        AuthorizationError::Redirect(target) => e.response(ResponseKind::Redirect),
-    }
-}
-
 impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
     pub fn finish(self) -> Result<R::Response, E::Error> {
         let (_request, result) = match self.inner {
@@ -150,6 +143,19 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
         };
 
         result
+    }
+}
+
+fn authorization_error<E: Endpoint<R>, R: WebRequest>(
+    endpoint: &mut E,
+    request: &mut R,
+    error: AuthorizationError
+)
+    -> Result<R::Response, E::Error> 
+{
+    match error {
+        AuthorizationError::Ignore => Err(OAuthError::DenySilently.into()),
+        AuthorizationError::Redirect(target) => endpoint.response(request, ResponseKind::Redirect),
     }
 }
 
@@ -179,20 +185,20 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     }
 
     /// Denies the request, the client is not allowed access.
-    fn deny(self) -> (R, Result<R::Response, E::Error>) {
+    fn deny(mut self) -> (R, Result<R::Response, E::Error>) {
         let result = match self.pending.deny() {
-            Ok(url) => self.endpoint.0.response(ResponseKind::Redirect),
-            Err(err) => authorization_error(&mut self.endpoint.0, err),
+            Ok(url) => self.endpoint.0.response(&mut self.request, ResponseKind::Redirect),
+            Err(err) => authorization_error(&mut self.endpoint.0, &mut self.request, err),
         };
 
         (self.request, result)
     }
 
     /// Tells the system that the resource owner with the given id has approved the grant.
-    fn authorize(self, who: String) -> (R, Result<R::Response, E::Error>) {
+    fn authorize(mut self, who: String) -> (R, Result<R::Response, E::Error>) {
         let result = match self.pending.authorize(self.endpoint, who.into()) {
-            Ok(url) => self.endpoint.0.response(ResponseKind::Redirect),
-            Err(err) => authorization_error(&mut self.endpoint.0, err),
+            Ok(url) => self.endpoint.0.response(&mut self.request, ResponseKind::Redirect),
+            Err(err) => authorization_error(&mut self.endpoint.0, &mut self.request, err),
         };
 
         (self.request, result)

@@ -53,10 +53,10 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             protect(&mut scoped, &wrapped)
         };
 
-        protected.map_err(|err| self.denied(err))
+        protected.map_err(|err| self.denied(&mut request, err))
     }
 
-    fn denied(&mut self, error: ResourceError) -> Result<R::Response, E::Error> {
+    fn denied(&mut self, request: &mut R, error: ResourceError) -> Result<R::Response, E::Error> {
         let kind = match &error {
             ResourceError::AccessDenied { .. } => ResponseKind::Unauthorized {
                 error: None,
@@ -67,7 +67,7 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             ResourceError::InvalidRequest { .. } => ResponseKind::Invalid,
         };
 
-        let mut response = self.endpoint.0.response(kind)?;
+        let mut response = self.endpoint.0.response(request, kind)?;
         response.unauthorized(&error.www_authenticate())?;
 
         Ok(response)
