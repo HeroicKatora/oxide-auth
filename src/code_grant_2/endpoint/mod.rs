@@ -82,7 +82,6 @@ mod resource;
 mod query;
 
 use std::borrow::Cow;
-use std::cell::Cell;
 use std::marker::PhantomData;
 
 use primitives::authorizer::Authorizer;
@@ -91,7 +90,6 @@ use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
 use super::accesstoken::{
-    Extension as AccessTokenExtension,
     PrimitiveError as AccessTokenPrimitiveError};
 use super::authorization::ErrorUrl;
 use super::guard::{
@@ -195,6 +193,13 @@ pub trait WebResponse {
 /// actually access all primitives. Thus, an implementation does not necessarily have to return
 /// something in `registrar`, `authorizer`, `issuer_mut` but failing to do so will also fail flows
 /// that try to use them.
+///
+/// # Panics
+///
+/// It is expected that the endpoint primitive functions are consistent, i.e. they don't begin
+/// returning `None` after having returned `Some(registrar)` previously for example. This ensures
+/// that the checks executed by the flow preparation methods catch missing primitives. When this
+/// contract is violated, the execution of a flow may lead to a panic.
 pub trait Endpoint<Request: WebRequest> {
     /// The error typed used as the error representation of each flow.
     type Error: From<OAuthError> + From<Request::Error>;

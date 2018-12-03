@@ -1,9 +1,6 @@
 use std::error;
 use std::fmt;
 
-use code_grant_2::guard::Error as ResourceError;
-use super::WebResponse;
-
 /// Errors which should not or need not be communicated to the requesting party but which are of
 /// interest to the server. See the documentation for each enum variant for more documentation on
 /// each as some may have an expected response. These include badly formatted headers or url encoded

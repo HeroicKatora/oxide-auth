@@ -1,7 +1,6 @@
 use code_grant_2::authorization::{
     authorization_code,
     Error as AuthorizationError,
-    ErrorUrl,
     Extension as AuthorizationExtension,
     Endpoint as AuthorizationEndpoint,
     Request as AuthorizationRequest,
@@ -33,7 +32,10 @@ struct AuthorizationPending<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebReques
     request: R,
 }
 
-/// A processed authentication request that is waiting for authorization by the resource owner.
+/// A processed authentication request that may be waiting for authorization by the resource owner.
+///
+/// Note that this borrows from the `AuthorizationFlow` used to create it. You can `finish` the
+/// authorization flow for this request to produce a response or an error.
 pub struct AuthorizationPartial<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
     inner: AuthorizationPartialInner<'a, E, R>,
 
@@ -80,7 +82,8 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     /// ## Panics
     ///
     /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
-    /// endpoint, in cases that would normally have been caught as an error here.
+    /// endpoint, for details see the documentation of `Endpoint`. For consistent endpoints,
+    /// the panic is instead caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.registrar().is_none() {
             return Err(OAuthError::PrimitiveError.into());
@@ -97,11 +100,13 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
 
     /// Use the checked endpoint to execute the authorization flow for a request.
     ///
+    /// In almost all cases this is followed by executing `finish` on the result but some users may
+    /// instead want to inspect the partial result.
+    ///
     /// ## Panics
     ///
-    /// It is expected that the endpoint primitive functions are consistent, i.e. they don't begin
-    /// returning `None` after having returned `Some(registrar)` previously for example. If this
-    /// invariant is violated, this function may panic.
+    /// When the registrar or the authorizer returned by the endpoint is suddenly `None` when
+    /// previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> AuthorizationPartial<E, R> {
         let negotiated = authorization_code(
             &self.endpoint,
@@ -135,6 +140,10 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
 }
 
 impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
+    /// Finish the authentication step.
+    ///
+    /// If authorization has not yet produced a hard error or an explicit response, executes the
+    /// owner solicitor of the endpoint to determine owner consent.
     pub fn finish(self) -> Result<R::Response, E::Error> {
         let (_request, result) = match self.inner {
             AuthorizationPartialInner::Pending { pending, } => pending.finish(),

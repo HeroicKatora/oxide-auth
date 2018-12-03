@@ -8,6 +8,7 @@ use code_grant_2::guard::{
 
 use super::*;
 
+/// Guards resources by requiring OAuth authorization.
 pub struct ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     endpoint: WrappedResource<E, R>,
 }
@@ -31,6 +32,16 @@ struct Scoped<'a, E: 'a, R: 'a> {
 }
 
 impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+    /// Check that the endpoint supports the necessary operations for handling requests.
+    ///
+    /// Binds the endpoint to a particular type of request that it supports, for many
+    /// implementations this is probably single type anyways.
+    ///
+    /// ## Panics
+    ///
+    /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
+    /// endpoint, for details see the documentation of `Endpoint` and `execute`. For 
+    /// consistent endpoints, the panic is instead caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.issuer_mut().is_none() {
             return Err(OAuthError::PrimitiveError.into());
@@ -41,6 +52,12 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         })
     }
 
+    /// Use the checked endpoint to check for authorization for a resource.
+    ///
+    /// ## Panics
+    ///
+    /// When the issuer returned by the endpoint is suddenly `None` when previously it 
+    /// was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<(), Result<R::Response, E::Error>> {
         let protected = {
             let wrapped = WrappedRequest::new(&mut request);

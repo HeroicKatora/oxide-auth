@@ -10,6 +10,12 @@ use code_grant_2::accesstoken::{
 
 use super::*;
 
+/// Offers access tokens to authenticated third parties.
+///
+/// After having received an authorization code from the resource owner, a client must
+/// directly contact the OAuth endpoint–authenticating itself–to receive the access
+/// token. The token is then used as authorization in requests to the resource. This
+/// request MUST be protected by TLS.
 pub struct AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     endpoint: WrappedToken<E, R>,
 }
@@ -33,6 +39,16 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
 struct Authorization(String, Vec<u8>);
 
 impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+    /// Check that the endpoint supports the necessary operations for handling requests.
+    ///
+    /// Binds the endpoint to a particular type of request that it supports, for many
+    /// implementations this is probably single type anyways.
+    ///
+    /// ## Panics
+    ///
+    /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
+    /// endpoint, for details see the documentation of `Endpoint` and `execute`. For 
+    /// consistent endpoints, the panic is instead caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.registrar().is_none() {
             return Err(OAuthError::PrimitiveError.into());
@@ -51,6 +67,12 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         })
     }
 
+    /// Use the checked endpoint to check for authorization for a resource.
+    ///
+    /// ## Panics
+    ///
+    /// When the registrar, authorizer, or issuer returned by the endpoint is suddenly 
+    /// `None` when previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
         let issued = access_token(
             &mut self.endpoint,
