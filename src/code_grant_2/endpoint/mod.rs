@@ -288,6 +288,14 @@ pub trait OwnerSolicitor<Request: WebRequest> {
 ///
 /// Not all responses indicate failure. A redirect will also occur in the a regular of providing an
 /// access token to the third party client.
+///
+/// Each variant contains some form of context information about the response. This can be used either
+/// purely informational or in some cases provides additional customization points. The addition of
+/// fields to some variant context can occur in any major release until `1.0`. It is discouraged to 
+/// exhaustively match the fields directly. Since some context could not permit cloning, the enum will
+/// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
+/// think the pros or cons should be evaluated differently.
+#[derive(Debug)]
 pub enum ResponseKind {
     /// Authorization to access the resource has not been granted.
     Unauthorized {
