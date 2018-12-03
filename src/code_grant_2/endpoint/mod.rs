@@ -242,7 +242,8 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// The endpoint can rely on this being called at most once for each flow, if it wants
     /// to preallocate the response or return a handle on an existing prototype.
-    fn response(&mut self, request: &mut Request, kind: ResponseKind) -> Result<Request::Response, Self::Error>;
+    fn response(&mut self, request: &mut Request, kind: ResponseKind) 
+        -> Result<Request::Response, Self::Error>;
 }
 
 impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {

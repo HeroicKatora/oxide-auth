@@ -155,7 +155,11 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(
 {
     match error {
         AuthorizationError::Ignore => Err(OAuthError::DenySilently.into()),
-        AuthorizationError::Redirect(target) => endpoint.response(request, ResponseKind::Redirect),
+        AuthorizationError::Redirect(target) => {
+            let mut response = endpoint.response(request, ResponseKind::Redirect)?;
+            response.redirect(target.into())?;
+            Ok(response)
+        },
     }
 }
 
@@ -186,22 +190,31 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
 
     /// Denies the request, the client is not allowed access.
     fn deny(mut self) -> (R, Result<R::Response, E::Error>) {
-        let result = match self.pending.deny() {
-            Ok(url) => self.endpoint.0.response(&mut self.request, ResponseKind::Redirect),
-            Err(err) => authorization_error(&mut self.endpoint.0, &mut self.request, err),
-        };
+        let result = self.pending.deny();
+        let result = Self::convert_result(result, &mut self.endpoint.0, &mut self.request);
 
         (self.request, result)
     }
 
     /// Tells the system that the resource owner with the given id has approved the grant.
     fn authorize(mut self, who: String) -> (R, Result<R::Response, E::Error>) {
-        let result = match self.pending.authorize(self.endpoint, who.into()) {
-            Ok(url) => self.endpoint.0.response(&mut self.request, ResponseKind::Redirect),
-            Err(err) => authorization_error(&mut self.endpoint.0, &mut self.request, err),
-        };
+        let result = self.pending.authorize(self.endpoint, who.into());
+        let result = Self::convert_result(result, &mut self.endpoint.0, &mut self.request);
 
         (self.request, result)
+    }
+
+    fn convert_result(result: Result<Url, AuthorizationError>, endpoint: &mut E, request: &mut R) 
+        -> Result<R::Response, E::Error>
+    {
+        match result {
+            Ok(url) => {
+                let mut response = endpoint.response(request, ResponseKind::Redirect)?;
+                response.redirect(url)?;
+                Ok(response)
+            }
+            Err(err) => authorization_error(endpoint, request, err),
+        }
     }
 }
 
