@@ -7,7 +7,12 @@ use std::sync::Arc;
 
 /// Allows access to the query parameters in an url or a body.
 ///
-/// Use one of the listed implementations below.
+/// Use one of the listed implementations below. Since those may be a bit confusing due to their
+/// abundant use of generics, basically use any type of `HashMap` that maps 'str-likes' to a
+/// collection of other 'str-likes'. Popular instances may be:
+/// * `HashMap<String, String>`
+/// * `HashMap<String, Vec<String>>`
+/// * `HashMap<Cow<'static, str>, Cow<'static, str>>`
 ///
 /// You should generally not have to implement this trait yourself, and if you do there are
 /// additional requirements on your implementation to guarantee standard conformance. Therefore the
