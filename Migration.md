@@ -72,12 +72,11 @@ open the path to more flexible `future` based implementations.
 
 -----
 
-[WIP] QueryParamter is now a private struct with several `impl From<_>` as
-substitutes for the previous enum variants. This should make frontend
-implementation more straightforward by simply invoking `.into()` while allowing
-introduction of additional representations in a non-breaking change (variants of
-public enums are strictly speaking breaking changes while new impls of crate
-types are not).
+QueryParamter is now a private struct with several `impl From<_>` as substitutes
+for the previous enum variants. This should make frontend implementation more
+straightforward by simply invoking `.into()` while allowing introduction of
+additional representations in a non-breaking change (variants of public enums
+are strictly speaking breaking changes while new impls of crate types are not).
 
 -----
 
@@ -100,6 +99,8 @@ configuration-free setup and a production environment. Relying on the standard
 constructors for `SigningKey` is intended to urge users to correctly use
 high-entropy inputs such as the default rng of standard password hashing
 algorithms.
+
+----
 
 ## v0.4.0-preview0
 
