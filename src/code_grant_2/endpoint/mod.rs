@@ -84,10 +84,10 @@ mod query;
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-use primitives::authorizer::Authorizer;
-use primitives::issuer::Issuer;
-use primitives::registrar::Registrar;
-use primitives::scope::Scope;
+pub use primitives::authorizer::Authorizer;
+pub use primitives::issuer::Issuer;
+pub use primitives::registrar::Registrar;
+pub use primitives::scope::Scope;
 
 use super::accesstoken::{
     PrimitiveError as AccessTokenPrimitiveError};

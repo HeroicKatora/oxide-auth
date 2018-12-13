@@ -181,6 +181,8 @@
 //! may want to provide additional wrappers.
 //!
 
+pub mod simple;
+
 #[cfg(feature = "actix-frontend")]
 pub mod actix;
 #[cfg(feature = "gotham-frontend")]
