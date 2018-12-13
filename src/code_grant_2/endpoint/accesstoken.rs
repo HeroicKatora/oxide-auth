@@ -5,6 +5,7 @@ use code_grant_2::accesstoken::{
     access_token,
     Error as TokenError,
     Extension as TokenExtension,
+    ExtensionSystem,
     Endpoint as TokenEndpoint,
     Request as TokenRequest};
 
@@ -125,9 +126,8 @@ impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
         self.0.issuer_mut().unwrap()
     }
 
-    fn extensions(&self) -> Box<Iterator<Item=&TokenExtension>> {
-        // TODO: forward extensions.
-        Box::new(None.into_iter())
+    fn extensions(&self) -> &ExtensionSystem {
+        &()
     }
 }
 

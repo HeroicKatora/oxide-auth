@@ -48,6 +48,23 @@ pub trait Extension: GrantExtension {
         -> std::result::Result<Option<ExtensionData>, ()>;
 }
 
+/// A system of extensions provided additional data.
+///
+/// An endpoint not having any extension may use `&()` as the result of system.
+pub trait ExtensionSystem {
+    /// Inspect the request and extension data to produce extension data.
+    ///
+    /// The input data comes from the extension data produced in the handling of the
+    /// authorization code request.
+    fn extend(&self, request: &Request, data: Extensions) -> std::result::Result<Extensions, ()>;
+}
+
+impl ExtensionSystem for () {
+    fn extend(&self, _: &Request, _: Extensions) -> std::result::Result<Extensions, ()> {
+        Ok(Extensions::new())
+    }
+}
+
 /// Required functionality to respond to access token requests.
 ///
 /// Each method will only be invoked exactly once when processing a correct and authorized request,
@@ -63,8 +80,10 @@ pub trait Endpoint {
     /// Return the issuer instance to create the access token.
     fn issuer(&mut self) -> &mut Issuer;
 
-    /// An iterator over the used extensions.
-    fn extensions(&self) -> Box<Iterator<Item=&Extension>>;
+    /// The system of used extension, extending responses.
+    ///
+    /// It is possible to use `&()`.
+    fn extensions(&self) -> &ExtensionSystem;
 }
 
 /// Try to redeem an authorization code.
@@ -116,17 +135,13 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
         return Err(Error::invalid((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
     }
 
-    let mut code_extensions = saved_params.extensions;
-    let mut access_extensions = Extensions::new();
+    let code_extensions = saved_params.extensions;
+    let access_extensions = handler.extensions().extend(request, code_extensions);
 
-    for extension_instance in handler.extensions() {
-        let saved_extension = code_extensions.remove(&extension_instance);
-        match extension_instance.extend_access_token(request, saved_extension) {
-            Err(_) =>  return Err(Error::invalid(())),
-            Ok(Some(extension)) => access_extensions.set(&extension_instance, extension),
-            Ok(None) => (),
-        }
-    }
+    let access_extensions = match access_extensions {
+        Ok(extensions) => extensions,
+        Err(_) =>  return Err(Error::invalid(())),
+    };
 
     let token = handler.issuer().issue(Grant {
         client_id: saved_params.client_id,
