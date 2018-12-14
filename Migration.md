@@ -4,6 +4,8 @@ more detailed information.
 
 ## v0.4.0-preview.1 [WIP]
 
+A HUGE refactor of the backend part of the library.
+
 Currently trying to streamline traits and method by making them less specialized
 and reusable or hiding complexity behind a more succinct interface. Part of this
 is cleaning up interfaces that were misguided by envisioning them with a too
@@ -77,6 +79,8 @@ for the previous enum variants. This should make frontend implementation more
 straightforward by simply invoking `.into()` while allowing introduction of
 additional representations in a non-breaking change (variants of public enums
 are strictly speaking breaking changes while new impls of crate types are not).
+As an added bonus, this change enabled many more zero-copy representations for
+query parameters.
 
 -----
 
@@ -101,6 +105,25 @@ high-entropy inputs such as the default rng of standard password hashing
 algorithms.
 
 ----
+
+[WIP]
+A new simple frontend (`frontends::simple`) has been introduced to serve as a
+common denominator for other implementations. Its data types are built for
+simplicity and used in tests, replacing the previous private test module
+implementations.
+
+----
+
+[WIP]
+Extension have been redesigned. Instead of the backend iterating over a set of
+extensions provided by the endpoint, the endpoint implementation now has full
+control over the input and output extension data in a single function call. The
+traits `AuthorizationExtension` etc. have been moved to the new
+`frontends::simple`.
+
+Rationale: This is to allow groups of extensions working closely together, such
+as possibly for OpenID in the future. It also solves a few efficieny and design
+issues by leaving the representation more open to library users/frontends.
 
 ## v0.4.0-preview0
 
