@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::sync::Arc;
 
 use super::{AuthorizationExtension, AccessTokenExtension, ExtensionResult};
 use code_grant_2::accesstoken::{ExtensionSystem, Request};
@@ -6,17 +7,38 @@ use primitives::grant::{Extensions};
 
 /// A simple system providing extensions to authorization and access token requests.
 ///
-/// The owning representation of access extensions can be switched out to `Arc<_>`, `Rc<_>` or other types.
+/// This extension system is suitable to group mostly unrelated extensions together.
+///
+/// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
+/// other types.
+#[derive(Debug, Default)]
 pub struct System<
-    AuthorizationContainer=Box<AuthorizationExtension>,
-    AccessTokenContainer=Box<AccessTokenExtension>
+    Authorization=Arc<AuthorizationExtension>,
+    AccessToken=Arc<AccessTokenExtension>
 > {
-    authorization: Vec<AuthorizationContainer>,
-    access_token: Vec<AccessTokenContainer>,
+    authorization: Vec<Authorization>,
+    access_token: Vec<AccessToken>,
+}
+
+impl<Auth, Acc> System<Auth, Acc> {
+    /// Create an empty extension system.
+    pub fn new() {
+        Default::default()
+    }
+
+    /// Add an authorization extension.
+    pub fn authorization(&mut self, extension: Auth) {
+        self.authorization.push(extension)
+    }
+
+    /// Add an access token extension.
+    pub fn access_token(&mut self, extension: Acc) {
+        self.access_token.push(extension)
+    }
 }
 
 impl<Auth, Acc> ExtensionSystem for System<Auth, Acc>
-    where Acc: Borrow<AccessTokenExtension>
+    where Acc: AccessTokenExtension
 {
     fn extend(&self, request: &Request, mut data: Extensions) -> std::result::Result<Extensions, ()> {
         let mut result_data = Extensions::new();

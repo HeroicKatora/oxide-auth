@@ -3,6 +3,10 @@ pub use code_grant_2::accesstoken::Request as AccessTokenRequest;
 
 mod system;
 
+use std::borrow::{Cow, ToOwned};
+use std::rc::Rc;
+use std::sync::Arc;
+
 pub use self::system::System;
 use primitives::grant::{Extension as ExtensionData, GrantExtension};
 
@@ -43,4 +47,70 @@ pub trait AccessTokenExtension: GrantExtension {
     /// returned as a response to the authorization code request is provided as an additional
     /// parameter.
     fn extend_access_token(&self, &AccessTokenRequest, Option<ExtensionData>) -> ExtensionResult;
+}
+
+impl<'a, T: AuthorizationExtension + ?Sized> AuthorizationExtension for &'a T {
+    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
+        (**self).extend_code(request)
+    }
+}
+
+impl<'a, T: AuthorizationExtension + ?Sized> AuthorizationExtension for Cow<'a, T> 
+    where T: Clone + ToOwned
+{
+    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
+        self.as_ref().extend_code(request)
+    }
+}
+
+impl<T: AuthorizationExtension + ?Sized> AuthorizationExtension for Box<T> {
+    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
+        (**self).extend_code(request)
+    }
+}
+
+impl<T: AuthorizationExtension + ?Sized> AuthorizationExtension for Arc<T> {
+    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
+        (**self).extend_code(request)
+    }
+}
+
+impl<T: AuthorizationExtension + ?Sized> AuthorizationExtension for Rc<T> {
+    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
+        (**self).extend_code(request)
+    }
+}
+
+
+
+impl<'a, T: AccessTokenExtension + ?Sized> AccessTokenExtension for &'a T {
+    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
+        (**self).extend_access_token(request, data)
+    }
+}
+
+impl<'a, T: AccessTokenExtension + ?Sized> AccessTokenExtension for Cow<'a, T> 
+    where T: Clone + ToOwned
+{
+    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
+        self.as_ref().extend_access_token(request, data)
+    }
+}
+
+impl<T: AccessTokenExtension + ?Sized> AccessTokenExtension for Box<T> {
+    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
+        (**self).extend_access_token(request, data)
+    }
+}
+
+impl<T: AccessTokenExtension + ?Sized> AccessTokenExtension for Arc<T> {
+    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
+        (**self).extend_access_token(request, data)
+    }
+}
+
+impl<T: AccessTokenExtension + ?Sized> AccessTokenExtension for Rc<T> {
+    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
+        (**self).extend_access_token(request, data)
+    }
 }

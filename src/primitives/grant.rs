@@ -2,26 +2,17 @@
 use super::{Url, Time};
 use super::scope::Scope;
 
+use std::borrow::{Cow, ToOwned};
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
+use std::rc::Rc;
+use std::sync::Arc;
 
 /// Provides a name registry for extensions.
 pub trait GrantExtension {
     /// An unique identifier distinguishing this extension type for parsing and storing.
     /// Obvious choices are the registered names as administered by IANA or private identifiers.
     fn identifier(&self) -> &'static str;
-}
-
-impl<T: GrantExtension + ?Sized> GrantExtension for Box<T> {
-    fn identifier(&self) -> &'static str {
-        (**self).identifier()
-    }
-}
-
-impl<'a, T: GrantExtension + ?Sized> GrantExtension for &'a T {
-    fn identifier(&self) -> &'static str {
-        (**self).identifier()
-    }
 }
 
 /// Wraps the data for an extension as a string with access restrictions.
@@ -187,5 +178,37 @@ impl<'a> Iterator for PrivateExtensions<'a> {
                 _ => (),
             }
         }
+    }
+}
+
+impl<'a, T: GrantExtension + ?Sized> GrantExtension for &'a T {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
+    }
+}
+
+impl<'a, T: GrantExtension + ?Sized> GrantExtension for Cow<'a, T> 
+    where T: Clone + ToOwned
+{
+    fn identifier(&self) -> &'static str {
+        self.as_ref().identifier()
+    }
+}
+
+impl<T: GrantExtension + ?Sized> GrantExtension for Box<T> {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
+    }
+}
+
+impl<T: GrantExtension + ?Sized> GrantExtension for Arc<T> {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
+    }
+}
+
+impl<T: GrantExtension + ?Sized> GrantExtension for Rc<T> {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
     }
 }
