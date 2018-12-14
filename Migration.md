@@ -125,6 +125,12 @@ Rationale: This is to allow groups of extensions working closely together, such
 as possibly for OpenID in the future. It also solves a few efficieny and design
 issues by leaving the representation more open to library users/frontends.
 
+----
+
+[WIP]
+Error variant namings and usages have been clarified. Specifically, such names
+should now correspond more closely to HTTP status codes where applicable.
+
 ## v0.4.0-preview0
 
 Actix is the only fully supported framework for the moment as development begins
