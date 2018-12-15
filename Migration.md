@@ -16,7 +16,7 @@ functionality for a small performance boost is not an acceptable tradeoff.
 
 [WIP]
 Documentation changes all around with an improved structure:
-* `code_grant` contains core algorithsm
+* `code_grant` contains core algorithms.
 * `code_grant::endpoint` contains the generic `Endpoint`, `WebRequest`,
   `WebResponse` and `xFlow` traits to generalize frontend implementations. Also
   note the wording now refers to these features as 'Endpoint' related while

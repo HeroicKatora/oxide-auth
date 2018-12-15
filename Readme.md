@@ -22,9 +22,22 @@ Additional
 [![Docs.rs Status](https://docs.rs/oxide-auth/badge.svg)](https://docs.rs/oxide-auth/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/iron/iron/master/LICENSE)
 
-More information about [contributing][CONTRIBUTING].
+A more or less comprehensive list of changes is contained in the
+[changelog][CHANGES]. Sometimes less as larger releases and reworks profit from
+a rough overview of the changes more than a cumulative list of detailed
+features.
+
+For some hints on upgrading from older versions see the [migration
+notes][MIGRATION].
+
+More information about [contributing][CONTRIBUTING]. Please respect that I
+maintain this on my own currently and have limited time. I appreciate
+suggestions but sometimes the associate workload can seem daunting. That means
+that simplifications to the workflow are also *highly* appreciated.
 
 [actix]: https://crates.io/crates/actix-web
 [example folder]: examples/
 [interactive example]: examples/authorization_actix.rs
+[CHANGES]: Changes.md
+[MIGRATION]: Migration.md
 [CONTRIBUTING]: docs/CONTRIBUTING.md
