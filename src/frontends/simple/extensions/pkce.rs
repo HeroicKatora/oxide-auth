@@ -16,28 +16,15 @@ impl AuthorizationExtension for Pkce {
             Ok(Some(encoded)) => encoded,
         };
 
-        ExtensionResult::Data(ExtensionData::private(Some(encoded)))
+        ExtensionResult::Data(encoded)
     }
 }
 
 impl AccessTokenExtension for Pkce {
     fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
-        let encoded = match data {
-            None => return ExtensionResult::Ok,
-            Some(encoded) => encoded,
-        };
+        let verifier = request.extension("code_verifier");
 
-        let verifier = match request.extension("code_verifier") {
-            Some(verifier) => verifier,
-            _ => return ExtensionResult::Err,
-        };
-
-        let method = match encoded.as_private() {
-            Ok(Some(method)) => method,
-            _ => return ExtensionResult::Err,
-        };
-
-        match self.verify(Cow::Owned(method), verifier) {
+        match self.verify(data, verifier) {
             Ok(_) => ExtensionResult::Ok,
             Err(_) => ExtensionResult::Err,
         }

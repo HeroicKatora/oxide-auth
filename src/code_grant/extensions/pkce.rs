@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 
-use code_grant::accesstoken::{Request as AccessTokenRequest};
-use code_grant::authorization::{Request as AuthorizationRequest};
-use primitives::grant::{Extension, GrantExtension};
+use primitives::grant::{GrantExtension, Extension as ExtensionData};
 
 use base64::encode as b64encode;
 use ring::digest::{SHA256, digest};
@@ -63,9 +61,18 @@ impl Pkce {
         self.allow_plain = true;
     }
 
-    /// 
+    /// Create the encoded method for proposed method and challenge.
+    ///
+    /// The method defaults to `plain` when none is given, effectively offering increased
+    /// compatibility but less security. Support for `plain` is optional and needs to be enabled
+    /// explicitely through `Pkce::allow_plain`. This extension may also require clients to use it,
+    /// in which case giving no challenge also leads to an error.
+    ///
+    /// The resulting string MUST NOT be publicly available to the client. Otherwise, it would be
+    /// trivial for a third party to impersonate the client in the access token request phase. For
+    /// a SHA256 methods the results would not be quite as severe but still bad practice.
     pub fn challenge(&self, method: Option<Cow<str>>, challenge: Option<Cow<str>>)
-        -> Result<Option<String>, ()>
+        -> Result<Option<ExtensionData>, ()>
     {
         let method = method.unwrap_or(Cow::Borrowed("plain"));
 
@@ -78,13 +85,35 @@ impl Pkce {
         let method = Method::from_parameter(method, challenge)?;
         let method = method.assert_supported_method(self.allow_plain)?;
 
-        Ok(Some(method.encode()))
+        Ok(Some(ExtensionData::private(Some(method.encode()))))
     }
 
-    pub fn verify(&self, method: Cow<str>, verifier: Cow<str>)
+    /// Verify against the encoded challenge.
+    ///
+    /// When the challenge is required, ensure again that a challenge was made and a corresponding
+    /// method data is present as an extension. This is not strictly necessary since clients should
+    /// not be able to delete private extension data but this check does not cost a lot.
+    ///
+    /// When a challenge was agreed upon but no verifier is present, this method will return an
+    /// error.
+    pub fn verify(&self, method: Option<ExtensionData>, verifier: Option<Cow<str>>)
         -> Result<(), ()>
     {
-        let method = Method::from_encoded(method)?;
+        let (method, verifier) = match (method, verifier) {
+            (None, _) if self.required => return Err(()),
+            (None, _) => return Ok(()),
+            // An internal saved method but no verifier
+            (Some(_), None) => return Err(()),
+            (Some(method), Some(verifier)) => (method, verifier),
+        };
+
+        let method = match method.as_private() {
+            Ok(Some(method)) => method,
+            _ => return Err(()),
+        };
+
+        let method = Method::from_encoded(Cow::Owned(method))?;
+
         method.verify(&verifier)
     }
 }
