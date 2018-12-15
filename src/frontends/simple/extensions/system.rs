@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::sync::Arc;
 
 use super::{AuthorizationExtension, AccessTokenExtension, ExtensionResult};
-use code_grant_2::accesstoken::{ExtensionSystem, Request};
+use code_grant::accesstoken::{ExtensionSystem, Request};
 use primitives::grant::{Extensions};
 
 /// A simple system providing extensions to authorization and access token requests.

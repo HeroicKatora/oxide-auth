@@ -22,3 +22,9 @@ pub mod guard;
 /// Polymorphic HTTP wrappers for code grant flows.
 pub mod endpoint;
 
+pub mod extensions;
+
+#[cfg(test)]
+mod tests;
+
+pub mod error;

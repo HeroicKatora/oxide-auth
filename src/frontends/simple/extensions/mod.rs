@@ -1,5 +1,5 @@
-pub use code_grant_2::authorization::Request as AuthorizationRequest;
-pub use code_grant_2::accesstoken::Request as AccessTokenRequest;
+pub use code_grant::authorization::Request as AuthorizationRequest;
+pub use code_grant::accesstoken::Request as AccessTokenRequest;
 
 mod system;
 

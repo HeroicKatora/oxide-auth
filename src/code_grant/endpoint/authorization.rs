@@ -1,4 +1,4 @@
-use code_grant_2::authorization::{
+use code_grant::authorization::{
     authorization_code,
     Error as AuthorizationError,
     Extension as AuthorizationExtension,

@@ -14,7 +14,7 @@ use self::request::{AuthorizationCode, AccessToken, Guard};
 
 pub use self::endpoint::CodeGrantEndpoint;
 pub use self::resolve::ResolvedResponse;
-pub use code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow, PreGrant, OwnerAuthorization};
+pub use code_grant::endpoint::{AuthorizationFlow, GrantFlow, AccessFlow, PreGrant, OwnerAuthorization};
 
 /// Bundles all oauth related methods under a single type.
 pub trait OAuth {

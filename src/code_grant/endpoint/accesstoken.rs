@@ -1,10 +1,9 @@
 use std::str::from_utf8;
 use std::marker::PhantomData;
 
-use code_grant_2::accesstoken::{
+use code_grant::accesstoken::{
     access_token,
     Error as TokenError,
-    Extension as TokenExtension,
     ExtensionSystem,
     Endpoint as TokenEndpoint,
     Request as TokenRequest};

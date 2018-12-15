@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use super::{AccessTokenExtension, CodeExtension};
-use code_grant::backend::{AccessTokenRequest, CodeRequest};
+use code_grant::accesstoken::{Request as AccessTokenRequest};
+use code_grant::authorization::{Request as AuthorizationRequest};
 use primitives::grant::{Extension, GrantExtension};
 
 use base64::encode as b64encode;
@@ -62,18 +62,11 @@ impl Pkce {
     pub fn allow_plain(&mut self) {
         self.allow_plain = true;
     }
-}
 
-impl GrantExtension for Pkce {
-    fn identifier(&self) -> &'static str {
-        "pkce"
-    }
-}
-
-impl CodeExtension for Pkce {
-    fn extend_code(&self, request: &CodeRequest) -> Result<Option<Extension>, ()> {
-        let challenge = request.extension("code_challenge");
-        let method = request.extension("code_challenge_method");
+    /// 
+    pub fn challenge(&self, method: Option<Cow<str>>, challenge: Option<Cow<str>>)
+        -> Result<Option<String>, ()>
+    {
         let method = method.unwrap_or(Cow::Borrowed("plain"));
 
         let challenge = match challenge {
@@ -85,24 +78,20 @@ impl CodeExtension for Pkce {
         let method = Method::from_parameter(method, challenge)?;
         let method = method.assert_supported_method(self.allow_plain)?;
 
-        Ok(Some(Extension::private(Some(method.encode()))))
+        Ok(Some(method.encode()))
+    }
+
+    pub fn verify(&self, method: Cow<str>, verifier: Cow<str>)
+        -> Result<(), ()>
+    {
+        let method = Method::from_encoded(method)?;
+        method.verify(&verifier)
     }
 }
 
-impl AccessTokenExtension for Pkce {
-    fn extend_access_token(&self, request: &AccessTokenRequest, code_extension: Option<Extension>)
-        -> Result<Option<Extension>, ()> {
-        let encoded = match code_extension {
-            None => return Ok(None),
-            Some(encoded) => encoded,
-        };
-
-        let verifier = request.extension("code_verifier").ok_or(())?;
-
-        let private_encoded = encoded.as_private()?.ok_or(())?;
-        let method = Method::from_encoded(private_encoded)?;
-
-        method.verify(&verifier).map(|_| None)
+impl GrantExtension for Pkce {
+    fn identifier(&self) -> &'static str {
+        "pkce"
     }
 }
 
@@ -130,7 +119,9 @@ impl Method {
         }
     }
 
-    fn from_encoded(mut encoded: String) -> Result<Method, ()> {
+    fn from_encoded(encoded: Cow<str>) -> Result<Method, ()> {
+        // TODO: avoid allocation in case of borrow and invalid.
+        let mut encoded = encoded.into_owned();
         match encoded.pop() {
             None => Err(()),
             Some('p') => Ok(Method::Plain(encoded)),

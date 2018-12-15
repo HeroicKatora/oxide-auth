@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use code_grant_2::guard::{
+use code_grant::guard::{
     protect,
     Error as ResourceError,
     Endpoint as ResourceEndpoint,

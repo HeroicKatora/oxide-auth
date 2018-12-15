@@ -1,5 +1,5 @@
 //! Simple, owning request and response types.
-use code_grant_2::endpoint::{QueryParameter, WebRequest, WebResponse};
+use code_grant::endpoint::{QueryParameter, WebRequest, WebResponse};
 
 use std::borrow::Cow;
 use std::collections::HashMap;

@@ -1,7 +1,7 @@
 use primitives::authorizer::Storage;
 use primitives::registrar::{Client, ClientMap};
 
-use code_grant::frontend::{AuthorizationFlow, OwnerAuthorizer};
+use code_grant::endpoint::{AuthorizationFlow, OwnerSolicitor};
 
 use std::collections::HashMap;
 
@@ -43,7 +43,8 @@ impl AuthorizationSetup {
     }
 
     fn test_error_redirect<P>(&mut self, request: CraftedRequest, pagehandler: P)
-    where P: OwnerAuthorizer<CraftedRequest> {
+        where P: OwnerSolicitor<CraftedRequest> 
+    {
         match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer)
             .handle(request)
             .complete(pagehandler) {
