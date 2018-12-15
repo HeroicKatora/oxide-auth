@@ -30,6 +30,16 @@ Documentation changes all around with an improved structure:
   multiple independent extensions at the same time, this is no longer required
   for other frontends.
 
+[WIP]
+The following names have changed for consistency:
+* Types of request-response mechanisms are now prefixed with the resource that
+  the requesting party (i.e. the client) tries to access. In particular:
+* `CodeRequest`, `CodeFlow`, … to `AuthorizationRequest`, `AuthorizationFlow`
+* `GuardFlow`, … to `ResourceFlow`
+* The `OwnerAuthorizer` has been named to `OwnerSolicitor` to emphasize its
+  role in conjunction with the resource owner and avoid confusing with directly
+  'authorization' related types.
+
 This migration notice denotes WIP or planned changes on the git version and will
 be merged into a single log when a release is made. WIP changes are intended to
 provide advance notice of expected interface changes and may appear only in
