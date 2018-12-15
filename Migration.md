@@ -14,10 +14,27 @@ later turned out, this choice also introduced complicated inter-module
 dependencies that reduced the overall available design space. Sacrificing
 functionality for a small performance boost is not an acceptable tradeoff.
 
+[WIP]
+Documentation changes all around with an improved structure:
+* `code_grant` contains core algorithsm
+* `code_grant::endpoint` contains the generic `Endpoint`, `WebRequest`,
+  `WebResponse` and `xFlow` traits to generalize frontend implementations. Also
+  note the wording now refers to these features as 'Endpoint' related while
+  'frontend' is used for http-library specific components. When other OAuth
+  methods are supported, this may instead move to its own top-level module.
+* `frontends::simple` contains reusable abstractions for endpoints. That is, an
+  an owning request and response struct. Similar abstractions previously existed
+  for test purposes only.
+* [WIP] Extensions are now implemented in such a way as to be used standalone.
+  While the `simple` frontend offers some trait based `System` to make use of
+  multiple independent extensions at the same time, this is no longer required
+  for other frontends.
+
 This migration notice denotes WIP or planned changes on the git version and will
-be merged into a single log when a release is made. WIP changes may appear in
-`preview.2` or later and are intended to provide advance notice of expected
-interface changes.
+be merged into a single log when a release is made. WIP changes are intended to
+provide advance notice of expected interface changes and may appear only in
+`preview.2` or later. In that case, they will be moved to the according
+migration note.
 
 -----
 

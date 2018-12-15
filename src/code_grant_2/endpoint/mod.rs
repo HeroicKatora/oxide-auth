@@ -23,58 +23,6 @@
 //!
 //! After receiving an authorization grant, access token or access request, initiate the respective
 //! flow by collecting the [`Authorizer`], [`Issuer`], and [`Registrar`] instances. For example:
-//!
-//! ```no_run
-//! extern crate oxide_auth;
-//! # extern crate url;
-//! # use std::borrow::Cow;
-//! # use std::collections::HashMap;
-//! # use std::vec::Vec;
-//! use oxide_auth::code_grant::frontend::{OAuthError, QueryParameter, WebRequest, WebResponse};
-//! use oxide_auth::code_grant::frontend::{GrantFlow};
-//! use oxide_auth::primitives::prelude::*;
-//! use url::Url;
-//! struct MyRequest { /* user defined */ }
-//! struct MyResponse { /* user defined */ }
-//!
-//! impl WebRequest for MyRequest {
-//!     type Error = OAuthError; /* Custom type permitted but this is easier */
-//!     type Response = MyResponse;
-//!     /* Implementation of the traits' methods */
-//! # fn query(&mut self) -> Result<QueryParameter, ()> { Err(()) }
-//! # fn urlbody(&mut self) -> Result<QueryParameter, ()> { Err(()) }
-//! # fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> { Err(()) }
-//! }
-//!
-//! impl WebResponse for MyResponse {
-//!     type Error = OAuthError;
-//!     /* Implementation of the traits' methods */
-//! # fn redirect(url: Url) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
-//! # fn text(text: &str) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
-//! # fn json(data: &str) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
-//! # fn as_client_error(self) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
-//! # fn as_unauthorized(self) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
-//! # fn with_authorization(self, kind: &str) -> Result<Self, Self::Error> { Ok(MyResponse {}) }
-//! }
-//!
-//! struct State<'a> {
-//!     registrar: &'a mut Registrar,
-//!     authorizer: &'a mut Authorizer,
-//!     issuer: &'a mut Issuer,
-//! }
-//!
-//! fn handle(state: State, request: MyRequest) -> Result<MyResponse, OAuthError> {
-//!     GrantFlow::new(state.registrar, state.authorizer, state.issuer)
-//!         .handle(request)
-//! }
-//! # pub fn main() { }
-//! ```
-//!
-//! [`WebRequest`]: trait.WebRequest.html
-//! [`WebResponse`]: trait.WebResponse.html
-//! [`Authorizer`]: ../../primitives/authorizer/trait.Authorizer.html
-//! [`Issuer`]: ../../primitives/issuer/trait.Issuer.html
-//! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
 mod authorization;
 mod accesstoken;
 mod error;
