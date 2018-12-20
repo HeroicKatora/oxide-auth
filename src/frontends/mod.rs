@@ -87,24 +87,14 @@
 //!     // Our internal frontends error type is `OAuthError`
 //!     type Error = OAuthError;
 //!
-//!     fn query(&mut self) -> Result<QueryParameter, ()> {
-//!         // Our query only has a single value for each key
-//!         Ok(QueryParameter::SingleValue(
-//!             // The values and keys are present as strings
-//!             SingleValueQuery::StringValue(
-//!                 // We can borrow our internal structures. Without copy! Yay!
-//!                 Cow::Borrowed(&self.query))))
+//!     fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, ()> {
+//!         Ok(Cow::Borrowed(&self.query))
 //!     }
 //!
-//!     fn urlbody(&mut self) -> Result<QueryParameter, ()> {
-//!         // Similar to above, constructing a zero-copy encapsulation of our data
-//!         self.urlbody.as_ref().map(|body|
-//!             QueryParameter::SingleValue(
-//!                 SingleValueQuery::StringValue(
-//!                     Cow::Borrowed(body))))
-//!             // None signals that the body was not url encoded, this is an error
+//!     fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, ()> {
+//!         self.urlbody.as_ref()
+//!             .map(|body| Cow::Borrowed(&self.query as &QueryParameter))
 //!             .ok_or(())
-//!
 //!     }
 //!
 //!     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
@@ -117,57 +107,6 @@
 //!     // Redeclare our error type, those two must be the same.
 //!     type Error = OAuthError;
 //!
-//!     fn redirect(url: Url) -> Result<Self, Self::Error> {
-//!         Ok(ExampleResponse {
-//!             // Redirect
-//!             status: 302,
-//!             location: Some(url.as_str().to_string()),
-//!             // This has no other headers or content
-//!             content_type: None,
-//!             www_authenticate: None,
-//!             body: None,
-//!         })
-//!     }
-//!
-//!     fn text(text: &str) -> Result<Self, Self::Error> {
-//!         Ok(ExampleResponse {
-//!             // Ok
-//!             status: 200,
-//!             content_type: Some("text/plain".to_string()),
-//!             body: Some(text.to_string()),
-//!
-//!             location: None,
-//!             www_authenticate: None,
-//!         })
-//!     }
-//!     // Json repsonse data, with media type `aplication/json`.
-//!     fn json(data: &str) -> Result<Self, Self::Error>{
-//!         Ok(ExampleResponse {
-//!             // Ok
-//!             status: 200,
-//!             content_type: Some("aplication/json".to_string()),
-//!             body: Some(data.to_string()),
-//!
-//!             location: None,
-//!             www_authenticate: None,
-//!         })
-//!     }
-//!     // Set the response status to 400
-//!     fn as_client_error(mut self) -> Result<Self, Self::Error> {
-//!         self.status = 400;
-//!         Ok(self)
-//!     }
-//!     // Set the response status to 401
-//!     fn as_unauthorized(mut self) -> Result<Self, Self::Error> {
-//!         self.status = 401;
-//!         Ok(self)
-//!     }
-//!     // Add an `WWW-Authenticate` header
-//!     fn with_authorization(mut self, kind: &str) -> Result<Self, Self::Error> {
-//!         self.status = 401;
-//!         self.www_authenticate = Some(kind.to_string());
-//!         Ok(self)
-//!     }
 //! }
 //! # fn main() {}
 //! ```

@@ -69,6 +69,7 @@ enum Body {
     Json(String),
 }
 
+#[derive(Debug)]
 enum CraftedError {
     Crafted,
     Err(OAuthError),
@@ -208,11 +209,11 @@ pub mod defaults {
     pub const EXAMPLE_SCOPE: &str = "example default";
 }
 
-/// Test the authorization code flow.
-mod authorization_code;
+// /// Test the authorization code flow.
+// mod authorization_code;
 /// Test the access token flow.
 mod access_token;
-/// Test the guard flow.
-mod resource_guard;
-/// Test functionality of pkce.
-mod pkce;
+// /// Test the guard flow.
+// mod resource_guard;
+// /// Test functionality of pkce.
+// mod pkce;
