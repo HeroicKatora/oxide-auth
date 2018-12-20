@@ -9,16 +9,16 @@ use primitives::scope::Scope;
 
 use code_grant::endpoint::{AccessTokenFlow, Endpoint, OwnerSolicitor, OAuthError, ResponseKind, WebRequest};
 
-pub struct AccessToken<'a> {
-    registrar: &'a Registrar,
-    authorizer: &'a mut Authorizer,
-    issuer: &'a mut Issuer,
-}
-
 #[derive(Debug)]
 pub enum Error<W: WebRequest> {
     Web(W::Error),
     OAuth(OAuthError),
+}
+
+pub struct AccessToken<'a> {
+    registrar: &'a Registrar,
+    authorizer: &'a mut Authorizer,
+    issuer: &'a mut Issuer,
 }
 
 pub fn access_token_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut Authorizer, issuer: &'a mut Issuer) 

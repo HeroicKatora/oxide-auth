@@ -87,17 +87,17 @@
 //!     // Our internal frontends error type is `OAuthError`
 //!     type Error = OAuthError;
 //!
-//!     fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, ()> {
+//!     fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, OAuthError> {
 //!         Ok(Cow::Borrowed(&self.query))
 //!     }
 //!
-//!     fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, ()> {
+//!     fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, OAuthError> {
 //!         self.urlbody.as_ref()
-//!             .map(|body| Cow::Borrowed(&self.query as &QueryParameter))
-//!             .ok_or(())
+//!             .map(|body| Cow::Borrowed(body as &QueryParameter))
+//!             .ok_or(OAuthError::PrimitiveError)
 //!     }
 //!
-//!     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
+//!     fn authheader(&mut self) -> Result<Option<Cow<str>>, OAuthError> {
 //!         // Borrow the data if it exists, else we had no header. No error cases.
 //!         Ok(self.authorization_header.as_ref().map(|string| string.as_str().into()))
 //!     }
@@ -107,7 +107,47 @@
 //!     // Redeclare our error type, those two must be the same.
 //!     type Error = OAuthError;
 //!
+//!     fn ok(&mut self) -> Result<(), OAuthError> {
+//!         self.status = 200;
+//!         self.www_authenticate = None;
+//!         self.location = None;
+//!         Ok(())
+//!     }
+//!
+//!     fn redirect(&mut self, target: Url) -> Result<(), OAuthError> {
+//!         self.status = 302;
+//!         self.www_authenticate = None;
+//!         self.location = Some(target.into_string());
+//!         Ok(())
+//!     }
+//!
+//!     fn client_error(&mut self) -> Result<(), OAuthError> {
+//!         self.status = 400;
+//!         self.www_authenticate = None;
+//!         self.location = None;
+//!         Ok(())
+//!     }
+//!
+//!     fn unauthorized(&mut self, www_authenticate: &str) -> Result<(), OAuthError> {
+//!         self.status = 401;
+//!         self.www_authenticate = Some(www_authenticate.to_string());
+//!         self.location = None;
+//!         Ok(())
+//!     }
+//!
+//!     fn body_text(&mut self, text: &str) -> Result<(), OAuthError> {
+//!         self.body = Some(text.to_string());
+//!         self.content_type = Some("text/plain".to_string());
+//!         Ok(())
+//!     }
+//!
+//!     fn body_json(&mut self, json: &str) -> Result<(), OAuthError> {
+//!         self.body = Some(json.to_string());
+//!         self.content_type = Some("application/json".to_string());
+//!         Ok(())
+//!     }
 //! }
+//!
 //! # fn main() {}
 //! ```
 //!

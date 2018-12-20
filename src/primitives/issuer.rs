@@ -127,6 +127,34 @@ impl TokenSigner {
     }
 }
 
+impl<'s, I: Issuer> Issuer for &'s mut I {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        (**self).issue(grant)
+    }
+
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        (**self).recover_token(token)
+    }
+
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        (**self).recover_refresh(token)
+    }
+}
+
+impl<I: Issuer> Issuer for Box<I> {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        (**self).issue(grant)
+    }
+
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        (**self).recover_token(token)
+    }
+
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        (**self).recover_refresh(token)
+    }
+}
+
 impl Issuer for TokenSigner {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         let token = self.signer.tag("token").generate(&grant)?;

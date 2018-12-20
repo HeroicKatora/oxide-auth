@@ -41,6 +41,26 @@ impl<I: TokenGenerator> Storage<I> {
     }
 }
 
+impl<'a, A: Authorizer> Authorizer for &'a mut A {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        (**self).authorize(grant)
+    }
+
+    fn extract(&mut self, code: &str) -> Option<Grant> {
+        (**self).extract(code)
+    }
+}
+
+impl<A: Authorizer> Authorizer for Box<A> {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        (**self).authorize(grant)
+    }
+
+    fn extract(&mut self, code: &str) -> Option<Grant> {
+        (**self).extract(code)
+    }
+}
+
 impl<I: TokenGenerator> Authorizer for Storage<I> {
     fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
         let token = self.issuer.generate(&grant)?;

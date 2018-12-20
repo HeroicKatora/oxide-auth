@@ -4,8 +4,12 @@
 //! request turns up, it is the registrars duty to verify the requested scope and redirect url for
 //! consistency in the permissions granted and urls registered.
 use super::scope::Scope;
+
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::rc::Rc;
+
 use url::Url;
 use ring::{digest, pbkdf2};
 use ring::error::Unspecified;
@@ -32,7 +36,7 @@ pub trait Registrar {
     ///
     /// Another common strategy is to set a default scope or return the intersection with another
     /// scope.
-    fn negotiate(&self, BoundClient, _scope: Option<Scope>) -> Result<PreGrant, RegistrarError>;
+    fn negotiate(&self, client: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError>;
 
     /// Look up a client id.
     fn client(&self, client_id: &str) -> Option<RegisteredClient>;
@@ -310,6 +314,76 @@ impl ClientMap {
         policy
             .as_ref().map(|boxed| &**boxed)
             .unwrap_or(Pbkdf2::static_default())
+    }
+}
+
+impl<'s, R: Registrar> Registrar for &'s R {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        (**self).bound_redirect(bound)
+    }
+
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        (**self).negotiate(bound, scope)
+    }
+
+    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        (**self).client(client_id)
+    }
+}
+
+impl<'s, R: Registrar> Registrar for &'s mut R {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        (**self).bound_redirect(bound)
+    }
+
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        (**self).negotiate(bound, scope)
+    }
+
+    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        (**self).client(client_id)
+    }
+}
+
+impl<R: Registrar> Registrar for Box<R> {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        (**self).bound_redirect(bound)
+    }
+
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        (**self).negotiate(bound, scope)
+    }
+
+    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        (**self).client(client_id)
+    }
+}
+
+impl<R: Registrar> Registrar for Rc<R> {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        (**self).bound_redirect(bound)
+    }
+
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        (**self).negotiate(bound, scope)
+    }
+
+    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        (**self).client(client_id)
+    }
+}
+
+impl<R: Registrar> Registrar for Arc<R> {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        (**self).bound_redirect(bound)
+    }
+
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        (**self).negotiate(bound, scope)
+    }
+
+    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+        (**self).client(client_id)
     }
 }
 
