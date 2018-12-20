@@ -3,7 +3,7 @@ use primitives::generator::RandomGenerator;
 use primitives::grant::{Grant, Extensions};
 use primitives::scope::Scope;
 
-use code_grant::frontend::AccessFlow;
+use code_grant::endpoint::AccessTokenFlow;
 
 use chrono::{Utc, Duration};
 

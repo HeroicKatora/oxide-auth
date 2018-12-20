@@ -44,7 +44,7 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     /// consistent endpoints, the panic is instead caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.issuer_mut().is_none() {
-            return Err(OAuthError::PrimitiveError.into());
+            return Err(endpoint.error(OAuthError::PrimitiveError));
         }
 
         Ok(ResourceFlow {
@@ -85,7 +85,8 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         };
 
         let mut response = self.endpoint.0.response(request, kind)?;
-        response.unauthorized(&error.www_authenticate())?;
+        response.unauthorized(&error.www_authenticate())
+            .map_err(|err| self.endpoint.0.web_error(err))?;
 
         Ok(response)
     }

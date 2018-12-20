@@ -86,11 +86,11 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     /// the panic is instead caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.registrar().is_none() {
-            return Err(OAuthError::PrimitiveError.into());
+            return Err(endpoint.error(OAuthError::PrimitiveError));
         }
 
         if endpoint.authorizer_mut().is_none() {
-            return Err(OAuthError::PrimitiveError.into());
+            return Err(endpoint.error(OAuthError::PrimitiveError));
         }
 
         Ok(AuthorizationFlow {
@@ -163,10 +163,11 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(
     -> Result<R::Response, E::Error> 
 {
     match error {
-        AuthorizationError::Ignore => Err(OAuthError::DenySilently.into()),
+        AuthorizationError::Ignore => Err(endpoint.error(OAuthError::DenySilently)),
         AuthorizationError::Redirect(target) => {
             let mut response = endpoint.response(request, ResponseKind::Redirect)?;
-            response.redirect(target.into())?;
+            response.redirect(target.into())
+                .map_err(|err| endpoint.web_error(err))?;
             Ok(response)
         },
     }
@@ -183,7 +184,7 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
             OwnerConsent::Denied => self.deny(),
             OwnerConsent::InProgress(resp) => self.in_progress(resp),
             OwnerConsent::Authorized(who) => self.authorize(who),
-            OwnerConsent::Error(err) => (self.request, Err(err.into())),
+            OwnerConsent::Error(err) => (self.request, Err(self.endpoint.0.web_error(err))),
         }
     }
 
@@ -219,7 +220,8 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
         match result {
             Ok(url) => {
                 let mut response = endpoint.response(request, ResponseKind::Redirect)?;
-                response.redirect(url)?;
+                response.redirect(url)
+                    .map_err(|err| endpoint.web_error(err))?;
                 Ok(response)
             }
             Err(err) => authorization_error(endpoint, request, err),

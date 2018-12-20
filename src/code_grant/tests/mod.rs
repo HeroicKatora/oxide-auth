@@ -1,4 +1,4 @@
-use super::frontend::*;
+use super::endpoint::*;
 use primitives::generator::TokenGenerator;
 use primitives::registrar::PreGrant;
 use primitives::grant::Grant;
@@ -8,78 +8,133 @@ use std::collections::HashMap;
 
 use url::Url;
 
+/// Open and simple implementation of `WebRequest`.
+#[derive(Clone, Debug, Default)]
 struct CraftedRequest {
-    query: Option<HashMap<String, Vec<String>>>,
-    urlbody: Option<HashMap<String, Vec<String>>>,
-    auth: Option<String>,
+    /// The key-value pairs in the url query component.
+    pub query: Option<HashMap<String, Vec<String>>>,
+
+    /// The key-value pairs of a `x-www-form-urlencoded` body.
+    pub urlbody: Option<HashMap<String, Vec<String>>>,
+
+    /// Provided authorization header.
+    pub auth: Option<String>,
 }
 
-#[derive(Debug)]
-enum CraftedResponse {
-    Redirect(Url),
+/// Open and simple implementation of `WebResponse`.
+#[derive(Debug, Default)]
+struct CraftedResponse {
+    /// HTTP status code.
+    pub status: Status,
+
+    /// A location header, for example for redirects.
+    pub location: Option<Url>,
+
+    /// Indicates how the client should have authenticated.
+    ///
+    /// Only set with `Unauthorized` status.
+    pub www_authenticate: Option<String>,
+
+    /// Encoded body of the response.
+    ///
+    /// One variant for each possible encoding type.
+    pub body: Option<Body>,
+}
+
+/// An enum containing the necessary HTTP status codes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+enum Status {
+    /// Http status code 200.
+    Ok,
+
+    /// Http status code 302.
+    Redirect,
+
+    /// Http status code 400.
+    BadRequest,
+
+    /// Http status code 401.
+    Unauthorized,
+}
+
+/// Models the necessary body contents.
+/// 
+/// Real HTTP protocols should set a content type header for each of the body variants.
+#[derive(Clone, Debug)]
+enum Body {
+    /// A pure text body.
     Text(String),
+
+    /// A json encoded body, `application/json`.
     Json(String),
-    RedirectFromError(Url),
-    ClientError(Box<CraftedResponse>),
-    Unauthorized(Box<CraftedResponse>),
-    Authorization(Box<CraftedResponse>, String),
+}
+
+enum CraftedError {
+    Crafted,
+    Err(OAuthError),
 }
 
 impl WebRequest for CraftedRequest {
     type Response = CraftedResponse;
-    type Error = OAuthError;
+    type Error = CraftedError;
 
-    fn query(&mut self) -> Result<QueryParameter, ()> {
-        self.query.as_ref()
-            .map(|params|
-                QueryParameter::MultiValue(
-                    MultiValueQuery::StringValues(
-                        Cow::Borrowed(params))))
-            .ok_or(())
+    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+        self.query.as_ref().map(|hm| Cow::Borrowed(hm as &QueryParameter)).ok_or(CraftedError::Crafted)
     }
 
-    fn urlbody(&mut self) -> Result<QueryParameter, ()> {
-        self.urlbody.as_ref()
-            .map(|params|
-                QueryParameter::MultiValue(
-                    MultiValueQuery::StringValues(
-                        Cow::Borrowed(params))))
-            .ok_or(())
+    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+        self.urlbody.as_ref().map(|hm| Cow::Borrowed(hm as &QueryParameter)).ok_or(CraftedError::Crafted)
     }
 
-    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
         Ok(self.auth.as_ref().map(|bearer| bearer.as_str().into()))
     }
 }
 
 impl WebResponse for CraftedResponse {
-    type Error = OAuthError;
-    fn redirect(url: Url) -> Result<Self, OAuthError> {
-        Ok(CraftedResponse::Redirect(url))
+    type Error = CraftedError;
+
+    fn ok(&mut self) -> Result<(), Self::Error> {
+        self.status = Status::Ok;
+        self.location = None;
+        self.www_authenticate = None;
+        Ok(())
     }
 
-    fn text(text: &str) -> Result<Self, OAuthError> {
-        Ok(CraftedResponse::Text(text.to_string()))
+    /// A response which will redirect the user-agent to which the response is issued.
+    fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
+        self.status = Status::Redirect;
+        self.location = Some(url);
+        self.www_authenticate = None;
+        Ok(())
     }
 
-    fn json(data: &str) -> Result<Self, OAuthError> {
-        Ok(CraftedResponse::Json(data.to_string()))
+    /// Set the response status to 400.
+    fn client_error(&mut self) -> Result<(), Self::Error> {
+        self.status = Status::BadRequest;
+        self.location = None;
+        self.www_authenticate = None;
+        Ok(())
     }
 
-    fn redirect_error(target: ErrorRedirect) -> Result<Self, OAuthError> {
-        Ok(CraftedResponse::RedirectFromError(target.into()))
+    /// Set the response status to 401 and add a `WWW-Authenticate` header.
+    fn unauthorized(&mut self, header_value: &str) -> Result<(), Self::Error> {
+        self.status = Status::Unauthorized;
+        self.location = None;
+        self.www_authenticate = Some(header_value.to_owned());
+        Ok(())
     }
 
-    fn as_client_error(self) -> Result<Self, OAuthError> {
-        Ok(CraftedResponse::ClientError(self.into()))
+    /// A pure text response with no special media type set.
+    fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
+        self.body = Some(Body::Text(text.to_owned()));
+        Ok(())
     }
 
-    fn as_unauthorized(self) -> Result<Self, OAuthError> {
-        Ok(CraftedResponse::Unauthorized(self.into()))
-    }
-
-    fn with_authorization(self, kind: &str) -> Result<Self, OAuthError> {
-        Ok(CraftedResponse::Authorization(self.into(), kind.to_string()))
+    /// Json repsonse data, with media type `aplication/json.
+    fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
+        self.body = Some(Body::Json(data.to_owned()));
+        Ok(())
     }
 }
 
@@ -94,31 +149,35 @@ impl TokenGenerator for TestGenerator {
 struct Allow(String);
 struct Deny;
 
-impl OwnerAuthorizer<CraftedRequest> for Allow {
-    fn check_authorization(self, _: CraftedRequest, _: &PreGrant)
-    -> OwnerAuthorization<CraftedResponse> {
-        OwnerAuthorization::Authorized(self.0.clone())
+impl OwnerSolicitor<CraftedRequest> for Allow {
+    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
+        -> OwnerConsent<CraftedResponse> 
+    {
+        OwnerConsent::Authorized(self.0.clone())
     }
 }
 
-impl OwnerAuthorizer<CraftedRequest> for Deny {
-    fn check_authorization(self, _: CraftedRequest, _: &PreGrant)
-    -> OwnerAuthorization<CraftedResponse> {
-        OwnerAuthorization::Denied
+impl OwnerSolicitor<CraftedRequest> for Deny {
+    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
+        -> OwnerConsent<CraftedResponse> 
+    {
+        OwnerConsent::Denied
     }
 }
 
-impl<'l> OwnerAuthorizer<CraftedRequest> for &'l Allow {
-    fn check_authorization(self, _: CraftedRequest, _: &PreGrant)
-    -> OwnerAuthorization<CraftedResponse> {
-        OwnerAuthorization::Authorized(self.0.clone())
+impl<'l> OwnerSolicitor<CraftedRequest> for &'l Allow {
+    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
+        -> OwnerConsent<CraftedResponse> 
+    {
+        OwnerConsent::Authorized(self.0.clone())
     }
 }
 
-impl<'l> OwnerAuthorizer<CraftedRequest> for &'l Deny {
-    fn check_authorization(self, _: CraftedRequest, _: &PreGrant)
-    -> OwnerAuthorization<CraftedResponse> {
-        OwnerAuthorization::Denied
+impl<'l> OwnerSolicitor<CraftedRequest> for &'l Deny {
+    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
+        -> OwnerConsent<CraftedResponse> 
+    {
+        OwnerConsent::Denied
     }
 }
 
@@ -132,6 +191,12 @@ impl<'r, I, K, V> ToSingleValueQuery for I where
     V: AsRef<str> + 'r {
     fn to_single_value_query(self) -> HashMap<String, Vec<String>> {
         self.map(|&(ref k, ref v)| (k.as_ref().to_string(), vec![v.as_ref().to_string()])).collect()
+    }
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Status::Ok
     }
 }
 

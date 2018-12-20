@@ -150,7 +150,7 @@ pub trait WebResponse {
 /// contract is violated, the execution of a flow may lead to a panic.
 pub trait Endpoint<Request: WebRequest> {
     /// The error typed used as the error representation of each flow.
-    type Error: From<OAuthError> + From<Request::Error>;
+    type Error;
 
     /// A registrar if this endpoint can access one.
     ///
@@ -188,7 +188,7 @@ pub trait Endpoint<Request: WebRequest> {
     /// try to recover from this error by resetting states and returning a `TryAgain` overall. The
     /// default implementation returns with an opaque, converted `OAuthError::PrimitiveError`.
     fn access_token_error(&mut self, _error: AccessTokenPrimitiveError) -> Self::Error {
-        OAuthError::PrimitiveError.into()
+        self.error(OAuthError::PrimitiveError)
     }
 
     /// Generate a prototype response.
@@ -197,6 +197,10 @@ pub trait Endpoint<Request: WebRequest> {
     /// to preallocate the response or return a handle on an existing prototype.
     fn response(&mut self, request: &mut Request, kind: ResponseKind) 
         -> Result<Request::Response, Self::Error>;
+
+    fn error(&mut self, err: OAuthError) -> Self::Error;
+
+    fn web_error(&mut self, err: Request::Error) -> Self::Error;
 }
 
 impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
@@ -228,6 +232,14 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
 
     fn response(&mut self, request: &mut R, kind: ResponseKind) -> Result<R::Response, Self::Error> {
         (**self).response(request, kind)
+    }
+
+    fn error(&mut self, err: OAuthError) -> Self::Error {
+        (**self).error(err)
+    }
+
+    fn web_error(&mut self, err: R::Error) -> Self::Error {
+        (**self).web_error(err)
     }
 }
 

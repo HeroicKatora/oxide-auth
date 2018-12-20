@@ -141,6 +141,17 @@ implementations.
 
 ----
 
+`Endpoint::Error` no longer requires traits bounds of `From<OAuthError>` and
+`From<Request::Error>`. Instead, a dedicated callback method taking `&mut self`
+of the endpoint does that conversion.
+
+Rationale: The trait bounds puts some restrictions on implementing endpoints
+with error types that are not defined in the current trait. Additionally, it
+made it impossible to generalize over the underlying request type, as there is
+no way to implemention `impl<T> From<T> for ErrorType`, of course.
+
+----
+
 [WIP]
 Extension have been redesigned. Instead of the backend iterating over a set of
 extensions provided by the endpoint, the endpoint implementation now has full

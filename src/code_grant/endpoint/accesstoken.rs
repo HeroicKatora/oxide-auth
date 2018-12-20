@@ -51,15 +51,15 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     /// consistent endpoints, the panic is instead caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.registrar().is_none() {
-            return Err(OAuthError::PrimitiveError.into());
+            return Err(endpoint.error(OAuthError::PrimitiveError));
         }
 
         if endpoint.authorizer_mut().is_none() {
-            return Err(OAuthError::PrimitiveError.into());
+            return Err(endpoint.error(OAuthError::PrimitiveError));
         }
 
         if endpoint.issuer_mut().is_none() {
-            return Err(OAuthError::PrimitiveError.into());
+            return Err(endpoint.error(OAuthError::PrimitiveError));
         }
 
         Ok(AccessTokenFlow {
@@ -84,31 +84,36 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         };
 
         let mut response = self.endpoint.0.response(&mut request, ResponseKind::Ok)?;
-        response.body_json(&token.to_json())?;
+        response.body_json(&token.to_json())
+            .map_err(|err| self.endpoint.0.web_error(err))?;
         Ok(response)
     }
 }
 
-fn token_error<E: Endpoint<R>, R: WebRequest>(e: &mut E, request: &mut R, error: TokenError)
+fn token_error<E: Endpoint<R>, R: WebRequest>(endpoint: &mut E, request: &mut R, error: TokenError)
     -> Result<R::Response, E::Error> 
 {
     Ok(match error {
         TokenError::Invalid(json) => {
-            let mut response = e.response(request, ResponseKind::Invalid)?;
-            response.client_error()?;
-            response.body_json(&json.to_json())?;
+            let mut response = endpoint.response(request, ResponseKind::Invalid)?;
+            response.client_error()
+                .map_err(|err| endpoint.web_error(err))?;
+            response.body_json(&json.to_json())
+                .map_err(|err| endpoint.web_error(err))?;
             response
         },
         TokenError::Unauthorized(json, scheme) =>{
-            let mut response = e.response(request, ResponseKind::Unauthorized {
+            let mut response = endpoint.response(request, ResponseKind::Unauthorized {
                 error: None,
             })?;
-            response.unauthorized(&scheme)?;
-            response.body_json(&json.to_json())?;
+            response.unauthorized(&scheme)
+                .map_err(|err| endpoint.web_error(err))?;
+            response.body_json(&json.to_json())
+                .map_err(|err| endpoint.web_error(err))?;
             response
         },
         TokenError::Primitive(primitives) => unimplemented!(),
-        TokenError::Internal => return Err(OAuthError::PrimitiveError.into()),
+        TokenError::Internal => return Err(endpoint.error(OAuthError::PrimitiveError)),
     })
 }
 
