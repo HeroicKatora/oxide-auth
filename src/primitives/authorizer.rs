@@ -41,7 +41,7 @@ impl<I: TokenGenerator> Storage<I> {
     }
 }
 
-impl<'a, A: Authorizer> Authorizer for &'a mut A {
+impl<'a, A: Authorizer + ?Sized> Authorizer for &'a mut A {
     fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
         (**self).authorize(grant)
     }
@@ -51,7 +51,7 @@ impl<'a, A: Authorizer> Authorizer for &'a mut A {
     }
 }
 
-impl<A: Authorizer> Authorizer for Box<A> {
+impl<A: Authorizer + ?Sized> Authorizer for Box<A> {
     fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
         (**self).authorize(grant)
     }

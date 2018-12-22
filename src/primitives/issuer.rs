@@ -127,7 +127,7 @@ impl TokenSigner {
     }
 }
 
-impl<'s, I: Issuer> Issuer for &'s mut I {
+impl<'s, I: Issuer + ?Sized> Issuer for &'s mut I {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (**self).issue(grant)
     }
@@ -141,7 +141,7 @@ impl<'s, I: Issuer> Issuer for &'s mut I {
     }
 }
 
-impl<I: Issuer> Issuer for Box<I> {
+impl<I: Issuer + ?Sized> Issuer for Box<I> {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (**self).issue(grant)
     }

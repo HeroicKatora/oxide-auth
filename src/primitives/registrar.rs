@@ -317,7 +317,7 @@ impl ClientMap {
     }
 }
 
-impl<'s, R: Registrar> Registrar for &'s R {
+impl<'s, R: Registrar + ?Sized> Registrar for &'s R {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         (**self).bound_redirect(bound)
     }
@@ -331,7 +331,7 @@ impl<'s, R: Registrar> Registrar for &'s R {
     }
 }
 
-impl<'s, R: Registrar> Registrar for &'s mut R {
+impl<'s, R: Registrar + ?Sized> Registrar for &'s mut R {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         (**self).bound_redirect(bound)
     }
@@ -345,7 +345,7 @@ impl<'s, R: Registrar> Registrar for &'s mut R {
     }
 }
 
-impl<R: Registrar> Registrar for Box<R> {
+impl<R: Registrar + ?Sized> Registrar for Box<R> {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         (**self).bound_redirect(bound)
     }
@@ -359,7 +359,7 @@ impl<R: Registrar> Registrar for Box<R> {
     }
 }
 
-impl<R: Registrar> Registrar for Rc<R> {
+impl<R: Registrar + ?Sized> Registrar for Rc<R> {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         (**self).bound_redirect(bound)
     }
@@ -373,7 +373,7 @@ impl<R: Registrar> Registrar for Rc<R> {
     }
 }
 
-impl<R: Registrar> Registrar for Arc<R> {
+impl<R: Registrar + ?Sized> Registrar for Arc<R> {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         (**self).bound_redirect(bound)
     }
