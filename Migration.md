@@ -133,7 +133,6 @@ algorithms.
 
 ----
 
-[WIP]
 A new simple frontend (`frontends::simple`) has been introduced to serve as a
 common denominator for other implementations. Its data types are built for
 simplicity and used in tests, replacing the previous private test module

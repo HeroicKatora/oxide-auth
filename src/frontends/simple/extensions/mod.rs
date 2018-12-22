@@ -1,3 +1,4 @@
+//! Extension systems with no cross-dependencies.
 pub use code_grant::authorization::Request as AuthorizationRequest;
 pub use code_grant::accesstoken::Request as AccessTokenRequest;
 

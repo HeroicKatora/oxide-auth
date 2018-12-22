@@ -239,8 +239,10 @@ pub trait Endpoint<Request: WebRequest> {
     fn response(&mut self, request: &mut Request, kind: ResponseKind) 
         -> Result<Request::Response, Self::Error>;
 
+    /// Wrap an error.
     fn error(&mut self, err: OAuthError) -> Self::Error;
 
+    /// Wrap an error in the request/response types.
     fn web_error(&mut self, err: Request::Error) -> Self::Error;
 }
 
@@ -291,6 +293,12 @@ impl Into<Url> for ErrorRedirect {
 }
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for &'a mut S {
+    fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
+        (**self).check_consent(request, pre)
+    }
+}
+
+impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for Box<S> {
     fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
         (**self).check_consent(request, pre)
     }

@@ -1,7 +1,6 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -110,6 +109,26 @@ where
     }
 }
 
+unsafe impl<'a, Q: QueryParameter + 'a + ?Sized> QueryParameter for &'a Q {
+    fn unique_value(&self, key: &str) -> Option<Cow<str>> {
+        (**self).unique_value(key)
+    }
+
+    fn normalize(&self) -> NormalizedParameter {
+        (**self).normalize()
+    }
+}
+
+unsafe impl<'a, Q: QueryParameter + 'a + ?Sized> QueryParameter for &'a mut Q {
+    fn unique_value(&self, key: &str) -> Option<Cow<str>> {
+        (**self).unique_value(key)
+    }
+
+    fn normalize(&self) -> NormalizedParameter {
+        (**self).normalize()
+    }
+}
+
 unsafe impl UniqueValue for str {
     fn get_unique(&self) -> Option<&str> {
         Some(self)
@@ -133,6 +152,12 @@ unsafe impl<'a, V> UniqueValue for &'a V
 unsafe impl<'a> UniqueValue for Cow<'a, str> {
     fn get_unique(&self) -> Option<&str> {
         Some(self.as_ref())
+    }
+}
+
+unsafe impl<V: UniqueValue> UniqueValue for Option<V> {
+    fn get_unique(&self) -> Option<&str> {
+        self.as_ref().and_then(V::get_unique)
     }
 }
 

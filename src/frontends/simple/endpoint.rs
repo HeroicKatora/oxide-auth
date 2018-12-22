@@ -1,8 +1,8 @@
-/// Helper for ad-hoc authorization endpoints needs.
-///
-/// Implements a simple struct with public members `Generic` that provides a common basis with an
-/// `Endpoint` implementation. Tries to implement the least amount of policies and logic while
-/// providing the biggest possible customizability (in that order).
+//! Helper for ad-hoc authorization endpoints needs.
+//!
+//! Implements a simple struct with public members `Generic` that provides a common basis with an
+//! `Endpoint` implementation. Tries to implement the least amount of policies and logic while
+//! providing the biggest possible customizability (in that order).
 use std::borrow::Borrow;
 
 use primitives::authorizer::Authorizer;

@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use super::{AuthorizationExtension, AuthorizationRequest, AccessTokenExtension, AccessTokenRequest};
 use super::{ExtensionData, ExtensionResult};
 
