@@ -68,13 +68,54 @@ pub enum OwnerConsent<Response: WebResponse> {
     Error(Response::Error),
 }
 
+/// Lists the differnet reasons for creating a response to the client.
+///
+/// Not all responses indicate failure. A redirect will also occur in the a regular of providing an
+/// access token to the third party client.
+///
+/// Each variant contains some form of context information about the response. This can be used either
+/// purely informational or in some cases provides additional customization points. The addition of
+/// fields to some variant context can occur in any major release until `1.0`. It is discouraged to 
+/// exhaustively match the fields directly. Since some context could not permit cloning, the enum will
+/// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
+/// think the pros or cons should be evaluated differently.
+#[derive(Debug)]
+pub enum ResponseKind {
+    /// Authorization to access the resource has not been granted.
+    Unauthorized {
+        /// The underlying cause for denying access.
+        ///
+        /// The http authorization header is to be set according to this field.
+        error: Option<ResourceError>,
+    },
+
+    /// Redirect the user-agent to another url.
+    ///
+    /// The endpoint has the opportunity to inspect and modify error information to some extent.
+    /// For example to log an error rate or to provide a pointer to a custom human readable
+    /// explanation page. The response will generally not contain a body.
+    Redirect,
+
+    /// The request did not conform to specification or was otheriwse invalid.
+    ///
+    /// As such, it was not handled further. Some processes still warrant a response body to be
+    /// set in the case of an invalid request, containing additional information for the client.
+    /// For example, an authorized client sending a malformed but authenticated request for an
+    /// access token will receive additional hints on the cause of his mistake.
+    Invalid,
+
+    /// An expected, normal response whose content requires precise semantics.
+    Ok,
+}
+
 /// An error occuring during authorization, convertible to the redirect url with which to respond.
 pub struct ErrorRedirect(ErrorUrl);
 
-impl Into<Url> for ErrorRedirect {
-    fn into(self) -> Url {
-        self.0.into()
-    }
+/// Checks consent with the owner of a resource, identified in a request.
+pub trait OwnerSolicitor<Request: WebRequest> {
+    /// Ensure that a user (resource owner) is currently authenticated (for example via a session
+    /// cookie) and determine if he has agreed to the presented grants.
+    fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
 }
 
 /// Abstraction of web requests with several different abstractions and constructors needed by an
@@ -243,49 +284,14 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     }
 }
 
-/// Checks consent with the owner of a resource, identified in a request.
-pub trait OwnerSolicitor<Request: WebRequest> {
-    /// Ensure that a user (resource owner) is currently authenticated (for example via a session
-    /// cookie) and determine if he has agreed to the presented grants.
-    fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
+impl Into<Url> for ErrorRedirect {
+    fn into(self) -> Url {
+        self.0.into()
+    }
 }
 
-/// Lists the differnet reasons for creating a response to the client.
-///
-/// Not all responses indicate failure. A redirect will also occur in the a regular of providing an
-/// access token to the third party client.
-///
-/// Each variant contains some form of context information about the response. This can be used either
-/// purely informational or in some cases provides additional customization points. The addition of
-/// fields to some variant context can occur in any major release until `1.0`. It is discouraged to 
-/// exhaustively match the fields directly. Since some context could not permit cloning, the enum will
-/// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
-/// think the pros or cons should be evaluated differently.
-#[derive(Debug)]
-pub enum ResponseKind {
-    /// Authorization to access the resource has not been granted.
-    Unauthorized {
-        /// The underlying cause for denying access.
-        ///
-        /// The http authorization header is to be set according to this field.
-        error: Option<ResourceError>,
-    },
-
-    /// Redirect the user-agent to another url.
-    ///
-    /// The endpoint has the opportunity to inspect and modify error information to some extent.
-    /// For example to log an error rate or to provide a pointer to a custom human readable
-    /// explanation page. The response will generally not contain a body.
-    Redirect,
-
-    /// The request did not conform to specification or was otheriwse invalid.
-    ///
-    /// As such, it was not handled further. Some processes still warrant a response body to be
-    /// set in the case of an invalid request, containing additional information for the client.
-    /// For example, an authorized client sending a malformed but authenticated request for an
-    /// access token will receive additional hints on the cause of his mistake.
-    Invalid,
-
-    /// An expected, normal response whose content requires precise semantics.
-    Ok,
+impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for &'a mut S {
+    fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
+        (**self).check_consent(request, pre)
+    }
 }

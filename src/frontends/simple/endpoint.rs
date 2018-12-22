@@ -3,12 +3,15 @@
 /// Implements a simple struct with public members `Generic` that provides a common basis with an
 /// `Endpoint` implementation. Tries to implement the least amount of policies and logic while
 /// providing the biggest possible customizability (in that order).
+use std::borrow::Borrow;
+
 use primitives::authorizer::Authorizer;
 use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
-use code_grant::endpoint::{AccessTokenFlow, Endpoint, OwnerConsent, OwnerSolicitor, OAuthError, PreGrant, ResponseKind, WebRequest};
+use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
+use code_grant::endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, OAuthError, PreGrant, ResponseKind, WebRequest};
 
 /// Errors either caused by the underlying web types or the library.
 #[derive(Debug)]
@@ -159,7 +162,35 @@ pub trait OptIssuer {
     fn opt_mut(&mut self) -> Option<&mut Issuer>;
 }
 
-type AccessToken<'a> = Generic<&'a (Registrar + 'a), &'a mut (Authorizer + 'a), &'a mut (Issuer + 'a), Vacant, Vacant>;
+type Authorization<'a, W> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), Vacant, &'a mut(OwnerSolicitor<W> + 'a), Vacant>;
+type AccessToken<'a> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), &'a mut(Issuer + 'a), Vacant, Vacant>;
+type Resource<'a> = Generic<Vacant, Vacant, &'a mut (Issuer + 'a), Vacant, &'a [Scope]>;
+
+/// Create an ad-hoc authorization flow.
+///
+/// Since all necessary primitives are expected in the function syntax, this is guaranteed to never
+/// fail or panic, compared to preparing one with `AuthorizationFlow`. 
+///
+/// But this is not as versatile and extensible, so it should be used with care.  The fact that it
+/// only takes references is a conscious choice to maintain forwards portability while encouraging
+/// the transition to custom `Endpoint` implementations instead.
+pub fn authorization_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut Authorizer, solicitor: &'a mut OwnerSolicitor<W>)
+    -> AuthorizationFlow<Authorization<'a, W>, W>
+    where W: WebRequest, W::Response: Default
+{
+    let flow = AuthorizationFlow::prepare(Generic {
+        registrar,
+        authorizer,
+        issuer: Vacant,
+        solicitor,
+        scopes: Vacant,
+    });
+
+    match flow {
+        Err(_) => unreachable!(),
+        Ok(flow) => flow,
+    }
+}
 
 /// Create an ad-hoc access token flow.
 ///
@@ -179,6 +210,32 @@ pub fn access_token_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut Au
         issuer,
         solicitor: Vacant,
         scopes: Vacant,
+    });
+
+    match flow {
+        Err(_) => unreachable!(),
+        Ok(flow) => flow,
+    }
+}
+
+/// Create an ad-hoc resource flow.
+///
+/// Since all necessary primitives are expected in the function syntax, this is guaranteed to never
+/// fail or panic, compared to preparing one with `ResourceFlow`. 
+///
+/// But this is not as versatile and extensible, so it should be used with care.  The fact that it
+/// only takes references is a conscious choice to maintain forwards portability while encouraging
+/// the transition to custom `Endpoint` implementations instead.
+pub fn resource_flow<'a, W>(issuer: &'a mut Issuer, scopes: &'a [Scope])
+    -> ResourceFlow<Resource<'a>, W>
+    where W: WebRequest, W::Response: Default
+{
+    let flow = ResourceFlow::prepare(Generic {
+        registrar: Vacant,
+        authorizer: Vacant,
+        issuer,
+        solicitor: Vacant,
+        scopes,
     });
 
     match flow {
@@ -272,6 +329,12 @@ impl OptIssuer for Vacant {
 impl<W: WebRequest> OwnerSolicitor<W> for Vacant {
     fn check_consent(&mut self, _: &mut W, _: &PreGrant) -> OwnerConsent<W::Response> {
         OwnerConsent::Denied
+    }
+}
+
+impl<T> OptRef<[Scope]> for T where T: Borrow<[Scope]> {
+    fn opt_ref(&self) -> Option<&[Scope]> {
+        Some(self.borrow())
     }
 }
 
