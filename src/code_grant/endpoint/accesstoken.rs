@@ -94,17 +94,20 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(endpoint: &mut E, request: &mut R,
     -> Result<R::Response, E::Error> 
 {
     Ok(match error {
-        TokenError::Invalid(json) => {
-            let mut response = endpoint.response(request, ResponseKind::Invalid)?;
+        TokenError::Invalid(mut json) => {
+            let mut response = endpoint.response(request, ResponseKind::Invalid {
+                access_token_error: Some(json.description()),
+            })?;
             response.client_error()
                 .map_err(|err| endpoint.web_error(err))?;
             response.body_json(&json.to_json())
                 .map_err(|err| endpoint.web_error(err))?;
             response
         },
-        TokenError::Unauthorized(json, scheme) =>{
+        TokenError::Unauthorized(mut json, scheme) =>{
             let mut response = endpoint.response(request, ResponseKind::Unauthorized {
                 error: None,
+                access_token_error: Some(json.description()),
             })?;
             response.unauthorized(&scheme)
                 .map_err(|err| endpoint.web_error(err))?;

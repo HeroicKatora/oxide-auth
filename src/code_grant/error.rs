@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use url::Url;
 
 /// Error codes returned from an authorization code request.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AuthorizationErrorType {
     /// The request is missing a required parameter, includes an invalid parameter value, includes
     /// a parameter more than once, or is otherwise malformed.
@@ -53,6 +53,7 @@ impl AuthorizationErrorType {
 
 /// Represents parameters of an error in an [Authorization Error Response](Authorization Error)
 /// [Authorization Error]: https://tools.ietf.org/html/rfc6749#section-4.2.2.1
+#[derive(Clone, Debug)]
 pub struct AuthorizationError {
     error: AuthorizationErrorType,
     description: Option<Cow<'static, str>>,
@@ -78,7 +79,7 @@ impl AuthorizationError {
 /// All defined error codes
 ///
 /// Details also found in <https://tools.ietf.org/html/rfc6749#section-5.2>.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AccessTokenErrorType {
     /// The request is missing a required parameter, includes an unsupported parameter value (other
     // than grant type), repeats a parameter, includes multiple credentials, utilizes more than one
@@ -125,6 +126,7 @@ impl AccessTokenErrorType {
 
 /// Represents parameters of an error in an [Issuing Error Response](Issuing Error)
 /// [ISsuing Error]: https://tools.ietf.org/html/rfc6749#section-5.2
+#[derive(Clone, Debug)]
 pub struct AccessTokenError {
     error: AccessTokenErrorType,
     description: Option<Cow<'static, str>>,

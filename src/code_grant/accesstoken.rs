@@ -242,10 +242,10 @@ impl Error {
     ///
     /// Some types of this error don't return any description which is represented by a `None`
     /// result.
-    pub fn description(&mut self) -> Option<&mut ErrorDescription> {
+    pub fn description(&mut self) -> Option<&mut AccessTokenError> {
         match self {
-            Error::Invalid(description) => Some(description),
-            Error::Unauthorized(description, _) => Some(description),
+            Error::Invalid(description) => Some(description.description()),
+            Error::Unauthorized(description, _) => Some(description.description()),
             Error::Primitive(_) => None,
             Error::Internal => None,
         }
@@ -262,6 +262,11 @@ impl ErrorDescription {
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();
         serde_json::to_string(&asmap).unwrap()
+    }
+
+    /// Get a handle to the description the client will receive.
+    pub fn description(&mut self) -> &mut AccessTokenError {
+        &mut self.error
     }
 }
 

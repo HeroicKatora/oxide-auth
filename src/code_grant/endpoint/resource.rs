@@ -81,11 +81,15 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         let kind = match &error {
             ResourceError::AccessDenied { .. } => ResponseKind::Unauthorized {
                 error: None,
+                access_token_error: None,
             },
             ResourceError::NoAuthentication { .. } => ResponseKind::Unauthorized {
                 error: None,
+                access_token_error: None,
             },
-            ResourceError::InvalidRequest { .. } => ResponseKind::Invalid,
+            ResourceError::InvalidRequest { .. } => ResponseKind::Invalid {
+                access_token_error: None,
+            },
         };
 
         let mut response = self.endpoint.0.response(request, kind)?;

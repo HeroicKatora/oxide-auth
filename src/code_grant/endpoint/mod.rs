@@ -43,6 +43,7 @@ use super::authorization::ErrorUrl;
 use super::guard::{
     /*Extension as GuardExtension,*/
     Error as ResourceError};
+use super::error::{AuthorizationError, AccessTokenError};
 
 use url::Url;
 
@@ -80,13 +81,19 @@ pub enum OwnerConsent<Response: WebResponse> {
 /// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
 /// think the pros or cons should be evaluated differently.
 #[derive(Debug)]
-pub enum ResponseKind {
+pub enum ResponseKind<'a> {
     /// Authorization to access the resource has not been granted.
     Unauthorized {
         /// The underlying cause for denying access.
         ///
         /// The http authorization header is to be set according to this field.
         error: Option<ResourceError>,
+
+        /// Information on an access token error.
+        ///
+        /// Endpoints may modify this description to add additional explanatory text or a reference
+        /// uri for clients seeking explanation.
+        access_token_error: Option<&'a mut AccessTokenError>,
     },
 
     /// Redirect the user-agent to another url.
@@ -94,7 +101,13 @@ pub enum ResponseKind {
     /// The endpoint has the opportunity to inspect and modify error information to some extent.
     /// For example to log an error rate or to provide a pointer to a custom human readable
     /// explanation page. The response will generally not contain a body.
-    Redirect,
+    Redirect {
+        /// Information on an authorization error.
+        ///
+        /// Endpoints may modify this description to add additional explanatory text or a reference
+        /// uri for clients or resource owners seeking explanation.
+        authorization_error: Option<&'a mut AuthorizationError>,
+    },
 
     /// The request did not conform to specification or was otheriwse invalid.
     ///
@@ -102,9 +115,19 @@ pub enum ResponseKind {
     /// set in the case of an invalid request, containing additional information for the client.
     /// For example, an authorized client sending a malformed but authenticated request for an
     /// access token will receive additional hints on the cause of his mistake.
-    Invalid,
+    Invalid {
+        /// Information on an invalid-access-token-request error.
+        ///
+        /// Endpoints may modify this description to add additional explanatory text or a reference
+        /// uri for clients seeking explanation.
+        access_token_error: Option<&'a mut AccessTokenError>,
+    },
 
-    /// An expected, normal response whose content requires precise semantics.
+    /// An expected, normal response.
+    ///
+    /// The content of the response may require precise semantics to be standard compliant,
+    /// therefore it is constructed using the `WebResponse` trait methods. Try not to tamper with
+    /// the format too much, such as unsetting a body etc. after the flow has finished.
     Ok,
 }
 

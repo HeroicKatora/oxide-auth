@@ -164,8 +164,10 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(
 {
     match error {
         AuthorizationError::Ignore => Err(endpoint.error(OAuthError::DenySilently)),
-        AuthorizationError::Redirect(target) => {
-            let mut response = endpoint.response(request, ResponseKind::Redirect)?;
+        AuthorizationError::Redirect(mut target) => {
+            let mut response = endpoint.response(request, ResponseKind::Redirect {
+                authorization_error: Some(target.description()),
+            })?;
             response.redirect(target.into())
                 .map_err(|err| endpoint.web_error(err))?;
             Ok(response)
@@ -219,7 +221,9 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     {
         match result {
             Ok(url) => {
-                let mut response = endpoint.response(request, ResponseKind::Redirect)?;
+                let mut response = endpoint.response(request, ResponseKind::Redirect {
+                    authorization_error: None,
+                })?;
                 response.redirect(url)
                     .map_err(|err| endpoint.web_error(err))?;
                 Ok(response)
