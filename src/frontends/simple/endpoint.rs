@@ -3,15 +3,13 @@
 //! Implements a simple struct with public members `Generic` that provides a common basis with an
 //! `Endpoint` implementation. Tries to implement the least amount of policies and logic while
 //! providing the biggest possible customizability (in that order).
-use std::borrow::Borrow;
-
 use primitives::authorizer::Authorizer;
 use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
 use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
-use code_grant::endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, OAuthError, PreGrant, ResponseKind, WebRequest};
+use code_grant::endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, OAuthError, PreGrant, ResponseKind, Scopes, WebRequest};
 
 /// Errors either caused by the underlying web types or the library.
 #[derive(Debug)]
@@ -87,17 +85,6 @@ pub struct Generic<R, A, I, S, C> {
 /// See [OwnerSolicitor](#OwnerSolicitor) for discussion on why this differs from the other
 /// primitives.
 pub struct Vacant;
-
-/// Like `AsRef` but with an optional result.
-///
-/// You are not supposed to need to implement this.
-/// 
-/// Keep in mind that using some `T` that is a trait will get sugared to `T + 'static` in the
-/// transformation to trait object, if no explicit bound is given.
-pub trait OptRef<T: ?Sized> {
-    /// A reference as `T` or `Option::None`.
-    fn opt_ref(&self) -> Option<&T>;
-}
 
 /// Like `AsRef<Registrar +'_>` but in a way that is expressible.
 ///
@@ -252,7 +239,7 @@ where
     A: OptAuthorizer,
     I: OptIssuer,
     O: OwnerSolicitor<W>,
-    C: OptRef<[Scope]>,
+    C: Scopes<W>,
 {
     type Error = Error<W>;
 
@@ -272,9 +259,8 @@ where
         Some(&mut self.solicitor)
     }
 
-    fn scopes(&mut self, _: &mut W) -> &[Scope] {
-        const NO_SCOPES: [Scope; 0] = [];
-        self.scopes.opt_ref().unwrap_or(&NO_SCOPES[..])
+    fn scopes(&mut self) -> Option<&mut Scopes<W>> {
+        Some(&mut self.scopes)
     }
 
     fn response(&mut self, _: &mut W, _: ResponseKind) -> Result<W::Response, Self::Error> {
@@ -332,14 +318,10 @@ impl<W: WebRequest> OwnerSolicitor<W> for Vacant {
     }
 }
 
-impl<T> OptRef<[Scope]> for T where T: Borrow<[Scope]> {
-    fn opt_ref(&self) -> Option<&[Scope]> {
-        Some(self.borrow())
+impl<W: WebRequest> Scopes<W> for Vacant {
+    fn scopes(&mut self, _: &mut W) -> &[Scope] {
+        const NO_SCOPES: [Scope; 0] = [];
+        &NO_SCOPES
     }
 }
 
-impl OptRef<[Scope]> for Vacant {
-    fn opt_ref(&self) -> Option<&[Scope]> {
-        Option::None
-    }
-}

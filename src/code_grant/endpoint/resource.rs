@@ -47,6 +47,10 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             return Err(endpoint.error(OAuthError::PrimitiveError));
         }
 
+        if endpoint.scopes().is_none() {
+            return Err(endpoint.error(OAuthError::PrimitiveError));
+        }
+
         Ok(ResourceFlow {
             endpoint: WrappedResource(endpoint, PhantomData),
         })
@@ -119,7 +123,7 @@ impl<R: WebRequest> WrappedRequest<R> {
 
 impl<'a, E: Endpoint<R> + 'a, R: WebRequest + 'a> ResourceEndpoint for Scoped<'a, E, R> {
     fn scopes(&mut self) -> &[Scope] {
-        self.endpoint.scopes(self.request)
+        self.endpoint.scopes().unwrap().scopes(self.request)
     }
 
     fn issuer(&mut self) -> &Issuer {

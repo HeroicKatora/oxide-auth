@@ -118,6 +118,16 @@ pub trait OwnerSolicitor<Request: WebRequest> {
     fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
 }
 
+/// Determine the scopes applying to a request of a resource.
+pub trait Scopes<Request: WebRequest> {
+    /// A list of alternative scopes.
+    ///
+    /// One of the scopes needs to be fulfilled by the access token in the request to grant access.
+    /// A scope is fulfilled if the set of its part is a subset of the parts in the grant. If the
+    /// slice is empty, then no scope can be fulfilled and the request is always blocked.
+    fn scopes(&mut self, request: &mut Request) -> &[Scope];
+}
+
 /// Abstraction of web requests with several different abstractions and constructors needed by an
 /// endpoint. It is assumed to originate from an HTTP request, as defined in the scope of the rfc,
 /// but theoretically other requests are possible.
@@ -221,7 +231,7 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// The client must fulfill any one scope, so returning an empty slice will always deny the
     /// request.
-    fn scopes(&mut self, request: &mut Request) -> &[Scope];
+    fn scopes(&mut self) -> Option<&mut Scopes<Request>>;
 
     /// Try to recover from a primitive error during access token flow.
     ///
@@ -269,8 +279,8 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
         (**self).owner_solicitor()
     }
 
-    fn scopes(&mut self, request: &mut R) -> &[Scope] {
-        (**self).scopes(request)
+    fn scopes(&mut self) -> Option<&mut Scopes<R>> {
+        (**self).scopes()
     }
 
     fn response(&mut self, request: &mut R, kind: ResponseKind) -> Result<R::Response, Self::Error> {
@@ -301,5 +311,29 @@ impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> fo
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for Box<S> {
     fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
         (**self).check_consent(request, pre)
+    }
+}
+
+impl<W: WebRequest> Scopes<W> for [Scope] {
+    fn scopes(&mut self, _: &mut W) -> &[Scope] {
+        self
+    }
+}
+
+impl<'a, W: WebRequest> Scopes<W> for &'a [Scope] {
+    fn scopes(&mut self, _: &mut W) -> &[Scope] {
+        self
+    }
+}
+
+impl<'a, W: WebRequest, S: Scopes<W> + 'a + ?Sized> Scopes<W> for &'a mut S {
+    fn scopes(&mut self, request: &mut W) -> &[Scope] {
+        (**self).scopes(request)
+    }
+}
+
+impl<'a, W: WebRequest, S: Scopes<W> + 'a + ?Sized> Scopes<W> for Box<S> {
+    fn scopes(&mut self, request: &mut W) -> &[Scope] {
+        (**self).scopes(request)
     }
 }
