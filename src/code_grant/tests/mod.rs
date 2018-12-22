@@ -209,11 +209,14 @@ pub mod defaults {
     pub const EXAMPLE_SCOPE: &str = "example default";
 }
 
-// /// Test the authorization code flow.
-// mod authorization_code;
+/// Test the authorization code flow.
+mod authorization;
+
 /// Test the access token flow.
 mod access_token;
-// /// Test the guard flow.
-// mod resource_guard;
+
+/// Test the resource flow.
+mod resource;
+
 // /// Test functionality of pkce.
 // mod pkce;

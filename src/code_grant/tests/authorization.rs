@@ -1,11 +1,13 @@
+use std::collections::HashMap;
+
 use primitives::authorizer::Storage;
 use primitives::registrar::{Client, ClientMap};
 
-use code_grant::endpoint::{AuthorizationFlow, OwnerSolicitor};
+use code_grant::endpoint::{OwnerSolicitor};
 
-use std::collections::HashMap;
+use frontends::simple::endpoint::authorization_flow;
 
-use super::{CraftedRequest, CraftedResponse, TestGenerator, ToSingleValueQuery};
+use super::{CraftedRequest, TestGenerator, ToSingleValueQuery};
 use super::{Allow, Deny};
 use super::defaults::*;
 
@@ -32,28 +34,29 @@ impl AuthorizationSetup {
     }
 
     fn test_silent_error(&mut self, request: CraftedRequest) {
-        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer)
-            .handle(request)
-            .complete(Allow(EXAMPLE_OWNER_ID.to_string())) {
-            Ok(CraftedResponse::Redirect(url))
-                => panic!("Redirection without client id {:?}", url),
+        match authorization_flow(&mut self.registrar, &mut self.authorizer, &mut Allow(EXAMPLE_OWNER_ID.to_string()))
+            .execute(request).finish() {
+            Ok(ref resp) if resp.location.is_some() => panic!("Redirect without client id {:?}", resp),
             Ok(resp) => panic!("Response without client id {:?}", resp),
             Err(_) => (),
         };
     }
 
-    fn test_error_redirect<P>(&mut self, request: CraftedRequest, pagehandler: P)
+    fn test_error_redirect<P>(&mut self, request: CraftedRequest, mut pagehandler: P)
         where P: OwnerSolicitor<CraftedRequest> 
     {
-        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer)
-            .handle(request)
-            .complete(pagehandler) {
-            Ok(CraftedResponse::RedirectFromError(ref url))
-            if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some()
-                => (),
-            resp
-                => panic!("Expected redirect with error set: {:?}", resp),
+        let response = authorization_flow(&mut self.registrar, &mut self.authorizer, &mut pagehandler)
+            .execute(request).finish();
+
+        let response = match response {
+            Err(resp) => panic!("Expected redirect with error set: {:?}", resp),
+            Ok(resp) => resp,
         };
+
+        match response.location {
+            Some(ref url) if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some() => (),
+            other => panic!("Expected location with error set description: {:?}", other),
+        }
     }
 }
 

@@ -3,7 +3,7 @@ use primitives::generator::RandomGenerator;
 use primitives::grant::{Grant, Extensions};
 use primitives::scope::Scope;
 
-use code_grant::endpoint::AccessTokenFlow;
+use frontends::simple::endpoint::resource_flow;
 
 use chrono::{Utc, Duration};
 
@@ -62,9 +62,7 @@ impl ResourceSetup {
     }
 
     fn test_access_error(&mut self, request: CraftedRequest) {
-        match AccessFlow::new(&mut self.issuer, &self.resource_scope)
-            .handle(request)
-        {
+        match resource_flow(&mut self.issuer, &self.resource_scope).execute(request) {
             Ok(resp) => panic!("Expected an error instead of {:?}", resp),
             Err(_) => (),
         }
