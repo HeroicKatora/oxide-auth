@@ -4,7 +4,6 @@
 
 use std::fmt;
 use std::borrow::Cow;
-use std::cell::{Cell, RefCell};
 use std::vec::IntoIter;
 use url::Url;
 
@@ -52,24 +51,6 @@ impl AuthorizationErrorType {
     }
 }
 
-impl AsRef<str> for AuthorizationErrorType {
-    fn as_ref(&self) -> &str {
-        self.description()
-    }
-}
-
-impl fmt::Display for AuthorizationErrorType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.as_ref())
-    }
-}
-
-/// Provides extensible modifiers for authorization errors, intended for `AuthorizationError::with`.
-pub trait AuthorizationErrorExt {
-    /// Add or set description, uri or the numeric error code.
-    fn modify(self, &mut AuthorizationError);
-}
-
 /// Represents parameters of an error in an [Authorization Error Response](Authorization Error)
 /// [Authorization Error]: https://tools.ietf.org/html/rfc6749#section-4.2.2.1
 pub struct AuthorizationError {
@@ -79,91 +60,24 @@ pub struct AuthorizationError {
 }
 
 impl AuthorizationError {
-    /// Construct an `AuthorizationError` using several parameters applied after one another.
-    ///
-    /// Providing no arguments, `()`, will produce a generic `InvalidRequest` error without any
-    /// description or error uri which would provide additional information for the client.
-    pub fn with<A: AuthorizationErrorExt>(modifier: A) -> AuthorizationError {
-        let mut error = AuthorizationError {
-            error: AuthorizationErrorType::InvalidRequest,
-            description: None,
-            uri: None,
-        };
-        modifier.modify(&mut error);
-        error
+    pub(crate) fn set_type(&mut self, new_type: AuthorizationErrorType) {
+        self.error = new_type;
+    }
+
+    /// Provide a short text explanation for the error.
+    pub fn explain<D: Into<Cow<'static, str>>>(&mut self, description: D) {
+        self.description = Some(description.into())
+    }
+
+    /// A uri identifying a resource explaining the error in detail.
+    pub fn explain_uri(&mut self, uri: Url) {
+        self.uri = Some(uri.into_string().into())
     }
 }
-
-/* Error modifiers, changing or adding attributes if in proper format */
-
-impl AuthorizationErrorExt for () {
-    fn modify(self, _error: &mut AuthorizationError) { }
-}
-
-impl AuthorizationErrorExt for AuthorizationError {
-    fn modify(self, error: &mut AuthorizationError) {
-        error.error = self.error;
-        error.description = self.description;
-        error.uri = self.uri;
-    }
-}
-
-impl AuthorizationErrorExt for &'static str {
-    fn modify(self, error: &mut AuthorizationError) {
-        error.description = Some(Cow::Borrowed(self));
-    }
-}
-
-impl AuthorizationErrorExt for Url {
-    fn modify(self, error: &mut AuthorizationError) {
-        error.uri = Some(Cow::Owned(self.as_str().to_string()))
-    }
-}
-
-impl AuthorizationErrorExt for AuthorizationErrorType {
-    fn modify(self, error: &mut AuthorizationError) {
-        error.error = self;
-    }
-}
-
-impl<A> AuthorizationErrorExt for Cell<A> where A: Sized + AuthorizationErrorExt {
-    fn modify(self, error: &mut AuthorizationError) {
-        self.into_inner().modify(error)
-    }
-}
-
-impl<A> AuthorizationErrorExt for RefCell<A> where A: Sized + AuthorizationErrorExt {
-    fn modify(self, error: &mut AuthorizationError) {
-        self.into_inner().modify(error)
-    }
-}
-
-impl<A, B> AuthorizationErrorExt for (A, B) where A: AuthorizationErrorExt, B: AuthorizationErrorExt {
-    fn modify(self, error: &mut AuthorizationError) {
-        self.0.modify(error);
-        self.1.modify(error);
-    }
-}
-
-/* Error encodings, e.g. url and json */
-
-impl IntoIterator for AuthorizationError {
-    type Item = (&'static str, Cow<'static, str>);
-    type IntoIter = IntoIter<(&'static str, Cow<'static, str>)>;
-    fn into_iter(self) -> Self::IntoIter {
-        let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
-        self.description.map(|d| vec.push(("description", d)));
-        self.uri.map(|uri| vec.push(("uri", uri)));
-        vec.into_iter()
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////////////
-//                             Access Request Error                             //
-// detailed in https://tools.ietf.org/html/rfc6749#section-5.2                  //
-//////////////////////////////////////////////////////////////////////////////////
 
 /// All defined error codes
+///
+/// Details also found in <https://tools.ietf.org/html/rfc6749#section-5.2>.
 #[derive(Debug)]
 pub enum AccessTokenErrorType {
     /// The request is missing a required parameter, includes an unsupported parameter value (other
@@ -209,6 +123,70 @@ impl AccessTokenErrorType {
     }
 }
 
+/// Represents parameters of an error in an [Issuing Error Response](Issuing Error)
+/// [ISsuing Error]: https://tools.ietf.org/html/rfc6749#section-5.2
+pub struct AccessTokenError {
+    error: AccessTokenErrorType,
+    description: Option<Cow<'static, str>>,
+    uri: Option<Cow<'static, str>>,
+}
+
+impl AccessTokenError {
+    pub(crate) fn set_type(&mut self, new_type: AccessTokenErrorType) {
+        self.error = new_type;
+    }
+
+    /// Provide a short text explanation for the error.
+    pub fn explain<D: Into<Cow<'static, str>>>(&mut self, description: D) {
+        self.description = Some(description.into())
+    }
+
+    /// A uri identifying a resource explaining the error in detail.
+    pub fn explain_uri(&mut self, uri: Url) {
+        self.uri = Some(uri.into_string().into())
+    }
+}
+
+impl Default for AuthorizationError {
+    /// Construct a `AuthorizationError` with no extra information.
+    ///
+    /// Will produce a generic `InvalidRequest` error without any description or error uri which
+    /// would provide additional information for the client.
+    fn default() -> Self {
+        AuthorizationError {
+            error: AuthorizationErrorType::InvalidRequest,
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+impl AsRef<str> for AuthorizationErrorType {
+    fn as_ref(&self) -> &str {
+        self.description()
+    }
+}
+
+impl fmt::Display for AuthorizationErrorType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
+impl Default for AccessTokenError {
+    /// Construct a `AccessTokenError` with no extra information.
+    ///
+    /// Will produce a generic `InvalidRequest` error without any description or error uri which
+    /// would provide additional information for the client.
+    fn default() -> Self {
+        AccessTokenError {
+            error: AccessTokenErrorType::InvalidRequest,
+            description: None,
+            uri: None,
+        }
+    }
+}
+
 impl AsRef<str> for AccessTokenErrorType {
     fn as_ref(&self) -> &str {
         self.description()
@@ -221,89 +199,19 @@ impl fmt::Display for AccessTokenErrorType {
     }
 }
 
-/// Provides extensible modifiers for authorization errors, intended for `AccessTokenError::with`.
-pub trait AccessTokenErrorExt {
-    /// Add or set description, uri or the numeric error code.
-    fn modify(self, &mut AccessTokenError);
-}
-
-/// Represents parameters of an error in an [Issuing Error Response](Issuing Error)
-/// [ISsuing Error]: https://tools.ietf.org/html/rfc6749#section-5.2
-pub struct AccessTokenError {
-    error: AccessTokenErrorType,
-    description: Option<Cow<'static, str>>,
-    uri: Option<Cow<'static, str>>,
-}
-
-impl AccessTokenError {
-    /// Construct an `AccessTokenError` using several parameters applied after one another.
-    ///
-    /// Providing no arguments, `()`, will produce a generic `InvalidRequest` error without any
-    /// description or error uri which would provide additional information for the client.
-    pub fn with<A: AccessTokenErrorExt>(modifier: A) -> AccessTokenError {
-        let mut error = AccessTokenError {
-            error: AccessTokenErrorType::InvalidRequest,
-            description: None,
-            uri: None,
-        };
-        modifier.modify(&mut error);
-        error
+/// The error as key-value pairs.
+impl IntoIterator for AuthorizationError {
+    type Item = (&'static str, Cow<'static, str>);
+    type IntoIter = IntoIter<(&'static str, Cow<'static, str>)>;
+    fn into_iter(self) -> Self::IntoIter {
+        let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
+        self.description.map(|d| vec.push(("description", d)));
+        self.uri.map(|uri| vec.push(("uri", uri)));
+        vec.into_iter()
     }
 }
 
-/* Error modifiers, changing or adding attributes if in proper format */
-
-impl AccessTokenErrorExt for () {
-    fn modify(self, _error: &mut AccessTokenError) { }
-}
-
-impl AccessTokenErrorExt for AccessTokenError {
-    fn modify(self, error: &mut AccessTokenError) {
-        error.error = self.error;
-        error.description = self.description;
-        error.uri = self.uri;
-    }
-}
-
-impl AccessTokenErrorExt for &'static str {
-    fn modify(self, error: &mut AccessTokenError) {
-        error.description = Some(Cow::Borrowed(self));
-    }
-}
-
-impl AccessTokenErrorExt for Url {
-    fn modify(self, error: &mut AccessTokenError) {
-        error.uri = Some(Cow::Owned(self.as_str().to_string()))
-    }
-}
-
-impl AccessTokenErrorExt for AccessTokenErrorType {
-    fn modify(self, error: &mut AccessTokenError) {
-        error.error = self;
-    }
-}
-
-impl<A> AccessTokenErrorExt for Cell<A> where A: Sized + AccessTokenErrorExt {
-    fn modify(self, error: &mut AccessTokenError) {
-        self.into_inner().modify(error)
-    }
-}
-
-impl<A> AccessTokenErrorExt for RefCell<A> where A: Sized + AccessTokenErrorExt {
-    fn modify(self, error: &mut AccessTokenError) {
-        self.into_inner().modify(error)
-    }
-}
-
-impl<A, B> AccessTokenErrorExt for (A, B) where A: AccessTokenErrorExt, B: AccessTokenErrorExt {
-    fn modify(self, error: &mut AccessTokenError) {
-        self.0.modify(error);
-        self.1.modify(error);
-    }
-}
-
-/* Error encodings, e.g. url and json */
-
+/// The error as key-value pairs.
 impl IntoIterator for AccessTokenError {
     type Item = (&'static str, Cow<'static, str>);
     type IntoIter = IntoIter<(&'static str, Cow<'static, str>)>;

@@ -4,7 +4,7 @@ use std::result::Result as StdResult;
 use url::Url;
 use chrono::{Duration, Utc};
 
-use code_grant::error::{AuthorizationError, AuthorizationErrorExt, AuthorizationErrorType};
+use code_grant::error::{AuthorizationError, AuthorizationErrorType};
 use primitives::authorizer::Authorizer;
 use primitives::registrar::{ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::grant::{Extensions, GrantExtension, Extension as ExtensionData, Grant};
@@ -108,23 +108,26 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
 
     // Setup an error with url and state, makes the code flow afterwards easier
     let error_uri = bound_client.redirect_uri.clone().into_owned();
-    let prepared_error = ErrorUrl::new(error_uri.clone(), state.clone(),
-        AuthorizationError::with(()));
+    let mut prepared_error = ErrorUrl::new(error_uri.clone(), state.clone(),
+        AuthorizationError::default());
 
     match request.method() {
         Some(ref method) if method.as_ref() == "code"
             => (),
-        _ => return Err(Error::Redirect(prepared_error.with(
-                AuthorizationErrorType::UnsupportedResponseType))),
+        _ => {
+            prepared_error.description().set_type(AuthorizationErrorType::UnsupportedResponseType);
+            return Err(Error::Redirect(prepared_error))
+        }
     }
 
     // Extract additional parameters
     let scope = request.scope();
     let scope = match scope.map(|scope| scope.as_ref().parse()) {
         None => None,
-        Some(Err(_)) =>
-            return Err(Error::Redirect(prepared_error.with(
-                AuthorizationErrorType::InvalidScope))),
+        Some(Err(_)) => {
+            prepared_error.description().set_type(AuthorizationErrorType::InvalidScope);
+            return Err(Error::Redirect(prepared_error))
+        },
         Some(Ok(scope)) => Some(scope),
     };
 
@@ -132,9 +135,10 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
 
     for extension_instance in handler.extensions() {
         match extension_instance.extend_code(request) {
-            Err(_) =>
-                return Err(Error::Redirect(prepared_error.with(
-                    AuthorizationErrorType::InvalidRequest))),
+            Err(_) => {
+                prepared_error.description().set_type(AuthorizationErrorType::InvalidRequest);
+                return Err(Error::Redirect(prepared_error))
+            },
             Ok(Some(extension)) =>
                 grant_extensions.set(&extension_instance, extension),
             Ok(None) => (),
@@ -143,8 +147,10 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
 
     let pre_grant = handler.registrar()
         .negotiate(bound_client, scope)
-        .map_err(|_| Error::Redirect(prepared_error.with(
-                AuthorizationErrorType::InvalidScope)))?;
+        .map_err(|_| {
+            prepared_error.description().set_type(AuthorizationErrorType::InvalidScope);
+            Error::Redirect(prepared_error)
+        })?;
 
     Ok(Pending {
         pre_grant,
@@ -165,7 +171,8 @@ impl Pending {
     /// Denies the request, which redirects to the client for which the request originated.
     pub fn deny(self) -> Result<Url> {
         let url = self.pre_grant.redirect_uri;
-        let error = AuthorizationError::with(AuthorizationErrorType::AccessDenied);
+        let mut error = AuthorizationError::default();
+        error.set_type(AuthorizationErrorType::AccessDenied);
         let error = ErrorUrl::new(url, self.state, error);
         Err(Error::Redirect(error))
     }
@@ -231,15 +238,22 @@ impl ErrorUrl {
         ErrorUrl{ base_uri: url, error: error }
     }
 
-    /// Modify the contained error.
-    pub fn with_mut<M>(&mut self, modifier: M) where M: AuthorizationErrorExt {
-        modifier.modify(&mut self.error);
+    /// Get a handle to the description the client will receive.
+    pub fn description(&mut self) -> &mut AuthorizationError {
+        &mut self.error
     }
+}
 
-    /// Modify the error by moving it.
-    pub fn with<M>(mut self, modifier: M) -> Self where M: AuthorizationErrorExt {
-        modifier.modify(&mut self.error);
-        self
+impl Error {
+    /// Get a handle to the description the client will receive.
+    ///
+    /// Some types of this error don't return any description which is represented by a `None`
+    /// result.
+    pub fn description(&mut self) -> Option<&mut AuthorizationError> {
+        match self {
+            Error::Ignore => None,
+            Error::Redirect(inner) => Some(inner.description()),
+        }
     }
 }
 

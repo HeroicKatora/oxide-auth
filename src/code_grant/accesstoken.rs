@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use chrono::{Duration, Utc};
 use serde_json;
 
-use code_grant::error::{AccessTokenError, AccessTokenErrorType, AccessTokenErrorExt};
+use code_grant::error::{AccessTokenError, AccessTokenErrorType};
 use primitives::authorizer::Authorizer;
 use primitives::issuer::{IssuedToken, Issuer};
 use primitives::grant::{Extension as ExtensionData, Extensions, Grant, GrantExtension};
@@ -89,7 +89,7 @@ pub trait Endpoint {
 /// Try to redeem an authorization code.
 pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerToken> {
     if !request.valid() {
-        return Err(Error::invalid(()))
+        return Err(Error::invalid())
     }
 
     let authorization = request.authorization();
@@ -97,42 +97,42 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
     let (client_id, auth): (&str, Option<&[u8]>) = match (&client_id, &authorization) {
         (&None, &Some((ref client_id, ref auth))) => (client_id.as_ref(), Some(auth.as_ref())),
         (&Some(ref client_id), &None) => (client_id.as_ref(), None),
-        _ => return Err(Error::invalid(())),
+        _ => return Err(Error::invalid()),
     };
 
     handler.registrar()
         .client(&client_id)
-        .ok_or(Error::unauthorized((), "basic"))?
+        .ok_or(Error::unauthorized("basic"))?
         .check_authentication(auth)
-        .map_err(|_| Error::unauthorized((), "basic"))?;
+        .map_err(|_| Error::unauthorized("basic"))?;
 
     match request.grant_type() {
         Some(ref cow) if cow == "authorization_code" => (),
-        None => return Err(Error::invalid(())),
-        Some(_) => return Err(Error::invalid(AccessTokenErrorType::UnsupportedGrantType)),
+        None => return Err(Error::invalid()),
+        Some(_) => return Err(Error::invalid_with(AccessTokenErrorType::UnsupportedGrantType)),
     };
 
     let code = request
         .code()
-        .ok_or(Error::invalid(()))?;
+        .ok_or(Error::invalid())?;
     let code = code.as_ref();
 
     let saved_params = match handler.authorizer().extract(code) {
-        None => return Err(Error::invalid(())),
+        None => return Err(Error::invalid()),
         Some(v) => v,
     };
 
     let redirect_uri = request
         .redirect_uri()
-        .ok_or(Error::invalid(()))?;
+        .ok_or(Error::invalid())?;
     let redirect_uri = redirect_uri.as_ref();
 
     if (saved_params.client_id.as_ref(), saved_params.redirect_uri.as_str()) != (client_id, redirect_uri) {
-        return Err(Error::invalid(AccessTokenErrorType::InvalidGrant))
+        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant))
     }
 
     if saved_params.until < Utc::now() {
-        return Err(Error::invalid((AccessTokenErrorType::InvalidGrant, "Grant expired")).into())
+        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant))
     }
 
     let code_extensions = saved_params.extensions;
@@ -140,7 +140,7 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
 
     let access_extensions = match access_extensions {
         Ok(extensions) => extensions,
-        Err(_) =>  return Err(Error::invalid(())),
+        Err(_) =>  return Err(Error::invalid()),
     };
 
     let token = handler.issuer().issue(Grant {
@@ -150,10 +150,7 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
         scope: saved_params.scope.clone(),
         until: Utc::now() + Duration::hours(1),
         extensions: access_extensions,
-    }).map_err(|()| Error::invalid((
-        AccessTokenErrorType::InvalidRequest,
-        "Failed to generate issued tokens"
-    )))?;
+    }).map_err(|()| Error::invalid_with(AccessTokenErrorType::InvalidRequest))?;
 
     Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
 }
@@ -210,17 +207,48 @@ pub struct ErrorDescription {
 
 type Result<T> = std::result::Result<T, Error>;
 
+/// Represents an access token, a refresh token and the associated scope for serialization.
+pub struct BearerToken(IssuedToken, String);
+
 impl Error {
-    fn invalid<Mod>(modifier: Mod) -> Error where Mod: AccessTokenErrorExt {
-        Error::Invalid(ErrorDescription{
-            error: AccessTokenError::with((AccessTokenErrorType::InvalidRequest, modifier))
+    fn invalid() -> Self {
+        Error::Invalid(ErrorDescription {
+            error: AccessTokenError::default()
         })
     }
 
-    fn unauthorized<Mod>(modifier: Mod, authtype: &str) -> Error where Mod: AccessTokenErrorExt {
-        Error::Unauthorized(
-            ErrorDescription{error: AccessTokenError::with((AccessTokenErrorType::InvalidClient, modifier))},
+    fn invalid_with(with_type: AccessTokenErrorType) -> Self {
+        Error::Invalid(ErrorDescription {
+            error: {
+                let mut error = AccessTokenError::default();
+                error.set_type(with_type);
+                error
+            },
+        })
+    }
+
+    fn unauthorized(authtype: &str) -> Error {
+        Error::Unauthorized(ErrorDescription {
+                error: {
+                    let mut error = AccessTokenError::default();
+                    error.set_type(AccessTokenErrorType::InvalidClient);
+                    error
+                },
+            },
             authtype.to_string())
+    }
+
+    /// Get a handle to the description the client will receive.
+    ///
+    /// Some types of this error don't return any description which is represented by a `None`
+    /// result.
+    pub fn description(&mut self) -> Option<&mut ErrorDescription> {
+        match self {
+            Error::Invalid(description) => Some(description),
+            Error::Unauthorized(description, _) => Some(description),
+            Error::Primitive(_) => None,
+            Error::Internal => None,
+        }
     }
 }
 
@@ -236,9 +264,6 @@ impl ErrorDescription {
         serde_json::to_string(&asmap).unwrap()
     }
 }
-
-/// Represents an access token, a refresh token and the associated scope for serialization.
-pub struct BearerToken(IssuedToken, String);
 
 impl BearerToken {
     /// Convert the token into a json string, viable for being sent over a network with
