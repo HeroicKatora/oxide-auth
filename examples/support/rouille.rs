@@ -4,7 +4,7 @@ extern crate serde_urlencoded;
 extern crate serde;
 extern crate serde_json;
 
-use self::reqwest::header::Authorization;
+use self::reqwest::header;
 use self::rouille::{Request, Response};
 
 use std::collections::HashMap;
@@ -42,7 +42,7 @@ pub fn dummy_client(request: &Request) -> Response {
     // Request the page with the oauth token
     let page_request = client
         .get("http://localhost:8020/")
-        .header(Authorization("Bearer ".to_string() + token_map.get("access_token").unwrap()))
+        .header(header::AUTHORIZATION, "Bearer ".to_string() + token_map.get("access_token").unwrap())
         .build().unwrap();
     let mut page_response = client.execute(page_request).unwrap();
     let mut protected_page = String::new();

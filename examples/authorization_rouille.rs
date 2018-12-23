@@ -139,6 +139,6 @@ fn solicitor(request: &mut &Request, grant: &PreGrant) -> OwnerConsent<Response>
             OwnerConsent::Authorized("dummy user".to_string())
         }
     } else {
-        unreachable!()
+        unreachable!("Authorization only mounted on GET and POST")
     }
 }
