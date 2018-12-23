@@ -45,7 +45,7 @@ pub trait Request {
     fn state(&self) -> Option<Cow<str>>;
 
     /// The method requested, valid requests MUST return `code`
-    fn method(&self) -> Option<Cow<str>>;
+    fn response_type(&self) -> Option<Cow<str>>;
 
     /// Retrieve an additional parameter used in an extension
     fn extension(&self, key: &str) -> Option<Cow<str>>;
@@ -111,7 +111,7 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
     let mut prepared_error = ErrorUrl::new(error_uri.clone(), state.clone(),
         AuthorizationError::default());
 
-    match request.method() {
+    match request.response_type() {
         Some(ref method) if method.as_ref() == "code"
             => (),
         _ => {

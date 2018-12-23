@@ -7,7 +7,7 @@ use code_grant::endpoint::{OwnerSolicitor};
 
 use frontends::simple::endpoint::authorization_flow;
 
-use super::{CraftedRequest, TestGenerator, ToSingleValueQuery};
+use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::{Allow, Deny};
 use super::defaults::*;
 
@@ -33,13 +33,27 @@ impl AuthorizationSetup {
         }
     }
 
+    fn test_success(&mut self, request: CraftedRequest) {
+        let response = authorization_flow(&mut self.registrar, &mut self.authorizer, &mut Allow(EXAMPLE_OWNER_ID.to_string()))
+            .execute(request)
+            .finish()
+            .expect("Should not error");
+        
+        assert_eq!(response.status, Status::Redirect);
+
+        match response.location {
+            Some(ref url) if url.as_str().find("error").is_none() => (),
+            other => panic!("Expected successful redirect: {:?}", other),
+        }
+    }
+
     fn test_silent_error(&mut self, request: CraftedRequest) {
         match authorization_flow(&mut self.registrar, &mut self.authorizer, &mut Allow(EXAMPLE_OWNER_ID.to_string()))
             .execute(request).finish() {
             Ok(ref resp) if resp.location.is_some() => panic!("Redirect without client id {:?}", resp),
             Ok(resp) => panic!("Response without client id {:?}", resp),
             Err(_) => (),
-        };
+        }
     }
 
     fn test_error_redirect<P>(&mut self, request: CraftedRequest, mut pagehandler: P)
@@ -58,6 +72,20 @@ impl AuthorizationSetup {
             other => panic!("Expected location with error set description: {:?}", other),
         }
     }
+}
+
+#[test]
+fn auth_success() {
+    let success = CraftedRequest {
+        query: Some(vec![("response_type", "code"),
+                         ("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
+            .iter().to_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    AuthorizationSetup::new().test_success(success);
 }
 
 #[test]
