@@ -9,7 +9,8 @@ use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
 use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
-use code_grant::endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, OAuthError, PreGrant, ResponseKind, Scopes, WebRequest};
+use code_grant::endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, OAuthError, PreGrant, ResponseKind, Scopes};
+use code_grant::endpoint::{WebRequest, WebResponse};
 
 /// Errors either caused by the underlying web types or the library.
 #[derive(Debug)]
@@ -36,7 +37,7 @@ pub enum Error<W: WebRequest> {
 /// Included types are assumed to be implemented independently, with no major connections. All
 /// attributes are public, so there is no inner invariant. The maintained invariants are already
 /// statically encoded in the type coices.
-pub struct Generic<R, A, I, S, C> {
+pub struct Generic<R, A, I, S, C, L> {
     /// The registrar implementation of `Vacant`.
     pub registrar: R,
 
@@ -51,6 +52,9 @@ pub struct Generic<R, A, I, S, C> {
     
     /// Determine scopes for the request types or `Vacant`.
     pub scopes: C,
+
+    /// Creates responses, may be vacant for `Default::default`.
+    pub response: L,
 }
 
 /// Marker struct if some primitive is not provided.
@@ -85,6 +89,9 @@ pub struct Generic<R, A, I, S, C> {
 /// See [OwnerSolicitor](#OwnerSolicitor) for discussion on why this differs from the other
 /// primitives.
 pub struct Vacant;
+
+/// A simple wrapper for functions and lambdas to be used as solicitors.
+pub struct FnSolicitor<F>(pub F);
 
 /// Like `AsRef<Registrar +'_>` but in a way that is expressible.
 ///
@@ -149,9 +156,13 @@ pub trait OptIssuer {
     fn opt_mut(&mut self) -> Option<&mut Issuer>;
 }
 
-type Authorization<'a, W> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), Vacant, &'a mut(OwnerSolicitor<W> + 'a), Vacant>;
-type AccessToken<'a> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), &'a mut(Issuer + 'a), Vacant, Vacant>;
-type Resource<'a> = Generic<Vacant, Vacant, &'a mut (Issuer + 'a), Vacant, &'a [Scope]>;
+pub trait ResponseCreator<W: WebResponse> {
+    fn create(&mut self) -> W;
+}
+
+type Authorization<'a, W> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), Vacant, &'a mut(OwnerSolicitor<W> + 'a), Vacant, Vacant>;
+type AccessToken<'a> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), &'a mut(Issuer + 'a), Vacant, Vacant, Vacant>;
+type Resource<'a> = Generic<Vacant, Vacant, &'a mut (Issuer + 'a), Vacant, &'a [Scope], Vacant>;
 
 /// Create an ad-hoc authorization flow.
 ///
@@ -171,6 +182,7 @@ pub fn authorization_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut A
         issuer: Vacant,
         solicitor,
         scopes: Vacant,
+        response: Vacant,
     });
 
     match flow {
@@ -197,6 +209,7 @@ pub fn access_token_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut Au
         issuer,
         solicitor: Vacant,
         scopes: Vacant,
+        response: Vacant,
     });
 
     match flow {
@@ -223,6 +236,7 @@ pub fn resource_flow<'a, W>(issuer: &'a mut Issuer, scopes: &'a [Scope])
         issuer,
         solicitor: Vacant,
         scopes,
+        response: Vacant,
     });
 
     match flow {
@@ -231,15 +245,15 @@ pub fn resource_flow<'a, W>(issuer: &'a mut Issuer, scopes: &'a [Scope])
     }
 }
 
-impl<W, R, A, I, O, C> Endpoint<W> for Generic<R, A, I, O, C> 
+impl<W, R, A, I, O, C, L> Endpoint<W> for Generic<R, A, I, O, C, L>
 where 
     W: WebRequest, 
-    W::Response: Default,
     R: OptRegistrar,
     A: OptAuthorizer,
     I: OptIssuer,
     O: OwnerSolicitor<W>,
     C: Scopes<W>,
+    L: ResponseCreator<W::Response>,
 {
     type Error = Error<W>;
 
@@ -264,7 +278,7 @@ where
     }
 
     fn response(&mut self, _: &mut W, _: ResponseKind) -> Result<W::Response, Self::Error> {
-        Ok(W::Response::default())
+        Ok(self.response.create())
     }
 
     fn error(&mut self, err: OAuthError) -> Error<W> {
@@ -325,3 +339,26 @@ impl<W: WebRequest> Scopes<W> for Vacant {
     }
 }
 
+impl<W, F> OwnerSolicitor<W> for FnSolicitor<F>
+where
+    W: WebRequest,
+    F: FnMut(&mut W, &PreGrant) -> OwnerConsent<W::Response>
+{
+    fn check_consent(&mut self, request: &mut W, grant: &PreGrant)
+        -> OwnerConsent<W::Response> 
+    {
+        (self.0)(request, grant)
+    }
+}
+
+impl<W: WebResponse> ResponseCreator<W> for Vacant where W: Default {
+    fn create(&mut self) -> W {
+        Default::default()
+    }
+}
+
+impl<W: WebResponse, F> ResponseCreator<W> for F where F: Fn() -> W {
+    fn create(&mut self) -> W {
+        self()
+    }
+}

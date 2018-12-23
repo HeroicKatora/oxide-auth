@@ -343,6 +343,12 @@ impl<W: WebRequest> Scopes<W> for [Scope] {
     }
 }
 
+impl<W: WebRequest> Scopes<W> for Vec<Scope> {
+    fn scopes(&mut self, _: &mut W) -> &[Scope] {
+        self.as_slice()
+    }
+}
+
 impl<'a, W: WebRequest> Scopes<W> for &'a [Scope] {
     fn scopes(&mut self, _: &mut W) -> &[Scope] {
         self

@@ -7,41 +7,60 @@ extern crate oxide_auth;
 extern crate url;
 
 use rouille::{Request, Response, ResponseBody, Server};
-use oxide_auth::frontends::rouille::*;
+use oxide_auth::code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, ResourceFlow};
+use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint, WebError};
+
+use oxide_auth::primitives::{
+    authorizer::Storage,
+    issuer::TokenSigner,
+    registrar::{Client, ClientMap},
+    generator::RandomGenerator,
+    scope::Scope,
+};
 
 use support::rouille::dummy_client;
 use support::open_in_browser;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::thread;
 
 /// Example of a main function of a rouille server supporting oauth.
 pub fn main() {
     // Stores clients in a simple in-memory hash map.
-    let clients =  {
+    let registrar = {
         let mut clients = ClientMap::new();
         // Register a dummy client instance
         let client = Client::public("LocalClient", // Client id
             "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
             "default".parse().unwrap()); // Allowed client scope
         clients.register_client(client);
-        Mutex::new(clients)
+        clients
     };
 
     // Authorization tokens are 16 byte random keys to a memory hash map.
-    let authorization_codes = Mutex::new(Storage::new(RandomGenerator::new(16)));
+    let authorizer = Storage::new(RandomGenerator::new(16));
 
     // Bearer tokens are signed (but not encrypted) using a passphrase.
-    let bearer_tokens = Arc::new(TokenSigner::ephemeral());
+    let issuer = TokenSigner::ephemeral();
+
+    let endpoint = Mutex::new(GenericEndpoint {
+        registrar,
+        authorizer,
+        issuer,
+        solicitor: FnSolicitor(solicitor),
+        scopes: vec!["default".parse::<Scope>().unwrap()],
+        response: Response::empty_404,
+    });
 
     // Create the main server instance
     let server = Server::new(("localhost", 8020), move |request| {
         router!(request,
             (GET) ["/"] => {
-                let mut issuer = &*bearer_tokens;
-                if let Err(err) = AccessFlow::new(&mut issuer, &vec!["default".parse().unwrap()])
-                    .handle(request)
+                let mut locked = endpoint.lock().unwrap();
+                if let Err(err) = ResourceFlow::prepare(&mut *locked)
+                    .expect("Can not fail")
+                    .execute(request)
                 { // Does not have the proper authorization token
-                    let mut response = err.response_or_else(Response::empty_404);
+                    let mut response = err.unwrap_or_else(|_| Response::empty_400());
 let text = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
@@ -55,26 +74,25 @@ here</a> to begin the authorization process.
                 }
             },
             (GET) ["/authorize"] => {
-                let mut registrar = clients.lock().unwrap();
-                let mut authorizer = authorization_codes.lock().unwrap();
-                AuthorizationFlow::new(&mut*registrar, &mut*authorizer)
-                    .handle(request).complete(&handle_get)
-                    .unwrap_or_else(|err| err.response_or_else(Response::empty_404))
+                let mut locked = endpoint.lock().unwrap();
+                AuthorizationFlow::prepare(&mut *locked)
+                    .expect("Can not fail")
+                    .execute(request).finish()
+                    .unwrap_or_else(|_| Response::empty_400())
             },
             (POST) ["/authorize"] => {
-                let mut registrar = clients.lock().unwrap();
-                let mut authorizer = authorization_codes.lock().unwrap();
-                AuthorizationFlow::new(&mut*registrar, &mut*authorizer)
-                    .handle(request).complete(&handle_post)
-                    .unwrap_or_else(|err| err.response_or_else(Response::empty_404))
+                let mut locked = endpoint.lock().unwrap();
+                AuthorizationFlow::prepare(&mut *locked)
+                    .expect("Can not fail")
+                    .execute(request).finish()
+                    .unwrap_or_else(|_| Response::empty_400())
             },
             (POST) ["/token"] => {
-                let mut authorizer = authorization_codes.lock().unwrap();
-                let mut issuer = &*bearer_tokens;
-                let mut registrar = clients.lock().unwrap();
-                GrantFlow::new(&mut*registrar, &mut*authorizer, &mut issuer)
-                    .handle(request)
-                    .unwrap_or_else(|err| err.response_or_else(Response::empty_404))
+                let mut locked = endpoint.lock().unwrap();
+                AccessTokenFlow::prepare(&mut *locked)
+                    .expect("Can not fail")
+                    .execute(request)
+                    .unwrap_or_else(|_| Response::empty_400())
             },
             _ => Response::empty_404()
         )
@@ -98,28 +116,29 @@ here</a> to begin the authorization process.
     client.join().expect("Failed to run client");
 }
 
-/// A simple implementation of the first part of an authentication handler. This will
-/// display a page to the user asking for his permission to proceed. The submitted form
-/// will then trigger the other authorization handler which actually completes the flow.
-fn handle_get(_: &Request, grant: &PreGrant) -> OwnerAuthorization<Response> {
-    let text = format!(
-        "<html>'{}' (at {}) is requesting permission for '{}'
-        <form method=\"post\">
-            <input type=\"submit\" value=\"Accept\" formaction=\"authorize?response_type=code&client_id={}\">
-            <input type=\"submit\" value=\"Deny\" formaction=\"authorize?response_type=code&client_id={}&deny=1\">
-        </form>
-        </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
-    let response = Response::html(text);
-    OwnerAuthorization::InProgress(response)
-}
-
-/// Handle form submission by a user, completing the authorization flow. The resource owner
-/// either accepted or denied the request.
-fn handle_post(request: &Request, _: &PreGrant) -> OwnerAuthorization<Response> {
-    // No real user authentication is done here, in production you SHOULD use session keys or equivalent
-    if let Some(_) = request.get_param("deny") {
-        OwnerAuthorization::Denied
+/// A simple implementation of an 'owner solicitor'.
+///
+/// In a POST request, this will display a page to the user asking for his permission to proceed.
+/// The submitted form will then trigger the other authorization handler which actually completes
+/// the flow.
+fn solicitor(request: &mut &Request, grant: &PreGrant) -> OwnerConsent<Response> {
+    if request.method() == "GET" {
+        let text = format!("<html>'{}' (at {}) is requesting permission for '{}'
+<form method=\"post\">
+    <input type=\"submit\" value=\"Accept\" formaction=\"authorize?response_type=code&client_id={}\">
+    <input type=\"submit\" value=\"Deny\" formaction=\"authorize?response_type=code&client_id={}&deny=1\">
+</form>
+</html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
+        let response = Response::html(text);
+        OwnerConsent::InProgress(response)
+    } else if request.method() == "POST" {
+        // No real user authentication is done here, in production you MUST use session keys or equivalent
+        if let Some(_) = request.get_param("deny") {
+            OwnerConsent::Denied
+        } else {
+            OwnerConsent::Authorized("dummy user".to_string())
+        }
     } else {
-        OwnerAuthorization::Authorized("dummy user".to_string())
+        unreachable!()
     }
 }

@@ -168,8 +168,8 @@ pub mod simple;
 // pub mod gotham;
 // #[cfg(feature = "iron-frontend")]
 // pub mod iron;
-// #[cfg(feature = "rouille-frontend")]
-// pub mod rouille;
+#[cfg(feature = "rouille-frontend")]
+pub mod rouille;
 
 /// Includes useful for writing frontends.
 pub mod dev {
