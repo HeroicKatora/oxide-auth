@@ -131,7 +131,7 @@ where
     W: Send + Sync + 'static,
     W::Response: Send + Sync + 'static
 {
-    type Result = Result<W::Response, OAuthError>;
+    type Result = Result<W::Response, W::Error>;
 }
 
 impl<W: WebRequest> Message for AccessToken<W> 
@@ -139,12 +139,12 @@ where
     W: Send + Sync + 'static,
     W::Response: Send + Sync + 'static
 {
-    type Result = Result<W::Response, OAuthError>;
+    type Result = Result<W::Response, W::Error>;
 }
 
 impl<W: WebRequest> Message for Resource<W> 
 where
     W: Send + Sync + 'static
 {
-    type Result = Result<(), OAuthError>;
+    type Result = Result<(), Result<W::Response, W::Error>>;
 }
