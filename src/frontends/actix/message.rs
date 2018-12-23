@@ -4,8 +4,8 @@
 //! the relevant information is extracted into special message types first.
 use super::actix::prelude::Message;
 
-use super::resolve::{ResolvedRequest, ResolvedResponse};
-use code_grant::frontend::{OAuthError, OwnerAuthorization, PreGrant};
+use super::request::{OAuthRequest as ResolvedRequest, OAuthResponse as ResolvedResponse};
+use code_grant::endpoint::{OAuthError, OwnerConsent, PreGrant, WebRequest};
 
 /// Approves or denies are grant request based on owner information.
 ///
@@ -13,7 +13,7 @@ use code_grant::frontend::{OAuthError, OwnerAuthorization, PreGrant};
 /// found in the basic code grant frontend.  All necessary data for validation needs to be
 /// owned (and `Sync`) because the request struct of `actix_web` can not be sent between all
 /// actors.
-pub type BoxedOwner = Box<(Fn(&PreGrant) -> OwnerAuthorization<ResolvedResponse>) + Send + Sync>;
+pub type BoxedOwner<W: WebRequest> = Box<(Fn(&PreGrant) -> OwnerConsent<W::Response>) + Send + Sync>;
 
 /// A request for an authorization code.
 ///
@@ -43,9 +43,9 @@ pub type BoxedOwner = Box<(Fn(&PreGrant) -> OwnerAuthorization<ResolvedResponse>
 /// };
 /// # }
 /// ```
-pub struct AuthorizationCode {
-    pub(super) request: ResolvedRequest,
-    pub(super) owner: BoxedOwner,
+pub struct AuthorizationCode<W: WebRequest=ResolvedRequest> {
+    pub(super) request: W,
+    pub(super) owner: BoxedOwner<W>,
 }
 
 /// A request for a bearer token.
@@ -74,7 +74,7 @@ pub struct AuthorizationCode {
 /// };
 /// # }
 /// ```
-pub struct AccessToken(pub(super) ResolvedRequest);
+pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub(super) W);
 
 
 /// A request for a resource, utilizing a bearer token.
@@ -103,16 +103,48 @@ pub struct AccessToken(pub(super) ResolvedRequest);
 /// };
 /// # }
 /// ```
-pub struct Guard(pub(super) ResolvedRequest);
+pub struct Resource<W: WebRequest=ResolvedRequest>(pub(super) W);
 
-impl Message for AuthorizationCode {
-    type Result = Result<ResolvedResponse, OAuthError>;
+impl<W: WebRequest> AuthorizationCode<W> {
+    pub fn new(request: W, owner: BoxedOwner<W>) -> Self {
+        AuthorizationCode {
+            request,
+            owner,
+        }
+    }
 }
 
-impl Message for AccessToken {
-    type Result = Result<ResolvedResponse, OAuthError>;
+impl<W: WebRequest> AccessToken<W> {
+    pub fn new(request: W) -> Self {
+        AccessToken(request)
+    }
 }
 
-impl Message for Guard {
+impl<W: WebRequest> Resource<W> {
+    pub fn new(request: W) -> Self {
+        Resource(request)
+    }
+}
+
+impl<W: WebRequest> Message for AuthorizationCode<W> 
+where
+    W: Send + Sync + 'static,
+    W::Response: Send + Sync + 'static
+{
+    type Result = Result<W::Response, OAuthError>;
+}
+
+impl<W: WebRequest> Message for AccessToken<W> 
+where
+    W: Send + Sync + 'static,
+    W::Response: Send + Sync + 'static
+{
+    type Result = Result<W::Response, OAuthError>;
+}
+
+impl<W: WebRequest> Message for Resource<W> 
+where
+    W: Send + Sync + 'static
+{
     type Result = Result<(), OAuthError>;
 }

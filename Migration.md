@@ -4,7 +4,8 @@ more detailed information.
 
 ## v0.4.0-preview.1 [WIP]
 
-A HUGE refactor of the backend part of the library.
+A HUGE refactor of the backend part of the library. For the `actix` part, see the
+relevant section.
 
 Currently trying to streamline traits and method by making them less specialized
 and reusable or hiding complexity behind a more succinct interface. Part of this
@@ -46,7 +47,32 @@ provide advance notice of expected interface changes and may appear only in
 `preview.2` or later. In that case, they will be moved to the according
 migration note.
 
------
+### Actix frontend
+
+The standardization of a simple, reusable `Endpoint` offers exiting new
+possibilites. Foremost, a simple newtype wrapper around this and other
+primitives imbues them with `Actor` powers and messaging [WIP]. Requests and
+responses are now more composable so the former now has a simpler representation
+and the necessity of tacking on owner owner consent information has been moved
+to messages entirely [WIP]. Messages for other primitive types have been added,
+so that even a `Registrar` or an `Issuer` can be run as their own actors. That
+might be very useful to attach them to a database backend.
+
+The initial construction of a `OAuthRequest` is now the result of an
+`OAuthFuture` that consumes the http request. This has simply been shifted from
+the actix message constructors. Since `OAuthRequest` now also implements
+`WebRequest` in a simple manner, many implementors will likely want to use a
+newtype style to further customize error types and response representations.
+Keep in mind that for a request to be useable as a message to an endpoint actor,
+the error types of the two have to agree. This restriction may be lifted in
+later versions.
+
+[WIP]
+This specific frontend also offers another `Endpoint` variant that is
+constructed using futures. This special implementation buffers partial results
+from primitives to retry a flow when polling from one of its futures fails.
+
+### More or less comprehensive change list
 
 `Registrar` now requires the result of `bound_redirect` to have a lifetime
 independent of `self`. Instead of requiring a long-living reference to an

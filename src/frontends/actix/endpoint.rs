@@ -1,6 +1,6 @@
 //! Provides a configurable actor with the functionality of a code grant frontend.
-use code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow};
-use code_grant::frontend::{OwnerAuthorizer, OwnerAuthorization, PreGrant};
+use code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow};
+use code_grant::endpoint::{OwnerSolicitor, OwnerConsent, PreGrant};
 
 use super::actix::{Actor, Context, Handler, MessageResult};
 use super::message::{AccessToken, AuthorizationCode, BoxedOwner, Guard};
@@ -9,7 +9,7 @@ use super::resolve::{ResolvedRequest, ResolvedResponse};
 /// A tag type to signal that no handler for this request type has been configured on the endpoint.
 pub struct NoHandler;
 
-struct OwnerBoxHandler(BoxedOwner);
+struct OwnerBoxHandler(BoxedOwner<ResolvedRequest>);
 
 /// An actor handling OAuth2 code grant requests.
 ///
