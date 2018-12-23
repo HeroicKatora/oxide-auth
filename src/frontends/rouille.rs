@@ -6,11 +6,8 @@ extern crate rouille;
 extern crate serde_urlencoded;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 use code_grant::endpoint::{QueryParameter, WebRequest, WebResponse};
-use code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow};
-use code_grant::endpoint::{OAuthError, OwnerSolicitor, OwnerConsent, PreGrant};
 
 use self::rouille::{Request, Response, ResponseBody};
 use url::Url;
@@ -33,11 +30,11 @@ impl<'a> WebRequest for &'a Request {
     type Error = WebError;
     type Response = Response;
 
-    fn query<'s>(&'s mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
         let query = self.raw_query_string();
-        let data: HashMap<Cow<'s, str>, Cow<'s, str>> = serde_urlencoded::from_str(query)
+        let data: Vec<(String, String)> = serde_urlencoded::from_str(query)
             .map_err(|_| WebError::Encoding)?;
-        Ok(Cow::Owned(data.normalize()))
+        Ok(Cow::Owned(data.into_iter().collect()))
     }
 
     fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
@@ -47,9 +44,9 @@ impl<'a> WebRequest for &'a Request {
         }
 
         let body = self.data().ok_or(WebError::Encoding)?;
-        let data: HashMap<String, String> = serde_urlencoded::from_reader(body)
+        let data: Vec<(String, String)> = serde_urlencoded::from_reader(body)
             .map_err(|_| WebError::Encoding)?;
-        Ok(Cow::Owned(data.normalize()))
+        Ok(Cow::Owned(data.into_iter().collect()))
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
@@ -96,5 +93,18 @@ impl WebResponse for Response {
         self.headers.push(("Content-Type".into(), "application/json".into()));
         self.data = ResponseBody::from_string(data);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn multi_query() {
+        let mut request = &Request::fake_http("GET", "/authorize?param=a&param=b", vec![], vec![]);
+        let query = WebRequest::query(&mut request).unwrap();
+
+        assert!(query.unique_value("param").is_none());
     }
 }

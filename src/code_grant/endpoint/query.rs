@@ -1,5 +1,6 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
+use std::iter::FromIterator;
 use std::hash::Hash;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -44,12 +45,14 @@ pub unsafe trait QueryParameter {
 /// Internally a hashmap but this may change due to optimizations.
 #[derive(Clone, Debug, Default)]
 pub struct NormalizedParameter {
-    inner: HashMap<Cow<'static, str>, Cow<'static, str>>,
+    /// The value is `None` if the key appeared at least twice.
+    inner: HashMap<Cow<'static, str>, Option<Cow<'static, str>>>,
 }
 
 unsafe impl QueryParameter for NormalizedParameter {
     fn unique_value(&self, key: &str) -> Option<Cow<str>> {
-        self.inner.get(key).cloned()
+        self.inner.get(key).and_then(|val| 
+            val.as_ref().map(Cow::as_ref).map(Cow::Borrowed))
     }
 
     fn normalize(&self) -> NormalizedParameter {
@@ -57,10 +60,35 @@ unsafe impl QueryParameter for NormalizedParameter {
     }
 }
 
+impl NormalizedParameter {
+    /// Insert a key-value-pair or mark key as dead if already present.
+    ///
+    /// Since each key must appear at most once, we do not remove it from the map but instead mark
+    /// the key as having a duplicate entry.
+    pub fn insert_or_poison(&mut self, key: Cow<'static, str>, val: Cow<'static, str>) {
+        self.inner.entry(key)
+            .and_modify(|val| *val = None)
+            .or_insert(Some(val));
+    }
+}
+
 impl Borrow<QueryParameter> for NormalizedParameter {
     fn borrow(&self) -> &(QueryParameter + 'static) {
         self
     }
+}
+
+impl<K, V> FromIterator<(K, V)> for NormalizedParameter 
+where
+    K: Into<Cow<'static, str>>,
+    V: Into<Cow<'static, str>>,
+{
+   fn from_iter<T>(iter: T) -> Self where T: IntoIterator<Item=(K, V)> {
+       let mut target = NormalizedParameter::default();
+       iter.into_iter()
+           .for_each(|(k, v)| target.insert_or_poison(k.into(), v.into()));
+       target
+   }
 }
 
 impl ToOwned for QueryParameter {
@@ -98,7 +126,7 @@ where
             .filter_map(|(key, val)| {
                 val.get_unique().map(|value| (
                     Cow::Owned(key.borrow().to_string()),
-                    Cow::Owned(value.to_string())
+                    Some(Cow::Owned(value.to_string()))
                 ))
             })
             .collect();
@@ -106,6 +134,37 @@ where
         NormalizedParameter {
             inner,
         }
+    }
+}
+
+unsafe impl<K, V> QueryParameter for Vec<(K, V)>
+where
+    K: Borrow<str> + Eq + Hash,
+    V: Borrow<str> + Eq + Hash,
+{
+    fn unique_value(&self, key: &str) -> Option<Cow<str>> {
+        let mut value = None;
+
+        for entry in self.iter() {
+            if entry.0.borrow() == key {
+                if value.is_some() {
+                    return None;
+                }
+                value = Some(Cow::Borrowed(entry.1.borrow()));
+            }
+        }
+
+        value
+    }
+
+    fn normalize(&self) -> NormalizedParameter {
+        let mut params = NormalizedParameter::default();
+        self.iter()
+            .map(|&(ref key, ref val)| (
+                    Cow::Owned(key.borrow().to_string()),
+                    Cow::Owned(val.borrow().to_string())))
+            .for_each(|(key, val)| params.insert_or_poison(key, val));
+        params
     }
 }
 
