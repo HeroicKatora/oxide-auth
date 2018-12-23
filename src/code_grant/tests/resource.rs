@@ -61,12 +61,31 @@ impl ResourceSetup {
         }
     }
 
+    fn test_access_success(&mut self, request: CraftedRequest) {
+        match resource_flow(&mut self.issuer, &self.resource_scope).execute(request) {
+            Ok(_) => (),
+            Err(ohno) => panic!("Expected an error instead of {:?}", ohno),
+        }
+    }
+
     fn test_access_error(&mut self, request: CraftedRequest) {
         match resource_flow(&mut self.issuer, &self.resource_scope).execute(request) {
             Ok(resp) => panic!("Expected an error instead of {:?}", resp),
             Err(_) => (),
         }
     }
+}
+
+#[test]
+fn resource_success() {
+    let mut setup = ResourceSetup::new();
+    let success = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some("Bearer ".to_string() + &setup.authtoken),
+    };
+
+    setup.test_access_success(success);
 }
 
 #[test]

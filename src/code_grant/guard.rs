@@ -67,6 +67,8 @@ pub enum Error {
     },
 }
 
+const BEARER_START: &'static str = "Bearer ";
+
 type Result<T> = std::result::Result<T, Error>;
 
 /// Required request methods for deciding on the rights to access a protected resource.
@@ -118,7 +120,15 @@ pub fn protect(handler: &mut Endpoint, req: &Request) -> Result<()> {
         }),
     };
 
-    let grant = match handler.issuer().recover_token(&token) {
+    if !token.starts_with(BEARER_START) {
+        return Err(Error::InvalidRequest {
+            authenticate,
+        })
+    }
+
+    let token = &token[BEARER_START.len()..];
+
+    let grant = match handler.issuer().recover_token(token) {
         Some(grant) => grant,
         None => return Err(Error::AccessDenied {
             failure: AccessFailure {
