@@ -89,6 +89,28 @@ data structures.
 
 -----
 
+`Registrar` also no longer requires returning a `RegisteredClient` in its
+interface. The `client` method has been replaced with 
+
+> `fn check(&self, client_id: &str, passphrase: Option<&[u8]>` 
+
+which should perform the equivalent of 
+
+```
+self.client(client_id).ok_or(Unspecified)?.check_authentication(passphrase)
+```
+
+while leaving the internal representation undetermined.
+
+Rationale: Tries to avoid having any references into the inner representation
+that do not refer to types which can be cloned into an owned representation.
+Such types make it harder than necessary to create an interface with
+messages/actors/async. Since the `client` method had no other purpose than the
+equivalent usage shown above, this choice should be fairly uncontroversial.
+
+
+-----
+
 Construction of `WebResponse` instances (e.g. by `redirect_error`) has been 
 removed from `WebResponse`. Instead, a new method `response` has been added to
 `Endpoint` that may inspect the request and kind of response required. All 

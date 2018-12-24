@@ -101,9 +101,7 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
     };
 
     handler.registrar()
-        .client(&client_id)
-        .ok_or(Error::unauthorized("basic"))?
-        .check_authentication(auth)
+        .check(&client_id, auth)
         .map_err(|_| Error::unauthorized("basic"))?;
 
     match request.grant_type() {

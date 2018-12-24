@@ -38,8 +38,8 @@ pub trait Registrar {
     /// scope.
     fn negotiate(&self, client: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError>;
 
-    /// Look up a client id.
-    fn client(&self, client_id: &str) -> Option<RegisteredClient>;
+    /// Try to login as client with some authentication.
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified>;
 }
 
 /// A pair of `client_id` and an optional `redirect_uri`.
@@ -215,11 +215,11 @@ impl<'a> RegisteredClient<'a> {
     /// Try to authenticate with the client and passphrase. This check will success if either the
     /// client is public and no passphrase was provided or if the client is confidential and the
     /// passphrase matches.
-    pub fn check_authentication(&self, passphrase: Option<&[u8]>) -> Result<&Self, Unspecified> {
+    pub fn check_authentication(&self, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
         match (passphrase, &self.client.encoded_client) {
-            (None, &ClientType::Public) => Ok(self),
+            (None, &ClientType::Public) => Ok(()),
             (Some(provided), &ClientType::Confidential{ passdata: ref stored })
-                => self.policy.check(&self.client.client_id, provided, stored).map(|()| self),
+                => self.policy.check(&self.client.client_id, provided, stored),
             _ => return Err(Unspecified)
         }
     }
@@ -326,8 +326,8 @@ impl<'s, R: Registrar + ?Sized> Registrar for &'s R {
         (**self).negotiate(bound, scope)
     }
 
-    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
-        (**self).client(client_id)
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+        (**self).check(client_id, passphrase)
     }
 }
 
@@ -340,8 +340,8 @@ impl<'s, R: Registrar + ?Sized> Registrar for &'s mut R {
         (**self).negotiate(bound, scope)
     }
 
-    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
-        (**self).client(client_id)
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+        (**self).check(client_id, passphrase)
     }
 }
 
@@ -354,8 +354,8 @@ impl<R: Registrar + ?Sized> Registrar for Box<R> {
         (**self).negotiate(bound, scope)
     }
 
-    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
-        (**self).client(client_id)
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+        (**self).check(client_id, passphrase)
     }
 }
 
@@ -368,8 +368,8 @@ impl<R: Registrar + ?Sized> Registrar for Rc<R> {
         (**self).negotiate(bound, scope)
     }
 
-    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
-        (**self).client(client_id)
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+        (**self).check(client_id, passphrase)
     }
 }
 
@@ -382,8 +382,8 @@ impl<R: Registrar + ?Sized> Registrar for Arc<R> {
         (**self).negotiate(bound, scope)
     }
 
-    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
-        (**self).client(client_id)
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+        (**self).check(client_id, passphrase)
     }
 }
 
@@ -419,12 +419,13 @@ impl Registrar for ClientMap {
         })
     }
 
-    fn client(&self, client_id: &str) -> Option<RegisteredClient> {
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
         let password_policy = Self::current_policy(&self.password_policy);
 
-        self.clients.get(client_id).map(|client| {
-            RegisteredClient::new(client, password_policy)
-        })
+        self.clients.get(client_id)
+            .ok_or(Unspecified)
+            .and_then(|client| RegisteredClient::new(client, password_policy)
+                .check_authentication(passphrase))
     }
 }
 
@@ -450,11 +451,9 @@ mod tests {
         register(registrar, public_client);
 
         {
-            let recovered_client = registrar.client(public_id)
-                .expect("Registered client not available");
-            recovered_client.check_authentication(None)
+            registrar.check(public_id, None)
                 .expect("Authorization of public client has changed");
-            recovered_client.check_authentication(Some(b""))
+            registrar.check(public_id, Some(b""))
                 .err().expect("Authorization with password succeeded");
         }
 
@@ -464,11 +463,9 @@ mod tests {
         register(registrar, private_client);
 
         {
-            let recovered_client = registrar.client(private_id)
-                .expect("Registered client not available");
-            recovered_client.check_authentication(Some(private_passphrase))
+            registrar.check(private_id, Some(private_passphrase))
                 .expect("Authorization with right password did not succeed");
-            recovered_client.check_authentication(Some(b"Not the private passphrase"))
+            registrar.check(private_id, Some(b"Not the private passphrase"))
                 .err().expect("Authorization succeed with wrong password");
         }
     }
