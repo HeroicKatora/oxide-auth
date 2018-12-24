@@ -4,7 +4,7 @@
 //! the relevant information is extracted into special message types first.
 use super::actix::prelude::Message;
 
-use super::request::{OAuthRequest as ResolvedRequest, OAuthResponse as ResolvedResponse};
+use super::request::{OAuthRequest as ResolvedRequest};
 use code_grant::endpoint::{OAuthError, OwnerConsent, PreGrant, WebRequest};
 
 /// Approves or denies are grant request based on owner information.
@@ -13,6 +13,7 @@ use code_grant::endpoint::{OAuthError, OwnerConsent, PreGrant, WebRequest};
 /// found in the basic code grant frontend.  All necessary data for validation needs to be
 /// owned (and `Sync`) because the request struct of `actix_web` can not be sent between all
 /// actors.
+#[allow(type_alias_bounds)]
 pub type BoxedOwner<W: WebRequest> = Box<(Fn(&PreGrant) -> OwnerConsent<W::Response>) + Send + Sync>;
 
 /// A request for an authorization code.
@@ -43,10 +44,7 @@ pub type BoxedOwner<W: WebRequest> = Box<(Fn(&PreGrant) -> OwnerConsent<W::Respo
 /// };
 /// # }
 /// ```
-pub struct AuthorizationCode<W: WebRequest=ResolvedRequest> {
-    pub(super) request: W,
-    pub(super) owner: BoxedOwner<W>,
-}
+pub struct AuthorizationCode<W: WebRequest=ResolvedRequest>(pub W);
 
 /// A request for a bearer token.
 ///
@@ -74,7 +72,7 @@ pub struct AuthorizationCode<W: WebRequest=ResolvedRequest> {
 /// };
 /// # }
 /// ```
-pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub(super) W);
+pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub W);
 
 
 /// A request for a resource, utilizing a bearer token.
@@ -103,28 +101,7 @@ pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub(super) W);
 /// };
 /// # }
 /// ```
-pub struct Resource<W: WebRequest=ResolvedRequest>(pub(super) W);
-
-impl<W: WebRequest> AuthorizationCode<W> {
-    pub fn new(request: W, owner: BoxedOwner<W>) -> Self {
-        AuthorizationCode {
-            request,
-            owner,
-        }
-    }
-}
-
-impl<W: WebRequest> AccessToken<W> {
-    pub fn new(request: W) -> Self {
-        AccessToken(request)
-    }
-}
-
-impl<W: WebRequest> Resource<W> {
-    pub fn new(request: W) -> Self {
-        Resource(request)
-    }
-}
+pub struct Resource<W: WebRequest=ResolvedRequest>(pub W);
 
 impl<W: WebRequest> Message for AuthorizationCode<W> 
 where

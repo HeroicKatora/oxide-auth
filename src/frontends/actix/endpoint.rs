@@ -25,7 +25,7 @@ where
 
     fn handle(&mut self, msg: AuthorizationCode<W>, _: &mut Self::Context) -> Self::Result {
         AuthorizationFlow::prepare(&mut self.0)?
-            .execute(msg.request)
+            .execute(msg.0)
             .finish()
     }
 }

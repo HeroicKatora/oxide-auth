@@ -37,7 +37,7 @@ urlencoded = { version = "^0.6", optional = true }
 
 [features]
 default = ["actix-frontend"]
-actix-frontend = ["actix", "actix-web", "futures"]
+actix-frontend = ["actix", "actix-web", "futures", "serde_urlencoded"]
 gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures", "serde_urlencoded"]
 iron-frontend = ["iron", "urlencoded",]
 rouille-frontend = ["rouille", "serde_urlencoded"]

@@ -16,6 +16,7 @@ use super::actix_web::http::header::{self, HeaderValue};
 use super::futures::{Async, Future, Poll};
 
 use url::Url;
+use super::serde_urlencoded;
 
 /// A future for all OAuth related data.
 pub struct OAuthFuture {
@@ -25,9 +26,10 @@ pub struct OAuthFuture {
 
 /// Sendable struct implementing `WebRequest`.
 pub struct OAuthRequest {
-    query: NormalizedParameter,
+    query: Result<NormalizedParameter, ()>,
     auth: Result<Option<String>, ()>,
-    body: Option<NormalizedParameter>,
+    // None if not urlencoded body or error in encoding
+    body: Result<NormalizedParameter, ()>,
 }
 
 /// An http response replacement that can be sent as an actix message.
@@ -62,20 +64,46 @@ impl Future for OAuthFuture {
     type Error = OAuthError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let body = match self.body.as_mut().map(Future::poll) {
+            Some(Ok(Async::NotReady)) => return Ok(Async::NotReady),
+            Some(Ok(Async::Ready(body))) => Ok(body.into_iter().collect()),
+            Some(Err(_)) => Err(()),
+            None => Err(()),
+        };
 
-        unimplemented!()
+        // We can not trust actix not deduplicating keys.
+        let query = match self.inner.uri().query().map(serde_urlencoded::from_str::<Vec<(String, String)>>) {
+            None => Ok(NormalizedParameter::default()),
+            Some(Ok(query)) => Ok(query.into_iter().collect()),
+            Some(Err(_)) => Err(()),
+        };
+
+        let auth = self.inner.headers()
+            .get(header::AUTHORIZATION)
+            .map(|header| header.to_str().map(str::to_string));
+
+        let auth = match auth {
+            Some(Ok(auth)) => Ok(Some(auth)),
+            Some(Err(_)) => Err(()),
+            None => Ok(None),
+        };
+
+        Ok(Async::Ready(OAuthRequest {
+            query,
+            auth,
+            body,
+        }))
     }
 }
 
 impl OAuthRequest {
+    /*
     /// Build an authorization code request from the http request.
     ///
     /// The provided method `check` will be sent inside the request and MUST validate that the
     /// resource owner has approved the authorization grant that was requested.  This is
     /// application specific logic that MUST check that the validiting owner is authenticated.
     pub fn authorization_code<F>(self, check: F) -> AuthorizationCode
-    where
-        F: Into<BoxedOwner<Self>>,
     {
         AuthorizationCode::new(self, check.into())
     }
@@ -89,6 +117,7 @@ impl OAuthRequest {
     pub fn resource(self) -> Resource {
         Resource::new(self)
     }
+    */
 }
 
 impl WebRequest for OAuthRequest {
@@ -96,11 +125,15 @@ impl WebRequest for OAuthRequest {
     type Response = OAuthResponse;
 
      fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
-         unimplemented!()
+         self.query.as_ref()
+             .map(|query| Cow::Borrowed(query as &QueryParameter))
+             .map_err(|_| OAuthError::InvalidRequest)
      }
 
      fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
-         unimplemented!()
+         self.body.as_ref()
+             .map(|body| Cow::Borrowed(body as &QueryParameter))
+             .map_err(|_| OAuthError::InvalidRequest)
      }
 
      fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error>{
@@ -181,5 +214,16 @@ impl OAuthResponse {
 impl From<OAuthResponse> for HttpResponse {
     fn from(resolved: OAuthResponse) -> Self {
         resolved.actix_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn is_send_sync() {
+        trait Test: Send + Sync + 'static { }
+        impl Test for OAuthRequest { }
+        impl Test for OAuthResponse { }
     }
 }

@@ -2,6 +2,7 @@
 extern crate actix;
 extern crate actix_web;
 extern crate futures;
+extern crate serde_urlencoded;
 
 use self::actix_web::HttpRequest;
 
