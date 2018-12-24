@@ -6,6 +6,7 @@ extern crate serde_urlencoded;
 
 use self::actix_web::HttpRequest;
 
+mod future_endpoint;
 mod endpoint;
 pub mod message;
 pub mod request;
@@ -14,6 +15,8 @@ pub mod request;
 pub use self::request::OAuthFuture;
 pub use self::request::OAuthRequest;
 pub use code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow, PreGrant, OwnerConsent, OwnerSolicitor};
+
+pub use self::future_endpoint::authorization;
 
 /// Bundles all oauth related methods under a single type.
 pub trait OAuth {

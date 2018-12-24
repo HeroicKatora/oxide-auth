@@ -30,7 +30,7 @@ pub struct Check {
 }
 
 impl Message for Check {
-    type Result = Result<(), Unspecified>;
+    type Result = Result<(), RegistrarError>;
 }
 
 impl<R: Registrar + 'static> Handler<BoundRedirect> for AsActor<R> {
@@ -50,7 +50,7 @@ impl<R: Registrar + 'static> Handler<Negotiate> for AsActor<R> {
 }
 
 impl<R: Registrar + 'static> Handler<Check> for AsActor<R> {
-    type Result = Result<(), Unspecified>;
+    type Result = Result<(), RegistrarError>;
 
     fn handle(&mut self, msg: Check, _: &mut Self::Context) -> Self::Result {
         self.0.check(&msg.client, msg.passphrase.as_ref().map(Vec::as_slice))

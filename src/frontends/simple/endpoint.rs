@@ -357,7 +357,7 @@ impl<W: WebResponse> ResponseCreator<W> for Vacant where W: Default {
     }
 }
 
-impl<W: WebResponse, F> ResponseCreator<W> for F where F: Fn() -> W {
+impl<W: WebResponse, F> ResponseCreator<W> for F where F: FnMut() -> W {
     fn create(&mut self) -> W {
         self()
     }

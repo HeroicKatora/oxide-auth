@@ -279,6 +279,23 @@ pub trait Endpoint<Request: WebRequest> {
     fn web_error(&mut self, err: Request::Error) -> Self::Error;
 }
 
+impl<'a, W: WebRequest> WebRequest for &'a mut W {
+    type Error = W::Error;
+    type Response = W::Response;
+
+    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+        (**self).query()
+    }
+
+    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+        (**self).urlbody()
+    }
+
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
+        (**self).authheader()
+    }
+}
+
 impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     type Error = E::Error;
 
