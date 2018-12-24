@@ -2,10 +2,18 @@
 //!
 //! The http types, especially `HttpRequest` can not be shared across threads.  Therefore,
 //! the relevant information is extracted into special message types first.
+mod authorizer;
+mod issuer;
+mod registrar;
+
 use super::actix::prelude::Message;
 
 use super::request::{OAuthRequest as ResolvedRequest};
 use code_grant::endpoint::{OAuthError, OwnerConsent, PreGrant, WebRequest};
+
+pub use self::authorizer::{Authorize, Extract};
+pub use self::issuer::{Issue, RecoverToken, RecoverRefresh};
+pub use self::registrar::{BoundRedirect, Check, Negotiate};
 
 /// Approves or denies are grant request based on owner information.
 ///

@@ -40,6 +40,9 @@ pub struct OAuthResponse {
 }
 
 impl OAuthFuture {
+    /// Extract relevant components from a request.
+    ///
+    /// The result of the future is `Send + Sync` so that it can be used in messages.
     pub fn new<S>(request: &HttpRequest<S>) -> Self {
         let request = request.drop_state();
         let body = if let Some(ctype) = request.request().headers().get(header::CONTENT_TYPE) {
