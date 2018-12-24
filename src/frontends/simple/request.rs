@@ -1,4 +1,6 @@
 //! Simple, owning request and response types.
+use std::marker::PhantomData;
+
 use code_grant::endpoint::{QueryParameter, WebRequest, WebResponse};
 
 use std::borrow::Cow;
@@ -71,7 +73,32 @@ pub enum Body {
 ///
 /// Since these types are built to never error on their operation, and `!` is not the stable unique
 /// representation for uninhabited types, this simple enum without variants is used instead.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum NoError { }
+
+/// Changes the error type of a web request and response.
+pub struct MapErr<W, F, T>(W, F, PhantomData<T>);
+
+impl<W, F, T> MapErr<W, F, T> {
+    /// Map all errors in request methods using the given function.
+    pub fn request(request: W, f: F) -> Self 
+        where W: WebRequest, F: FnMut(W::Error) -> T 
+    {
+        MapErr(request, f, PhantomData)
+    }
+
+    /// Map all errors in response methods using the given function.
+    pub fn response(response: W, f: F) -> Self
+        where W: WebResponse, F: FnMut(W::Error) -> T
+    {
+        MapErr(response, f, PhantomData)
+    }
+
+    /// Recover original response or request.
+    pub fn into_inner(self) -> W {
+        self.0
+    }
+}
 
 impl WebRequest for Request {
     type Error = NoError;
@@ -149,5 +176,55 @@ impl NoError {
 impl Default for Status {
     fn default() -> Self {
         Status::Ok
+    }
+}
+
+impl<W: WebRequest, F, T> WebRequest for MapErr<W, F, T> where F: FnMut(W::Error) -> T {
+    type Error = T;
+    type Response = MapErr<W::Response, F, T>;
+
+    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+        self.0.query().map_err(&mut self.1)
+    }
+
+    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+        self.0.urlbody().map_err(&mut self.1)
+    }
+
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
+        self.0.authheader().map_err(&mut self.1)
+    }
+}
+
+impl<W: WebResponse, F, T> WebResponse for MapErr<W, F, T> where F: FnMut(W::Error) -> T {
+    type Error = T;
+
+    fn ok(&mut self) -> Result<(), Self::Error> {
+        self.0.ok().map_err(&mut self.1)
+    }
+
+    /// A response which will redirect the user-agent to which the response is issued.
+    fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
+        self.0.redirect(url).map_err(&mut self.1)
+    }
+
+    /// Set the response status to 400.
+    fn client_error(&mut self) -> Result<(), Self::Error> {
+        self.0.client_error().map_err(&mut self.1)
+    }
+
+    /// Set the response status to 401 and add a `WWW-Authenticate` header.
+    fn unauthorized(&mut self, header_value: &str) -> Result<(), Self::Error> {
+        self.0.unauthorized(header_value).map_err(&mut self.1)
+    }
+
+    /// A pure text response with no special media type set.
+    fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
+        self.0.body_text(text).map_err(&mut self.1)
+    }
+
+    /// Json repsonse data, with media type `aplication/json.
+    fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
+        self.0.body_json(data).map_err(&mut self.1)
     }
 }

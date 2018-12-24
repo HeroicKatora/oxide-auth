@@ -224,6 +224,7 @@ impl From<OAuthResponse> for HttpResponse {
 mod tests {
     use super::*;
 
+    #[ignore(dead_code)]
     fn is_send_sync() {
         trait Test: Send + Sync + 'static { }
         impl Test for OAuthRequest { }

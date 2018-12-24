@@ -175,7 +175,7 @@ impl fmt::Debug for ClientType {
 
 impl From<Unspecified> for RegistrarError {
     fn from(err: Unspecified) -> Self {
-        RegistrarError::Unspecified
+        match err { Unspecified => RegistrarError::Unspecified }
     }
 }
 

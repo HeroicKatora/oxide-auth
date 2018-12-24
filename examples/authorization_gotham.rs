@@ -1,3 +1,4 @@
+#![cfg(feature = "disabled")]
 mod support;
 #[cfg(feature = "gotham-frontend")]
 mod support_gotham;

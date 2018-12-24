@@ -10,6 +10,8 @@ mod future_endpoint;
 mod endpoint;
 pub mod message;
 pub mod request;
+#[cfg(test)]
+mod tests;
 
 // pub use self::endpoint::CodeGrantEndpoint;
 pub use self::request::OAuthFuture;
