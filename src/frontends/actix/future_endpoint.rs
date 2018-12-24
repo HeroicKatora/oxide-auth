@@ -118,12 +118,13 @@ impl RegistrarProxy {
 impl Registrar for RegistrarProxy {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         if self.bound.borrow().unsent() {
-            self.bound.borrow_mut().send(m::BoundRedirect {
+            let bound = m::BoundRedirect {
                 bound: ClientUrl {
                     client_id: Cow::Owned(bound.client_id.into_owned()),
                     redirect_uri: bound.redirect_uri.map(|uri| Cow::Owned(uri.into_owned())),
                 }
-            });
+            };
+            self.bound.borrow_mut().send(bound);
         }
 
         match self.bound.borrow_mut().poll() {
@@ -142,13 +143,14 @@ impl Registrar for RegistrarProxy {
 
     fn negotiate(&self, client: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
         if self.negotiate.borrow().unsent() {
-            self.negotiate.borrow_mut().send(m::Negotiate {
+            let negotiate = m::Negotiate {
                 client: BoundClient {
                     client_id: Cow::Owned(client.client_id.into_owned()),
                     redirect_uri: Cow::Owned(client.redirect_uri.into_owned()),
                 },
                 scope: scope,
-            });
+            };
+            self.negotiate.borrow_mut().send(negotiate);
         }
 
         match self.negotiate.borrow_mut().poll() {
@@ -161,10 +163,11 @@ impl Registrar for RegistrarProxy {
 
     fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         if self.check.borrow().unsent() {
-            self.check.borrow_mut().send(m::Check {
+            let check = m::Check {
                 client: client_id.to_owned(),
-                passphrase: passphrase.map(|p| p.to_owned())
-            });
+                passphrase: passphrase.map(|p| p.to_owned()),
+            };
+            self.check.borrow_mut().send(check);
         }
 
         match self.check.borrow_mut().poll() {

@@ -146,9 +146,12 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
 
     let pre_grant = handler.registrar()
         .negotiate(bound_client, scope)
-        .map_err(|_| {
-            prepared_error.description().set_type(AuthorizationErrorType::InvalidScope);
-            Error::Redirect(prepared_error)
+        .map_err(|err| match err {
+            RegistrarError::PrimitiveError => Error::PrimitiveError,
+            RegistrarError::Unspecified => {
+                prepared_error.description().set_type(AuthorizationErrorType::InvalidScope);
+                Error::Redirect(prepared_error)
+            },
         })?;
 
     Ok(Pending {
@@ -190,7 +193,7 @@ impl Pending {
            scope: self.pre_grant.scope,
            until: Utc::now() + Duration::minutes(10),
            extensions: self.extensions,
-       }).map_err(|()| Error::Ignore)?;
+       }).map_err(|()| Error::PrimitiveError)?;
 
        url.query_pairs_mut()
            .append_pair("code", grant.as_str())

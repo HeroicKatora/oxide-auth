@@ -7,6 +7,7 @@ use super::super::AsActor;
 use ring::error::Unspecified;
 
 /// Request a bound redirect.
+#[derive(Clone, Debug)]
 pub struct BoundRedirect {
     pub bound: ClientUrl<'static>,
 }
@@ -15,6 +16,7 @@ impl Message for BoundRedirect {
     type Result = Result<BoundClient<'static>, RegistrarError>;
 }
 
+#[derive(Clone, Debug)]
 pub struct Negotiate {
     pub client: BoundClient<'static>,
     pub scope: Option<Scope>
@@ -24,6 +26,7 @@ impl Message for Negotiate {
     type Result = Result<PreGrant, RegistrarError>;
 }
 
+#[derive(Clone, Debug)]
 pub struct Check {
     pub client: String,
     pub passphrase: Option<Vec<u8>>,

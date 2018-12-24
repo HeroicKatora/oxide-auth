@@ -90,5 +90,6 @@ fn future_authorization() {
     assert_eq!(response.status, Status::Redirect);
 
     let location = response.location.expect("Location header should be set");
+    eprintln!("{:?}", &location);
     assert_eq!(location.as_str().find("error"), None);
 }
