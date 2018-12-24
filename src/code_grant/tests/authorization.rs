@@ -36,7 +36,6 @@ impl AuthorizationSetup {
     fn test_success(&mut self, request: CraftedRequest) {
         let response = authorization_flow(&mut self.registrar, &mut self.authorizer, &mut Allow(EXAMPLE_OWNER_ID.to_string()))
             .execute(request)
-            .finish()
             .expect("Should not error");
         
         assert_eq!(response.status, Status::Redirect);
@@ -49,7 +48,8 @@ impl AuthorizationSetup {
 
     fn test_silent_error(&mut self, request: CraftedRequest) {
         match authorization_flow(&mut self.registrar, &mut self.authorizer, &mut Allow(EXAMPLE_OWNER_ID.to_string()))
-            .execute(request).finish() {
+            .execute(request)
+        {
             Ok(ref resp) if resp.location.is_some() => panic!("Redirect without client id {:?}", resp),
             Ok(resp) => panic!("Response without client id {:?}", resp),
             Err(_) => (),
@@ -59,8 +59,7 @@ impl AuthorizationSetup {
     fn test_error_redirect<P>(&mut self, request: CraftedRequest, mut pagehandler: P)
         where P: OwnerSolicitor<CraftedRequest> 
     {
-        let response = authorization_flow(&mut self.registrar, &mut self.authorizer, &mut pagehandler)
-            .execute(request).finish();
+        let response = authorization_flow(&mut self.registrar, &mut self.authorizer, &mut pagehandler).execute(request);
 
         let response = match response {
             Err(resp) => panic!("Expected redirect with error set: {:?}", resp),

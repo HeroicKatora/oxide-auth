@@ -36,7 +36,7 @@ struct AuthorizationPending<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebReques
 ///
 /// Note that this borrows from the `AuthorizationFlow` used to create it. You can `finish` the
 /// authorization flow for this request to produce a response or an error.
-pub struct AuthorizationPartial<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
+struct AuthorizationPartial<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
     inner: AuthorizationPartialInner<'a, E, R>,
 
     /// TODO: offer this in the public api instead of dropping the request.
@@ -107,7 +107,7 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     ///
     /// When the registrar or the authorizer returned by the endpoint is suddenly `None` when
     /// previously it was `Some(_)`.
-    pub fn execute(&mut self, mut request: R) -> AuthorizationPartial<E, R> {
+    pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
         let negotiated = authorization_code(
             &self.endpoint,
             &WrappedRequest::new(&mut request));
@@ -132,10 +132,12 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             },
         };
 
-        AuthorizationPartial {
+        let partial = AuthorizationPartial {
             inner,
             _with_request: None,
-        }
+        };
+
+        partial.finish()
     }
 }
 

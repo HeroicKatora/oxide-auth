@@ -275,7 +275,7 @@ where
                 Err(_) => unreachable!("Preconditions always fulfilled"),
             };
 
-            flow.execute(&mut self.request).finish()
+            flow.execute(&mut self.request)
         };
 
         // Weed out the terminating results.

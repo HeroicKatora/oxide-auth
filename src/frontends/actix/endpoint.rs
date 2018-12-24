@@ -24,9 +24,7 @@ where
     type Result = Result<W::Response, W::Error>;
 
     fn handle(&mut self, msg: AuthorizationCode<W>, _: &mut Self::Context) -> Self::Result {
-        AuthorizationFlow::prepare(&mut self.0)?
-            .execute(msg.0)
-            .finish()
+        AuthorizationFlow::prepare(&mut self.0)?.execute(msg.0)
     }
 }
 
@@ -41,8 +39,7 @@ where
     type Result = Result<W::Response, W::Error>;
 
     fn handle(&mut self, msg: AccessToken<W>, _: &mut Self::Context) -> Self::Result {
-        AccessTokenFlow::prepare(&mut self.0)?
-            .execute(msg.0)
+        AccessTokenFlow::prepare(&mut self.0)?.execute(msg.0)
     }
 }
 
@@ -57,7 +54,6 @@ where
     type Result = Result<(), Result<W::Response, W::Error>>;
 
     fn handle(&mut self, msg: Resource<W>, _: &mut Self::Context) -> Self::Result {
-        ResourceFlow::prepare(&mut self.0).map_err(Err)?
-            .execute(msg.0)
+        ResourceFlow::prepare(&mut self.0).map_err(Err)?.execute(msg.0)
     }
 }
