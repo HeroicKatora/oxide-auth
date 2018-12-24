@@ -77,7 +77,7 @@ fn future_authorization() {
     let result = setup.runner.block_on(authorization(
         setup.registrar.clone(),
         setup.authorizer.clone(),
-        FnSolicitor(|_req: &mut &mut _, _: &_| { OwnerConsent::Authorized(defaults::EXAMPLE_OWNER_ID.to_string()) }),
+        FnSolicitor(|_req: &mut _, _: &_| { OwnerConsent::Authorized(defaults::EXAMPLE_OWNER_ID.to_string()) }),
         MapErr::request(request, NoError::into::<OAuthError>),
         MapErr::response(response, NoError::into::<OAuthError>)));
 

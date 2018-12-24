@@ -6,7 +6,7 @@ use primitives::authorizer::Authorizer;
 use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::scope::Scope;
 use primitives::grant::Grant;
-use code_grant::endpoint::{AuthorizationFlow, OwnerSolicitor, OAuthError, WebRequest};
+use code_grant::endpoint::{AuthorizationFlow, OwnerSolicitor, OwnerConsent, OAuthError, WebRequest};
 use frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
 
 use super::message as m;
@@ -27,7 +27,7 @@ pub fn authorization<R, A, S, W>(
 where
     R: Registrar + 'static,
     A: Authorizer + 'static,
-    S: for<'a> OwnerSolicitor<&'a mut W> + 'static,
+    S: OwnerSolicitor<W> + 'static,
     W: WebRequest + 'static,
     W::Error: From<OAuthError>,
     W::Response: 'static,
@@ -237,22 +237,35 @@ impl Authorizer for AuthorizerProxy {
     }
 }
 
+struct RefMutSolicitor<'a, S: 'a>(&'a mut S);
+
+impl<'a, W, S: 'a> OwnerSolicitor<&'a mut W> for RefMutSolicitor<'a, S> 
+where
+    W: WebRequest,
+    S: OwnerSolicitor<W>,
+{
+    fn check_consent(&mut self, request: &mut &'a mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
+        self.0.check_consent(*request, pre)
+    }
+}
+
 impl<W: WebRequest, S> Future for AuthorizationFuture<W, S> 
 where 
-    S: for<'a> OwnerSolicitor<&'a mut W>,
+    S: OwnerSolicitor<W>,
     W::Error: From<OAuthError>,
 {
     type Item = Result<W::Response, W::Error>;
     type Error = MailboxError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+
         let response_mut = &mut self.response;
         let result = {
             let endpoint = Generic {
                 registrar: &self.registrar,
                 authorizer: &mut self.authorizer,
                 issuer: Vacant,
-                solicitor: &mut self.solicitor,
+                solicitor: RefMutSolicitor(&mut self.solicitor),
                 scopes: Vacant,
                 response: || { response_mut.take().unwrap() },
             };
