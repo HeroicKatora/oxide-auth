@@ -8,7 +8,7 @@ use code_grant::error::{AccessTokenError, AccessTokenErrorType};
 use primitives::authorizer::Authorizer;
 use primitives::issuer::{IssuedToken, Issuer};
 use primitives::grant::{Extension as ExtensionData, Extensions, Grant, GrantExtension};
-use primitives::registrar::Registrar;
+use primitives::registrar::{Registrar, RegistrarError};
 
 /// Trait based retrieval of parameters necessary for access token request handling.
 pub trait Request {
@@ -102,7 +102,13 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
 
     handler.registrar()
         .check(&client_id, auth)
-        .map_err(|_| Error::unauthorized("basic"))?;
+        .map_err(|err| match err {
+            RegistrarError::Unspecified => Error::unauthorized("basic"),
+            RegistrarError::PrimitiveError => Error::Primitive(PrimitiveError {
+                grant: None,
+                extensions: None,
+            }),
+        })?;
 
     match request.grant_type() {
         Some(ref cow) if cow == "authorization_code" => (),
@@ -166,10 +172,6 @@ pub enum Error {
     /// This is expected to occur with some endpoints. See `PrimitiveError` for
     /// more details on when this is returned.
     Primitive(PrimitiveError),
-
-    /// The operation failed in such a way that it would not be wise for the
-    /// connected client to know a more diverse reason.
-    Internal,
 }
 
 /// The endpoint should have enough control over its primitives to find
@@ -245,7 +247,6 @@ impl Error {
             Error::Invalid(description) => Some(description.description()),
             Error::Unauthorized(description, _) => Some(description.description()),
             Error::Primitive(_) => None,
-            Error::Internal => None,
         }
     }
 }

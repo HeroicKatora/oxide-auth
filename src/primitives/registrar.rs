@@ -7,6 +7,7 @@ use super::scope::Scope;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use std::rc::Rc;
 
@@ -39,7 +40,7 @@ pub trait Registrar {
     fn negotiate(&self, client: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError>;
 
     /// Try to login as client with some authentication.
-    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified>;
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError>;
 }
 
 /// A pair of `client_id` and an optional `redirect_uri`.
@@ -49,6 +50,7 @@ pub trait Registrar {
 /// is a native client which uses opens a local port to receive the redirect. Since it can not
 /// necessarily predict the port, the open port needs to be communicated to the server (Note: this
 /// mechanism is not provided by the simple `ClientMap` implementation).
+#[derive(Clone, Debug)]
 pub struct ClientUrl<'a> {
     /// The identifier indicated
     pub client_id: Cow<'a, str>,
@@ -61,6 +63,7 @@ pub struct ClientUrl<'a> {
 ///
 /// This instance can be used to complete parameter negotiation with the registrar. In the simplest
 /// case this only includes agreeing on a scope allowed for the client.
+#[derive(Clone, Debug)]
 pub struct BoundClient<'a> {
     /// The identifier of the client, moved from the request.
     pub client_id: Cow<'a, str>,
@@ -73,7 +76,7 @@ pub struct BoundClient<'a> {
 /// request. Together with the owner_id and a computed expiration time stamp, this will form a
 /// grant of some sort. In the case of the authorization code grant flow, it will be an
 /// authorization code at first, which can be traded for an access code by the client acknowledged.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PreGrant {
     /// The registered client id.
     pub client_id: String,
@@ -86,19 +89,21 @@ pub struct PreGrant {
 }
 
 /// Handled responses from a registrar.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum RegistrarError {
-    /// Indicates an entirely unknown client.
-    Unregistered,
-
-    /// The redirection url was not the registered one.
+    /// One of several different causes that should be indistiguishable.
     ///
-    /// It is generally advisable to perform an exact match on the url, to prevent injection of
-    /// bad query parameters for example but not strictly required.
-    MismatchedRedirect,
+    /// * Indicates an entirely unknown client.
+    /// * The client is not authorized.
+    /// * The redirection url was not the registered one.  It is generally advisable to perform an
+    ///   exact match on the url, to prevent injection of bad query parameters for example but not
+    ///   strictly required.
+    ///
+    /// These should be indistiguishable to avoid security problems.
+    Unspecified,
 
-    /// The client is not authorized.
-    UnauthorizedClient,
+    /// Something went wrong with this primitive that has no security reason.
+    PrimitiveError,
 }
 
 /// Clients are registered users of authorization tokens.
@@ -106,7 +111,7 @@ pub enum RegistrarError {
 /// There are two types of clients, public and confidential. Public clients operate without proof
 /// of identity while confidential clients are granted additional assertions on their communication
 /// with the servers. They might be allowed more freedom as they are harder to impersonate.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Client {
     client_id: String,
     redirect_uri: Url,
@@ -118,7 +123,7 @@ pub struct Client {
 ///
 /// This provides a standard encoding for `Registrars` who wish to store their clients and makes it
 /// possible to test password policies.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EncodedClient {
     /// The id of this client. If this is was registered at a `Registrar`, this should be a key
     /// to the instance.
@@ -157,6 +162,21 @@ pub enum ClientType {
 pub struct ClientMap {
     clients: HashMap<String, EncodedClient>,
     password_policy: Option<Box<PasswordPolicy>>,
+}
+
+impl fmt::Debug for ClientType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            ClientType::Public => write!(f, "<public>"),
+            ClientType::Confidential { .. } => write!(f, "<confidential>"),
+        }
+    }
+}
+
+impl From<Unspecified> for RegistrarError {
+    fn from(err: Unspecified) -> Self {
+        RegistrarError::Unspecified
+    }
 }
 
 impl Client {
@@ -275,7 +295,8 @@ impl PasswordPolicy for Pbkdf2 {
     }
 
     fn check(&self, _client_id: &str /* Was interned */, passphrase: &[u8], stored: &[u8])
-    -> Result<(), Unspecified> {
+        -> Result<(), Unspecified>
+    {
         if stored.len() < 64 {
             return Err(Unspecified)
         }
@@ -326,7 +347,7 @@ impl<'s, R: Registrar + ?Sized> Registrar for &'s R {
         (**self).negotiate(bound, scope)
     }
 
-    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         (**self).check(client_id, passphrase)
     }
 }
@@ -340,7 +361,7 @@ impl<'s, R: Registrar + ?Sized> Registrar for &'s mut R {
         (**self).negotiate(bound, scope)
     }
 
-    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         (**self).check(client_id, passphrase)
     }
 }
@@ -354,7 +375,7 @@ impl<R: Registrar + ?Sized> Registrar for Box<R> {
         (**self).negotiate(bound, scope)
     }
 
-    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         (**self).check(client_id, passphrase)
     }
 }
@@ -368,7 +389,7 @@ impl<R: Registrar + ?Sized> Registrar for Rc<R> {
         (**self).negotiate(bound, scope)
     }
 
-    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         (**self).check(client_id, passphrase)
     }
 }
@@ -382,7 +403,7 @@ impl<R: Registrar + ?Sized> Registrar for Arc<R> {
         (**self).negotiate(bound, scope)
     }
 
-    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         (**self).check(client_id, passphrase)
     }
 }
@@ -390,7 +411,7 @@ impl<R: Registrar + ?Sized> Registrar for Arc<R> {
 impl Registrar for ClientMap {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         let client = match self.clients.get(bound.client_id.as_ref()) {
-            None => return Err(RegistrarError::Unregistered),
+            None => return Err(RegistrarError::Unspecified),
             Some(stored) => stored
         };
 
@@ -398,7 +419,7 @@ impl Registrar for ClientMap {
         match bound.redirect_uri {
             None => (),
             Some(ref url) if url.as_ref().as_str() == client.redirect_uri.as_str() => (),
-            _ => return Err(RegistrarError::MismatchedRedirect),
+            _ => return Err(RegistrarError::Unspecified),
         }
 
         Ok(BoundClient {
@@ -419,13 +440,15 @@ impl Registrar for ClientMap {
         })
     }
 
-    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         let password_policy = Self::current_policy(&self.password_policy);
 
         self.clients.get(client_id)
             .ok_or(Unspecified)
             .and_then(|client| RegisteredClient::new(client, password_policy)
-                .check_authentication(passphrase))
+                .check_authentication(passphrase))?;
+
+        Ok(())
     }
 }
 

@@ -172,6 +172,7 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(
                 .map_err(|err| endpoint.web_error(err))?;
             Ok(response)
         },
+        AuthorizationError::PrimitiveError => Err(endpoint.error(OAuthError::PrimitiveError)),
     }
 }
 

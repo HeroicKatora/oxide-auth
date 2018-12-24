@@ -98,9 +98,8 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
     };
 
     let bound_client = match handler.registrar().bound_redirect(client_url) {
-        Err(RegistrarError::Unregistered) => return Err(Error::Ignore),
-        Err(RegistrarError::MismatchedRedirect) => return Err(Error::Ignore),
-        Err(RegistrarError::UnauthorizedClient) => return Err(Error::Ignore),
+        Err(RegistrarError::Unspecified) => return Err(Error::Ignore),
+        Err(RegistrarError::PrimitiveError) => return Err(Error::PrimitiveError),
         Ok(pre_grant) => pre_grant,
     };
 
@@ -216,7 +215,12 @@ pub enum Error {
     Ignore,
 
     /// Redirect to the given url
-    Redirect(ErrorUrl) ,
+    Redirect(ErrorUrl),
+
+    /// Something happened in one of the primitives.
+    ///
+    /// The endpoint should decide how to handle this and if this is temporary.
+    PrimitiveError,
 }
 
 /// Encapsulates a redirect to a valid redirect_uri with an error response. The implementation
@@ -253,6 +257,7 @@ impl Error {
         match self {
             Error::Ignore => None,
             Error::Redirect(inner) => Some(inner.description()),
+            Error::PrimitiveError => None,
         }
     }
 }
