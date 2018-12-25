@@ -115,7 +115,7 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(endpoint: &mut E, request: &mut R,
                 .map_err(|err| endpoint.web_error(err))?;
             response
         },
-        TokenError::Primitive(primitives) => {
+        TokenError::Primitive(_) => {
             // FIXME: give the context for restoration.
             return Err(endpoint.error(OAuthError::PrimitiveError))
         },

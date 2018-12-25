@@ -6,8 +6,8 @@ use super::actix::{Actor, Context, Handler, Message};
 use super::message::{AccessToken, AuthorizationCode, Resource};
 use super::AsActor;
 
-/// A tag type to signal that no handler for this request type has been configured on the endpoint.
-pub struct NoHandler;
+// /// A tag type to signal that no handler for this request type has been configured on the endpoint.
+// pub struct NoHandler;
 
 impl<P: 'static> Actor for AsActor<P> {
     type Context = Context<Self>;

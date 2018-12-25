@@ -49,7 +49,7 @@ reqwest = "^0.9"
 
 [[example]]
 name = "authorization_actix"
-required-features = ["actix-frontend", "not-a-feature"]
+required-features = ["actix-frontend"]
 
 [[example]]
 name = "authorization_gotham"

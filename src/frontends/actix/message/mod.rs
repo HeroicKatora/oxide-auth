@@ -9,7 +9,7 @@ mod registrar;
 use super::actix::prelude::Message;
 
 use super::request::{OAuthRequest as ResolvedRequest};
-use code_grant::endpoint::{OAuthError, OwnerConsent, PreGrant, WebRequest};
+use code_grant::endpoint::{OwnerConsent, PreGrant, WebRequest};
 
 pub use self::authorizer::{Authorize, Extract};
 pub use self::issuer::{Issue, RecoverToken, RecoverRefresh};

@@ -4,10 +4,9 @@ use primitives::authorizer::{Authorizer, Storage};
 use primitives::generator::RandomGenerator;
 use primitives::issuer::{Issuer, TokenSigner};
 use primitives::registrar::{Client, ClientMap};
-use primitives::scope::Scope;
 use primitives::grant::{Extensions, Grant};
 
-use code_grant::endpoint::{PreGrant, OAuthError, OwnerConsent};
+use code_grant::endpoint::{OAuthError, OwnerConsent};
 use frontends::simple::endpoint::FnSolicitor;
 use frontends::simple::request::{Body, MapErr, NoError, Request, Response, Status};
 
@@ -15,7 +14,6 @@ use super::{AsActor, access_token, authorization, resource};
 use super::actix::{Actor, Addr, System, SystemRunner};
 
 use chrono::{Utc, Duration};
-use url::Url;
 use serde_json;
 
 struct Setup {
@@ -106,10 +104,8 @@ fn future_authorization() {
         MapErr::response(response, NoError::into::<OAuthError>)));
 
     let result = result
-        .expect("Should not be an actix error");
-    let response = result
         .expect("Should not be an oauth error");
-    let response = response.into_inner();
+    let response = result.into_inner();
 
     assert_eq!(response.status, Status::Redirect);
 
@@ -145,10 +141,8 @@ fn future_access_token() {
         MapErr::response(response, NoError::into::<OAuthError>)));
 
     let result = result
-        .expect("Should not be an actix error");
-    let response = result
         .expect("Should not be an oauth error");
-    let response = response.into_inner();
+    let response = result.into_inner();
 
     assert_eq!(response.status, Status::Ok);
 
@@ -179,12 +173,9 @@ fn future_resource() {
         MapErr::request(request, NoError::into::<OAuthError>),
         MapErr::response(response, NoError::into::<OAuthError>)));
 
-    let result = result
-        .expect("Should not be an actix error");
-
     let () = match result {
         Ok(()) => (),
-        Err(Err(err)) => panic!("Should not be an oauth error: {:?}", err),
         Err(Ok(resp)) => panic!("Should not be a response: {:?}", resp.into_inner()),
+        Err(Err(err)) => panic!("Should not be an oauth error: {:?}", err),
     };
 }

@@ -7,15 +7,16 @@ use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, P
 use primitives::scope::Scope;
 use primitives::grant::Grant;
 use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
-use code_grant::endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest};
+use code_grant::endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest, WebResponse};
 use frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
 
 use super::message as m;
 
 use super::actix::{Addr, MailboxError, Message, Recipient};
 use super::actix::dev::RecipientRequest;
+use super::actix_web::{HttpResponse, ResponseError};
 use super::futures::{Async, Future, Poll};
-use super::AsActor;
+use super::{AsActor, OAuthResponse};
 
 pub fn authorization<R, A, S, W>(
     registrar: Addr<AsActor<R>>,
@@ -24,7 +25,7 @@ pub fn authorization<R, A, S, W>(
     request: W,
     response: W::Response
 )
-    -> Box<Future<Item=Result<W::Response, W::Error>, Error=MailboxError> + 'static>
+    -> Box<Future<Item=W::Response, Error=W::Error> + 'static>
 where
     R: Registrar + 'static,
     A: Authorizer + 'static,
@@ -49,7 +50,7 @@ pub fn access_token<R, A, I, W>(
     request: W,
     response: W::Response
 )
-    -> Box<Future<Item=Result<W::Response, W::Error>, Error=MailboxError> + 'static>
+    -> Box<Future<Item=W::Response, Error=W::Error> + 'static>
 where
     R: Registrar + 'static,
     A: Authorizer + 'static,
@@ -73,7 +74,7 @@ pub fn resource<I, W, C>(
     request: W,
     response: W::Response
 )
-    -> Box<Future<Item=Result<(), Result<W::Response, W::Error>>, Error=MailboxError> + 'static>
+    -> Box<Future<Item=(), Error=ResourceProtection<W::Response>> + 'static>
 where
     I: Issuer + 'static,
     C: Scopes<W> + 'static,
@@ -87,6 +88,11 @@ where
         request,
         response: Some(response),
     })
+}
+
+pub enum ResourceProtection<W: WebResponse> {
+    Respond(W),
+    Error(W::Error),
 }
 
 struct Buffer<M> 
@@ -411,8 +417,8 @@ where
     S: OwnerSolicitor<W>,
     W::Error: From<OAuthError>,
 {
-    type Item = Result<W::Response, W::Error>;
-    type Error = MailboxError;
+    type Item = W::Response;
+    type Error = W::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let response_mut = &mut self.response;
@@ -436,26 +442,21 @@ where
 
         // Weed out the terminating results.
         let oerr = match result {
-            Ok(response) => return Ok(Async::Ready(Ok(response))),
-            Err(SimpleError::Web(err)) => return Ok(Async::Ready(Err(err))),
+            Ok(response) => return Ok(Async::Ready(response)),
+            Err(SimpleError::Web(err)) => return Err(err),
             Err(SimpleError::OAuth(oauth)) => oauth,
         };
 
         // Could it have been the registrar or authorizer that failed?
         match oerr {
             OAuthError::PrimitiveError => (),
-            other => return Ok(Async::Ready(Err(other.into()))),
+            other => return Err(other.into()),
         }
 
         // Are we getting this primitive error due to a pending reply?
         if !self.registrar.is_waiting() && !self.authorizer.is_waiting() {
-            // Is this because of a terminal mailbox error?
-            if let Some(mb) = self.registrar.error().or(self.authorizer.error()) {
-                return Err(mb)
-            }
-
-            // It was some other primitive that failed.
-            return Ok(Async::Ready(Err(OAuthError::PrimitiveError.into())));
+            // No, this was fatal
+            return Err(OAuthError::PrimitiveError.into());
         }
 
         self.registrar.rearm();
@@ -468,8 +469,8 @@ impl<W: WebRequest> Future for AccessTokenFuture<W>
 where
     W::Error: From<OAuthError>
 {
-    type Item = Result<W::Response, W::Error>;
-    type Error = MailboxError;
+    type Item = W::Response;
+    type Error = W::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let response_mut = &mut self.response;
@@ -493,26 +494,21 @@ where
 
         // Weed out the terminating results.
         let oerr = match result {
-            Ok(response) => return Ok(Async::Ready(Ok(response))),
-            Err(SimpleError::Web(err)) => return Ok(Async::Ready(Err(err))),
+            Ok(response) => return Ok(Async::Ready(response)),
+            Err(SimpleError::Web(err)) => return Err(err),
             Err(SimpleError::OAuth(oauth)) => oauth,
         };
 
         // Could it have been the registrar or authorizer that failed?
         match oerr {
             OAuthError::PrimitiveError => (),
-            other => return Ok(Async::Ready(Err(other.into()))),
+            other => return Err(other.into()),
         }
 
         // Are we getting this primitive error due to a pending reply?
         if !self.registrar.is_waiting() && !self.authorizer.is_waiting() && !self.issuer.is_waiting() {
-            // Is this because of a terminal mailbox error?
-            if let Some(mb) = self.registrar.error().or(self.authorizer.error()).or(self.issuer.error()) {
-                return Err(mb)
-            }
-
-            // It was some other primitive that failed.
-            return Ok(Async::Ready(Err(OAuthError::PrimitiveError.into())));
+            // No, this was fatal
+            return Err(OAuthError::PrimitiveError.into());
         }
 
         self.registrar.rearm();
@@ -527,8 +523,8 @@ where
     C: Scopes<W>,
     W::Error: From<OAuthError>,
 {
-    type Item = Result<(), Result<W::Response, W::Error>>;
-    type Error = MailboxError;
+    type Item = ();
+    type Error = ResourceProtection<W::Response>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let response_mut = &mut self.response;
@@ -552,33 +548,28 @@ where
 
         // Weed out the terminating results.
         let err = match result {
-            Ok(()) => return Ok(Async::Ready(Ok(()))),
+            Ok(()) => return Ok(Async::Ready(())),
             Err(err) => err,
         };
 
         // Err may be a response
         let err = match err {
-            Ok(response) => return Ok(Async::Ready(Err(Ok(response)))),
+            Ok(response) => return Err(ResourceProtection::Respond(response)),
             Err(err) => err,
         };
 
         // Now we are at the errors produced by the endpoint.
         // Since we control the endpoint, second representations is `OAuthError`.
-        let err = match err {
+        let () = match err {
             SimpleError::OAuth(OAuthError::PrimitiveError) => (),
-            SimpleError::OAuth(err) => return Ok(Async::Ready(Err(Err(err.into())))),
-            SimpleError::Web(err) => return Ok(Async::Ready(Err(Err(err)))),
+            SimpleError::OAuth(err) => return Err(ResourceProtection::Error(err.into())),
+            SimpleError::Web(err) => return Err(ResourceProtection::Error(err)),
         };
 
         // Are we getting this primitive error due to a pending reply?
         if !self.issuer.is_waiting() {
-            // Is this because of a terminal mailbox error?
-            if let Some(mb) = self.issuer.error() {
-                return Err(mb)
-            }
-
-            // It was some other primitive that failed.
-            return Ok(Async::Ready(Err(Err(OAuthError::PrimitiveError.into()))));
+            // No, this was fatal
+            return Err(ResourceProtection::Error(OAuthError::PrimitiveError.into()));
         }
 
         self.issuer.rearm();
