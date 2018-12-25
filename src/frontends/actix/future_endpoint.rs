@@ -7,7 +7,7 @@ use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, P
 use primitives::scope::Scope;
 use primitives::grant::Grant;
 use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
-use code_grant::endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, WebRequest};
+use code_grant::endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest};
 use frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
 
 use super::message as m;
@@ -62,6 +62,28 @@ where
         registrar: RegistrarProxy::new(registrar),
         authorizer: AuthorizerProxy::new(authorizer),
         issuer: IssuerProxy::new(issuer),
+        request,
+        response: Some(response),
+    })
+}
+
+pub fn resource<I, W, C>(
+    issuer: Addr<AsActor<I>>,
+    scopes: C,
+    request: W,
+    response: W::Response
+)
+    -> Box<Future<Item=Result<(), Result<W::Response, W::Error>>, Error=MailboxError> + 'static>
+where
+    I: Issuer + 'static,
+    C: Scopes<W> + 'static,
+    W: WebRequest + 'static,
+    W::Error: From<OAuthError>,
+    W::Response: 'static,
+{
+    Box::new(ResourceFuture {
+        issuer: IssuerProxy::new(issuer),
+        scopes,
         request,
         response: Some(response),
     })
@@ -123,6 +145,13 @@ struct AccessTokenFuture<W> where W: WebRequest {
     issuer: IssuerProxy,
     request: W,
     // Is an option because we may need to take it out.
+    response: Option<W::Response>,
+}
+
+struct ResourceFuture<W, C> where W: WebRequest {
+    issuer: IssuerProxy,
+    request: W,
+    scopes: C,
     response: Option<W::Response>,
 }
 
@@ -322,7 +351,7 @@ impl Issuer for IssuerProxy {
         }
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         if self.recover_token.borrow().unsent() {
             let recover = m::RecoverToken {
                 token: token.to_string(),
@@ -332,14 +361,13 @@ impl Issuer for IssuerProxy {
         }
 
         match self.recover_token.borrow_mut().poll() {
-            Ok(Async::NotReady) => None,
-            Ok(Async::Ready(Some(grant))) => Some(grant),
-            Ok(Async::Ready(None)) => None,
-            Err(()) => None,
+            Ok(Async::NotReady) => Err(()),
+            Ok(Async::Ready(ready)) => ready,
+            Err(()) => Err(()),
         }
     }
 
-    fn recover_refresh <'a>(&'a self, token: &'a str) -> Option<Grant> {
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         if self.recover_refresh.borrow().unsent() {
             let recover = m::RecoverRefresh {
                 token: token.to_string(),
@@ -349,23 +377,32 @@ impl Issuer for IssuerProxy {
         }
 
         match self.recover_refresh.borrow_mut().poll() {
-            Ok(Async::NotReady) => None,
-            Ok(Async::Ready(Some(grant))) => Some(grant),
-            Ok(Async::Ready(None)) => None,
-            Err(()) => None,
+            Ok(Async::NotReady) => Err(()),
+            Ok(Async::Ready(ready)) => ready,
+            Err(()) => Err(()),
         }
     }
 }
 
-struct RefMutSolicitor<'a, S: 'a>(&'a mut S);
+struct RefMutPrimitive<'a, S: 'a>(&'a mut S);
 
-impl<'a, W, S: 'a> OwnerSolicitor<&'a mut W> for RefMutSolicitor<'a, S> 
+impl<'a, W, S: 'a> OwnerSolicitor<&'a mut W> for RefMutPrimitive<'a, S> 
 where
     W: WebRequest,
     S: OwnerSolicitor<W>,
 {
     fn check_consent(&mut self, request: &mut &'a mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
         self.0.check_consent(*request, pre)
+    }
+}
+
+impl<'a, W, C: 'a> Scopes<&'a mut W> for RefMutPrimitive<'a, C>
+where
+    W: WebRequest,
+    C: Scopes<W>,
+{
+    fn scopes(&mut self, request: &mut &'a mut W) -> &[Scope] {
+        self.0.scopes(*request)
     }
 }
 
@@ -384,7 +421,7 @@ where
                 registrar: &self.registrar,
                 authorizer: &mut self.authorizer,
                 issuer: Vacant,
-                solicitor: RefMutSolicitor(&mut self.solicitor),
+                solicitor: RefMutPrimitive(&mut self.solicitor),
                 scopes: Vacant,
                 response: || { response_mut.take().unwrap() },
             };
@@ -480,6 +517,70 @@ where
 
         self.registrar.rearm();
         self.authorizer.rearm();
+        self.issuer.rearm();
+        Ok(Async::NotReady)
+    }
+}
+
+impl<W: WebRequest, C> Future for ResourceFuture<W, C> 
+where 
+    C: Scopes<W>,
+    W::Error: From<OAuthError>,
+{
+    type Item = Result<(), Result<W::Response, W::Error>>;
+    type Error = MailboxError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let response_mut = &mut self.response;
+        let result = {
+            let endpoint = Generic {
+                registrar: Vacant,
+                authorizer: Vacant,
+                issuer: &mut self.issuer,
+                solicitor: Vacant,
+                scopes: RefMutPrimitive(&mut self.scopes),
+                response: || { response_mut.take().unwrap() },
+            };
+
+            let mut flow = match ResourceFlow::prepare(endpoint) {
+                Ok(flow) => flow,
+                Err(_) => unreachable!("Preconditions always fulfilled"),
+            };
+
+            flow.execute(&mut self.request)
+        };
+
+        // Weed out the terminating results.
+        let err = match result {
+            Ok(()) => return Ok(Async::Ready(Ok(()))),
+            Err(err) => err,
+        };
+
+        // Err may be a response
+        let err = match err {
+            Ok(response) => return Ok(Async::Ready(Err(Ok(response)))),
+            Err(err) => err,
+        };
+
+        // Now we are at the errors produced by the endpoint.
+        // Since we control the endpoint, second representations is `OAuthError`.
+        let err = match err {
+            SimpleError::OAuth(OAuthError::PrimitiveError) => (),
+            SimpleError::OAuth(err) => return Ok(Async::Ready(Err(Err(err.into())))),
+            SimpleError::Web(err) => return Ok(Async::Ready(Err(Err(err)))),
+        };
+
+        // Are we getting this primitive error due to a pending reply?
+        if !self.issuer.is_waiting() {
+            // Is this because of a terminal mailbox error?
+            if let Some(mb) = self.issuer.error() {
+                return Err(mb)
+            }
+
+            // It was some other primitive that failed.
+            return Ok(Async::Ready(Err(Err(OAuthError::PrimitiveError.into()))));
+        }
+
         self.issuer.rearm();
         Ok(Async::NotReady)
     }

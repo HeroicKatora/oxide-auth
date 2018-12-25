@@ -24,10 +24,10 @@ pub trait Issuer {
     fn issue(&mut self, Grant) -> Result<IssuedToken, ()>;
 
     /// Get the values corresponding to a bearer token
-    fn recover_token<'a>(&'a self, &'a str) -> Option<Grant>;
+    fn recover_token<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
 
     /// Get the values corresponding to a refresh token
-    fn recover_refresh<'a>(&'a self, &'a str) -> Option<Grant>;
+    fn recover_refresh<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
 }
 
 /// Token parameters returned to a client.
@@ -81,12 +81,12 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
         Ok(IssuedToken { token, refresh, until })
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
-        self.access.get(token).cloned()
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        Ok(self.access.get(token).cloned())
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
-        self.refresh.get(token).cloned()
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        Ok(self.refresh.get(token).cloned())
     }
 }
 
@@ -132,11 +132,11 @@ impl<'s, I: Issuer + ?Sized> Issuer for &'s mut I {
         (**self).issue(grant)
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (**self).recover_token(token)
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (**self).recover_refresh(token)
     }
 }
@@ -146,11 +146,11 @@ impl<I: Issuer + ?Sized> Issuer for Box<I> {
         (**self).issue(grant)
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (**self).recover_token(token)
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (**self).recover_refresh(token)
     }
 }
@@ -162,12 +162,12 @@ impl Issuer for TokenSigner {
         Ok(IssuedToken {token, refresh, until: grant.until})
     }
 
-    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
-        self.signer.tag("token").extract(token).ok()
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        Ok(self.signer.tag("token").extract(token).ok())
     }
 
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Option<Grant> {
-        self.signer.tag("refresh").extract(token).ok()
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        Ok(self.signer.tag("refresh").extract(token).ok())
     }
 }
 
@@ -178,12 +178,12 @@ impl<'a> Issuer for &'a TokenSigner {
         Ok(IssuedToken {token, refresh, until: grant.until})
     }
 
-    fn recover_token<'t>(&'t self, token: &'t str) -> Option<Grant> {
-        self.signer.tag("token").extract(token).ok()
+    fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
+        Ok(self.signer.tag("token").extract(token).ok())
     }
 
-    fn recover_refresh<'t>(&'t self, token: &'t str) -> Option<Grant> {
-        self.signer.tag("refresh").extract(token).ok()
+    fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
+        Ok(self.signer.tag("refresh").extract(token).ok())
     }
 }
 
@@ -215,7 +215,8 @@ pub mod tests {
         let issued = issuer.issue(request)
             .expect("Issuing failed");
         let from_token = issuer.recover_token(&issued.token)
-            .expect("Could not recover the issued token");
+            .expect("Issuer failed during recover")
+            .expect("Issued token appears to be invalid");
 
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");

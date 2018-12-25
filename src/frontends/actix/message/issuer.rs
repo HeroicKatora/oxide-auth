@@ -17,7 +17,7 @@ pub struct RecoverToken {
 }
 
 impl Message for RecoverToken {
-    type Result = Option<Grant>;
+    type Result = Result<Option<Grant>, ()>;
 }
 
 pub struct RecoverRefresh {
@@ -25,7 +25,7 @@ pub struct RecoverRefresh {
 }
 
 impl Message for RecoverRefresh {
-    type Result = Option<Grant>;
+    type Result = Result<Option<Grant>, ()>;
 }
 
 impl<I: Issuer + 'static> Handler<Issue> for AsActor<I> {
@@ -38,7 +38,7 @@ impl<I: Issuer + 'static> Handler<Issue> for AsActor<I> {
 
 
 impl<I: Issuer + 'static> Handler<RecoverToken> for AsActor<I> {
-    type Result = Option<Grant>; 
+    type Result = Result<Option<Grant>, ()>; 
 
     fn handle(&mut self, msg: RecoverToken, _: &mut Self::Context) -> Self::Result {
         self.0.recover_token(&msg.token)
@@ -46,7 +46,7 @@ impl<I: Issuer + 'static> Handler<RecoverToken> for AsActor<I> {
 }
 
 impl<I: Issuer + 'static> Handler<RecoverRefresh> for AsActor<I> {
-    type Result = Option<Grant>;
+    type Result = Result<Option<Grant>, ()>; 
 
     fn handle(&mut self, msg: RecoverRefresh, _: &mut Self::Context) -> Self::Result {
         self.0.recover_refresh(&msg.token)

@@ -65,6 +65,9 @@ pub enum Error {
         /// Information for the `Authenticate` header in the error response.
         authenticate: Authenticate,
     },
+
+    /// Some part of the endpoint failed, defer to endpoint for handling.
+    PrimitiveError,
 }
 
 const BEARER_START: &'static str = "Bearer ";
@@ -129,8 +132,9 @@ pub fn protect(handler: &mut Endpoint, req: &Request) -> Result<()> {
     let token = &token[BEARER_START.len()..];
 
     let grant = match handler.issuer().recover_token(token) {
-        Some(grant) => grant,
-        None => return Err(Error::AccessDenied {
+        Err(()) => return Err(Error::PrimitiveError),
+        Ok(Some(grant)) => grant,
+        Ok(None) => return Err(Error::AccessDenied {
             failure: AccessFailure {
                 code: Some(ErrorCode::InvalidRequest),
             },
@@ -226,6 +230,7 @@ impl Error {
             Error::InvalidRequest { authenticate, } => {
                 authenticate.extend_header(&mut header);
             },
+            Error::PrimitiveError => (),
         }
         header.finalize()
     }

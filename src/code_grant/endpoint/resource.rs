@@ -90,6 +90,7 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             ResourceError::InvalidRequest { .. } => ResponseKind::Invalid {
                 access_token_error: None,
             },
+            ResourceError::PrimitiveError => return Err(self.endpoint.0.error(OAuthError::PrimitiveError)),
         };
 
         let mut response = self.endpoint.0.response(request, kind)?;

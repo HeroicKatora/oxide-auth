@@ -11,7 +11,7 @@ use code_grant::endpoint::{PreGrant, OAuthError, OwnerConsent};
 use frontends::simple::endpoint::FnSolicitor;
 use frontends::simple::request::{Body, MapErr, NoError, Request, Response, Status};
 
-use super::{AsActor, access_token, authorization};
+use super::{AsActor, access_token, authorization, resource};
 use super::actix::{Actor, Addr, System, SystemRunner};
 
 use chrono::{Utc, Duration};
@@ -24,6 +24,7 @@ struct Setup {
     issuer: Addr<AsActor<TokenSigner>>,
     runner: SystemRunner,
     valid_authorization: String,
+    valid_token: String,
 }
 
 impl Setup {
@@ -34,7 +35,7 @@ impl Setup {
 
         let mut authorizer = Storage::new(RandomGenerator::new(16));
         let mut registrar = ClientMap::new();
-        let issuer = TokenSigner::ephemeral();
+        let mut issuer = TokenSigner::ephemeral();
 
         registrar.register_client(Client::confidential(
             EXAMPLE_CLIENT_ID,
@@ -52,7 +53,8 @@ impl Setup {
             extensions: Extensions::new(),
         };
 
-        let valid_authorization = authorizer.authorize(grant).unwrap();
+        let valid_authorization = authorizer.authorize(grant.clone()).unwrap();
+        let valid_token = issuer.issue(grant).unwrap().token;
 
         let runner = System::new("OAuthTestSystem");
         let authorizer = AsActor(authorizer).start();
@@ -65,6 +67,7 @@ impl Setup {
             issuer,
             runner,
             valid_authorization,
+            valid_token,
         }
     }
 }
@@ -156,4 +159,32 @@ fn future_access_token() {
 
     assert!(response.get("access_token").is_some());
     assert_eq!(response.get("token_type").cloned(), Some("bearer".to_owned()));
+}
+
+#[test]
+fn future_resource() {
+    let mut setup = Setup::start();
+
+    let request = Request {
+        query: HashMap::new(),
+        urlbody: HashMap::new(),
+        auth: Some("Bearer ".to_string() + &setup.valid_token),
+    };
+
+    let response = Response::default();
+
+    let result = setup.runner.block_on(resource(
+        setup.issuer.clone(),
+        vec![defaults::EXAMPLE_SCOPE.parse().unwrap()],
+        MapErr::request(request, NoError::into::<OAuthError>),
+        MapErr::response(response, NoError::into::<OAuthError>)));
+
+    let result = result
+        .expect("Should not be an actix error");
+
+    let () = match result {
+        Ok(()) => (),
+        Err(Err(err)) => panic!("Should not be an oauth error: {:?}", err),
+        Err(Ok(resp)) => panic!("Should not be a response: {:?}", resp.into_inner()),
+    };
 }
