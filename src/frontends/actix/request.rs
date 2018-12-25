@@ -144,16 +144,14 @@ impl OAuthResponse {
         match response.body {
             Some(Body::Text(text)) => {
                 builder.content_type("text/plain");
-                builder.body(text);
+                builder.body(text)
             },
             Some(Body::Json(text)) => {
                 builder.content_type("application/json");
-                builder.body(text);
+                builder.body(text)
             },
-            None => (),
+            None => builder.finish() ,
         }
-
-        builder.finish()
     }
 }
 
