@@ -122,8 +122,12 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
     let code = code.as_ref();
 
     let saved_params = match handler.authorizer().extract(code) {
-        None => return Err(Error::invalid()),
-        Some(v) => v,
+        Err(()) => return Err(Error::Primitive(PrimitiveError {
+            grant: None,
+            extensions: None,
+        })),
+        Ok(None) => return Err(Error::invalid()),
+        Ok(Some(v)) => v,
     };
 
     let redirect_uri = request
@@ -154,7 +158,11 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
         scope: saved_params.scope.clone(),
         until: Utc::now() + Duration::hours(1),
         extensions: access_extensions,
-    }).map_err(|()| Error::invalid_with(AccessTokenErrorType::InvalidRequest))?;
+    }).map_err(|()| Error::Primitive(PrimitiveError {
+        // FIXME: endpoint should get and handle these.
+        grant: None,
+        extensions: None,
+    }))?;
 
     Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
 }

@@ -17,7 +17,7 @@ pub struct Extract {
 }
 
 impl Message for Extract {
-    type Result = Option<Grant>;
+    type Result = Result<Option<Grant>, ()>;
 }
 
 impl<A: Authorizer + 'static> Handler<Authorize> for AsActor<A> {
@@ -29,7 +29,7 @@ impl<A: Authorizer + 'static> Handler<Authorize> for AsActor<A> {
 }
 
 impl<A: Authorizer + 'static> Handler<Extract> for AsActor<A> {
-    type Result = Option<Grant>; 
+    type Result = Result<Option<Grant>, ()>;
 
     fn handle(&mut self, msg: Extract, _: &mut Self::Context) -> Self::Result {
         self.0.extract(&msg.token)

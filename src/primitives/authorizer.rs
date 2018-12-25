@@ -20,7 +20,7 @@ pub trait Authorizer {
     /// Retrieve the parameters associated with a token, invalidating the code in the process. In
     /// particular, a code should not be usable twice (there is no stateless implementation of an
     /// authorizer for this reason).
-    fn extract(&mut self, &str) -> Option<Grant>;
+    fn extract(&mut self, token: &str) -> Result<Option<Grant>, ()>;
 }
 
 /// An in-memory hash map.
@@ -46,7 +46,7 @@ impl<'a, A: Authorizer + ?Sized> Authorizer for &'a mut A {
         (**self).authorize(grant)
     }
 
-    fn extract(&mut self, code: &str) -> Option<Grant> {
+    fn extract(&mut self, code: &str) -> Result<Option<Grant>, ()> {
         (**self).extract(code)
     }
 }
@@ -56,7 +56,7 @@ impl<A: Authorizer + ?Sized> Authorizer for Box<A> {
         (**self).authorize(grant)
     }
 
-    fn extract(&mut self, code: &str) -> Option<Grant> {
+    fn extract(&mut self, code: &str) -> Result<Option<Grant>, ()> {
         (**self).extract(code)
     }
 }
@@ -68,8 +68,8 @@ impl<I: TokenGenerator> Authorizer for Storage<I> {
         Ok(token)
     }
 
-    fn extract<'a>(&mut self, grant: &'a str) -> Option<Grant> {
-        self.tokens.remove(grant)
+    fn extract<'a>(&mut self, grant: &'a str) -> Result<Option<Grant>, ()> {
+        Ok(self.tokens.remove(grant))
     }
 }
 
@@ -96,13 +96,14 @@ pub mod tests {
         let token = authorizer.authorize(grant.clone())
             .expect("Authorization should not fail here");
         let recovered_grant = authorizer.extract(&token)
+            .expect("Primitive failed extracting grant")
             .expect("Could not extract grant for valid token");
 
         if grant != recovered_grant {
             panic!("Grant was not stored correctly");
         }
 
-        if authorizer.extract(&token).is_some() {
+        if authorizer.extract(&token).unwrap().is_some() {
             panic!("Token must only be usable once");
         }
     }

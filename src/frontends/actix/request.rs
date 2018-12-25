@@ -99,30 +99,6 @@ impl Future for OAuthFuture {
     }
 }
 
-impl OAuthRequest {
-    /*
-    /// Build an authorization code request from the http request.
-    ///
-    /// The provided method `check` will be sent inside the request and MUST validate that the
-    /// resource owner has approved the authorization grant that was requested.  This is
-    /// application specific logic that MUST check that the validiting owner is authenticated.
-    pub fn authorization_code<F>(self, check: F) -> AuthorizationCode
-    {
-        AuthorizationCode::new(self, check.into())
-    }
-
-    /// Treat http request as a bearer token request.
-    pub fn access_token(self) -> AccessToken {
-        AccessToken::new(self)
-    }
-
-    /// Extract the bearer token from the request to guard a resource.
-    pub fn resource(self) -> Resource {
-        Resource::new(self)
-    }
-    */
-}
-
 impl WebRequest for OAuthRequest {
     type Error = OAuthError;
     type Response = OAuthResponse;

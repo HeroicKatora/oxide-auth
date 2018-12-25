@@ -79,6 +79,16 @@ pub enum NoError { }
 /// Changes the error type of a web request and response.
 pub struct MapErr<W, F, T>(W, F, PhantomData<T>);
 
+impl Body {
+    /// View the content of the body.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Body::Text(ref body) => body,
+            Body::Json(ref body) => body,
+        }
+    }
+}
+
 impl<W, F, T> MapErr<W, F, T> {
     /// Map all errors in request methods using the given function.
     pub fn request(request: W, f: F) -> Self 

@@ -2,11 +2,12 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 
 use primitives::authorizer::Authorizer;
-// use primitives::issuer::Issuer;
+use primitives::issuer::{Issuer, IssuedToken};
 use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::scope::Scope;
 use primitives::grant::Grant;
-use code_grant::endpoint::{AuthorizationFlow, OwnerSolicitor, OwnerConsent, OAuthError, WebRequest};
+use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
+use code_grant::endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, WebRequest};
 use frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
 
 use super::message as m;
@@ -36,6 +37,31 @@ where
         registrar: RegistrarProxy::new(registrar),
         authorizer: AuthorizerProxy::new(authorizer),
         solicitor,
+        request,
+        response: Some(response),
+    })
+}
+
+pub fn access_token<R, A, I, W>(
+    registrar: Addr<AsActor<R>>,
+    authorizer: Addr<AsActor<A>>,
+    issuer: Addr<AsActor<I>>,
+    request: W,
+    response: W::Response
+)
+    -> Box<Future<Item=Result<W::Response, W::Error>, Error=MailboxError> + 'static>
+where
+    R: Registrar + 'static,
+    A: Authorizer + 'static,
+    I: Issuer + 'static,
+    W: WebRequest + 'static,
+    W::Error: From<OAuthError>,
+    W::Response: 'static,
+{
+    Box::new(AccessTokenFuture {
+        registrar: RegistrarProxy::new(registrar),
+        authorizer: AuthorizerProxy::new(authorizer),
+        issuer: IssuerProxy::new(issuer),
         request,
         response: Some(response),
     })
@@ -76,10 +102,25 @@ struct AuthorizerProxy {
     extract: Buffer<m::Extract>,
 }
 
+struct IssuerProxy {
+    issue: Buffer<m::Issue>,
+    recover_token: RefCell<Buffer<m::RecoverToken>>,
+    recover_refresh: RefCell<Buffer<m::RecoverRefresh>>,
+}
+
 struct AuthorizationFuture<W, S> where W: WebRequest {
     registrar: RegistrarProxy,
     authorizer: AuthorizerProxy,
     solicitor: S,
+    request: W,
+    // Is an option because we may need to take it out.
+    response: Option<W::Response>,
+}
+
+struct AccessTokenFuture<W> where W: WebRequest {
+    registrar: RegistrarProxy,
+    authorizer: AuthorizerProxy,
+    issuer: IssuerProxy,
     request: W,
     // Is an option because we may need to take it out.
     response: Option<W::Response>,
@@ -155,8 +196,7 @@ impl Registrar for RegistrarProxy {
 
         match self.negotiate.borrow_mut().poll() {
             Ok(Async::NotReady) => Err(RegistrarError::PrimitiveError),
-            Ok(Async::Ready(Ok(grant))) => Ok(grant),
-            Ok(Async::Ready(Err(err))) => Err(err),
+            Ok(Async::Ready(ready)) => ready,
             Err(()) => Err(RegistrarError::PrimitiveError),
         }
     }
@@ -172,8 +212,7 @@ impl Registrar for RegistrarProxy {
 
         match self.check.borrow_mut().poll() {
             Ok(Async::NotReady) => Err(RegistrarError::PrimitiveError),
-            Ok(Async::Ready(Ok(ready))) => Ok(ready),
-            Ok(Async::Ready(Err(err))) => Err(err),
+            Ok(Async::Ready(ready)) => ready,
             Err(()) => Err(RegistrarError::PrimitiveError),
         }
     }
@@ -215,13 +254,12 @@ impl Authorizer for AuthorizerProxy {
 
         match self.authorize.poll() {
             Ok(Async::NotReady) => Err(()),
-            Ok(Async::Ready(Ok(token))) => Ok(token),
-            Ok(Async::Ready(Err(()))) => Err(()),
+            Ok(Async::Ready(ready)) => ready,
             Err(()) => Err(()),
         }
     }
 
-    fn extract(&mut self, token: &str) -> Option<Grant> {
+    fn extract(&mut self, token: &str) -> Result<Option<Grant>, ()> {
         if self.extract.unsent() {
             self.extract.send(m::Extract {
                 token: token.to_owned(),
@@ -229,6 +267,88 @@ impl Authorizer for AuthorizerProxy {
         }
 
         match self.extract.poll() {
+            Ok(Async::NotReady) => Err(()),
+            Ok(Async::Ready(ready)) => ready,
+            Err(()) => Err(()),
+        }
+    }
+}
+
+impl IssuerProxy {
+    pub fn new<I>(issuer: Addr<AsActor<I>>) -> Self 
+        where I: Issuer + 'static
+    {
+        IssuerProxy {
+            issue: Buffer::new(issuer.clone().recipient()),
+            recover_token: RefCell::new(Buffer::new(issuer.clone().recipient())),
+            recover_refresh: RefCell::new(Buffer::new(issuer.recipient())),
+        }
+    }
+
+    pub fn is_waiting(&self) -> bool {
+        self.issue.is_waiting()
+        || self.recover_token.borrow().is_waiting()
+        || self.recover_refresh.borrow().is_waiting()
+    }
+
+    pub fn error(&self) -> Option<MailboxError> {
+        self.issue.error()
+            .or(self.recover_token.borrow().error())
+            .or(self.recover_refresh.borrow().error())
+    }
+    
+    pub fn rearm(&mut self) {
+        self.issue.rearm();
+        self.recover_token.borrow_mut().rearm();
+        self.recover_refresh.borrow_mut().rearm();
+    }
+}
+
+impl Issuer for IssuerProxy {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        if self.issue.unsent() {
+            let issue = m::Issue {
+                grant,
+            };
+
+            self.issue.send(issue);
+        }
+
+        match self.issue.poll() {
+            Ok(Async::NotReady) => Err(()),
+            Ok(Async::Ready(Ok(token))) => Ok(token),
+            Ok(Async::Ready(Err(()))) => Err(()),
+            Err(()) => Err(()),
+        }
+    }
+
+    fn recover_token<'a>(&'a self, token: &'a str) -> Option<Grant> {
+        if self.recover_token.borrow().unsent() {
+            let recover = m::RecoverToken {
+                token: token.to_string(),
+            };
+
+            self.recover_token.borrow_mut().send(recover);
+        }
+
+        match self.recover_token.borrow_mut().poll() {
+            Ok(Async::NotReady) => None,
+            Ok(Async::Ready(Some(grant))) => Some(grant),
+            Ok(Async::Ready(None)) => None,
+            Err(()) => None,
+        }
+    }
+
+    fn recover_refresh <'a>(&'a self, token: &'a str) -> Option<Grant> {
+        if self.recover_refresh.borrow().unsent() {
+            let recover = m::RecoverRefresh {
+                token: token.to_string(),
+            };
+
+            self.recover_refresh.borrow_mut().send(recover);
+        }
+
+        match self.recover_refresh.borrow_mut().poll() {
             Ok(Async::NotReady) => None,
             Ok(Async::Ready(Some(grant))) => Some(grant),
             Ok(Async::Ready(None)) => None,
@@ -258,7 +378,6 @@ where
     type Error = MailboxError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-
         let response_mut = &mut self.response;
         let result = {
             let endpoint = Generic {
@@ -304,6 +423,64 @@ where
 
         self.registrar.rearm();
         self.authorizer.rearm();
+        Ok(Async::NotReady)
+    }
+}
+
+impl<W: WebRequest> Future for AccessTokenFuture<W> 
+where
+    W::Error: From<OAuthError>
+{
+    type Item = Result<W::Response, W::Error>;
+    type Error = MailboxError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let response_mut = &mut self.response;
+        let result = {
+            let endpoint = Generic {
+                registrar: &self.registrar,
+                authorizer: &mut self.authorizer,
+                issuer: &mut self.issuer,
+                solicitor: Vacant,
+                scopes: Vacant,
+                response: || { response_mut.take().unwrap() },
+            };
+
+            let mut flow = match AccessTokenFlow::prepare(endpoint) {
+                Ok(flow) => flow,
+                Err(_) => unreachable!("Preconditions always fulfilled"),
+            };
+
+            flow.execute(&mut self.request)
+        };
+
+        // Weed out the terminating results.
+        let oerr = match result {
+            Ok(response) => return Ok(Async::Ready(Ok(response))),
+            Err(SimpleError::Web(err)) => return Ok(Async::Ready(Err(err))),
+            Err(SimpleError::OAuth(oauth)) => oauth,
+        };
+
+        // Could it have been the registrar or authorizer that failed?
+        match oerr {
+            OAuthError::PrimitiveError => (),
+            other => return Ok(Async::Ready(Err(other.into()))),
+        }
+
+        // Are we getting this primitive error due to a pending reply?
+        if !self.registrar.is_waiting() && !self.authorizer.is_waiting() && !self.issuer.is_waiting() {
+            // Is this because of a terminal mailbox error?
+            if let Some(mb) = self.registrar.error().or(self.authorizer.error()).or(self.issuer.error()) {
+                return Err(mb)
+            }
+
+            // It was some other primitive that failed.
+            return Ok(Async::Ready(Err(OAuthError::PrimitiveError.into())));
+        }
+
+        self.registrar.rearm();
+        self.authorizer.rearm();
+        self.issuer.rearm();
         Ok(Async::NotReady)
     }
 }
