@@ -6,6 +6,7 @@
 use super::scope::Scope;
 
 use std::borrow::Cow;
+use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -76,7 +77,7 @@ pub struct BoundClient<'a> {
 /// request. Together with the owner_id and a computed expiration time stamp, this will form a
 /// grant of some sort. In the case of the authorization code grant flow, it will be an
 /// authorization code at first, which can be traded for an access code by the client acknowledged.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreGrant {
     /// The registered client id.
     pub client_id: String,
@@ -241,6 +242,17 @@ impl<'a> RegisteredClient<'a> {
             (Some(provided), &ClientType::Confidential{ passdata: ref stored })
                 => self.policy.check(&self.client.client_id, provided, stored),
             _ => return Err(Unspecified)
+        }
+    }
+}
+
+impl cmp::PartialOrd<Self> for PreGrant {
+    /// `PreGrant` is compared by scope if `client_id` and `redirect_uri` are equal.
+    fn partial_cmp(&self, rhs: &PreGrant) -> Option<cmp::Ordering> {
+        if (&self.client_id, &self.redirect_uri) != (&rhs.client_id, &rhs.redirect_uri) {
+            None
+        } else {
+            self.scope.partial_cmp(&rhs.scope)
         }
     }
 }

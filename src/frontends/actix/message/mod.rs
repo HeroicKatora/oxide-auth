@@ -8,76 +8,76 @@ mod registrar;
 
 use super::actix::prelude::Message;
 
+use super::ResourceProtection;
 use super::request::{OAuthRequest as ResolvedRequest};
-use code_grant::endpoint::{OwnerConsent, PreGrant, WebRequest};
+use code_grant::endpoint::WebRequest;
 
 pub use self::authorizer::{Authorize, Extract};
 pub use self::issuer::{Issue, RecoverToken, RecoverRefresh};
 pub use self::registrar::{BoundRedirect, Check, Negotiate};
 
-/// Approves or denies are grant request based on owner information.
+/// A request for an authorization code from an endpoint actor.
 ///
-/// This is basically and sendable version of the much more generic `OwnerAuthorizer` concept
-/// found in the basic code grant frontend.  All necessary data for validation needs to be
-/// owned (and `Sync`) because the request struct of `actix_web` can not be sent between all
-/// actors.
-#[allow(type_alias_bounds)]
-pub type BoxedOwner<W: WebRequest> = Box<(Fn(&PreGrant) -> OwnerConsent<W::Response>) + Send + Sync>;
-
-/// A request for an authorization code.
+/// ## Example
 ///
-/// Originates from code similar to this:
+/// Here is a way to request an authorization code response from some actix recipient.
 ///
 /// ```no_run
+/// # extern crate actix;
 /// # extern crate actix_web;
 /// # extern crate futures;
 /// # extern crate oxide_auth;
-/// use oxide_auth::frontends::actix::OAuth;
-/// # use oxide_auth::frontends::actix::message::AuthorizationCode;
-/// # use oxide_auth::code_grant::frontend::{OwnerAuthorization, OAuthError};
-/// # use oxide_auth::frontends::actix::ResolvedResponse;
+/// use oxide_auth::frontends::actix::{OAuth, OAuthError, OAuthResponse};
+/// use oxide_auth::frontends::actix::message::AuthorizationCode;
+/// # use oxide_auth::frontends::actix::request::OAuthRequest;
+/// # use actix::Recipient;
 /// # use actix_web::HttpRequest;
 /// # use futures::Future;
 /// # fn main() {
-/// let handler = |request: HttpRequest| {
+///
+/// fn handle(request: HttpRequest, recipient: Recipient<AuthorizationCode>)
+///     -> impl Future<Item=OAuthResponse, Error=OAuthError>
+/// {
 ///     request.oauth2()
-///         .authorization_code(|pre_grant|
-///             OwnerAuthorization::Denied
-///         ) // a future
-///         .and_then(|message: AuthorizationCode|
-/// # -> Result<(), OAuthError> { // some future
-///             unimplemented!()
-/// # }
-///         );
-/// };
+///         .and_then(move |request| recipient
+///             .send(request.authorization_code())
+///             // Merge `MailboxError` and response ´OAuthError`
+///             .map_err(|_| OAuthError::DenySilently)
+///             .and_then(|x| x))
+/// }
 /// # }
 /// ```
 pub struct AuthorizationCode<W: WebRequest=ResolvedRequest>(pub W);
 
 /// A request for a bearer token.
 ///
-/// Originates from code similar to this:
+/// ## Example
+///
+/// Here is a way to request an access token response from some actix recipient.
 ///
 /// ```no_run
+/// # extern crate actix;
 /// # extern crate actix_web;
 /// # extern crate futures;
 /// # extern crate oxide_auth;
-/// use oxide_auth::frontends::actix::OAuth;
-/// # use oxide_auth::frontends::actix::message::AccessToken;
-/// # use oxide_auth::code_grant::frontend::{OwnerAuthorization, OAuthError};
-/// # use oxide_auth::frontends::actix::ResolvedResponse;
+/// use oxide_auth::frontends::actix::{OAuth, OAuthError, OAuthResponse};
+/// use oxide_auth::frontends::actix::message::AccessToken;
+/// # use oxide_auth::frontends::actix::request::OAuthRequest;
+/// # use actix::Recipient;
 /// # use actix_web::HttpRequest;
 /// # use futures::Future;
 /// # fn main() {
-/// let handler = |request: HttpRequest| {
+///
+/// fn handle(request: HttpRequest, recipient: Recipient<AccessToken>)
+///     -> impl Future<Item=OAuthResponse, Error=OAuthError>
+/// {
 ///     request.oauth2()
-///         .access_token() // a future
-///         .and_then(|message: AccessToken|
-/// # -> Result<(), OAuthError> { // some future
-///             unimplemented!()
-/// # }
-///         );
-/// };
+///         .and_then(move |request| recipient
+///             .send(request.access_token())
+///             // Merge `MailboxError` and response ´OAuthError`
+///             .map_err(|_| OAuthError::DenySilently)
+///             .and_then(|x| x))
+/// }
 /// # }
 /// ```
 pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub W);
@@ -85,28 +85,34 @@ pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub W);
 
 /// A request for a resource, utilizing a bearer token.
 ///
-/// Originates from code similar to this:
+/// ## Example
+///
+/// Here is a way to test an authorizing request against an actix recipient.
 ///
 /// ```no_run
+/// # extern crate actix;
 /// # extern crate actix_web;
 /// # extern crate futures;
 /// # extern crate oxide_auth;
-/// use oxide_auth::frontends::actix::OAuth;
-/// # use oxide_auth::frontends::actix::message::Guard;
-/// # use oxide_auth::code_grant::frontend::{OwnerAuthorization, OAuthError};
-/// # use oxide_auth::frontends::actix::ResolvedResponse;
+/// use oxide_auth::frontends::actix::{OAuth, OAuthError, OAuthResponse, ResourceProtection};
+/// use oxide_auth::frontends::actix::message::Resource;
+/// # use oxide_auth::frontends::actix::request::OAuthRequest;
+/// # use actix::Recipient;
 /// # use actix_web::HttpRequest;
 /// # use futures::Future;
 /// # fn main() {
-/// let handler = |request: HttpRequest| {
+///
+/// fn handle(request: HttpRequest, recipient: Recipient<Resource>)
+///     -> impl Future<Item=(), Error=ResourceProtection<OAuthResponse>>
+/// {
 ///     request.oauth2()
-///         .guard() // a future
-///         .and_then(|message: Guard|
-/// # -> Result<(), OAuthError> { // some future
-///             unimplemented!()
-/// # }
-///         );
-/// };
+///         .map_err(ResourceProtection::Error)
+///         .and_then(move |request| recipient
+///             .send(request.resource())
+///             // Merge `MailboxError` and response ´OAuthError`
+///             .map_err(|_| ResourceProtection::Error(OAuthError::DenySilently))
+///             .and_then(|x| x))
+/// }
 /// # }
 /// ```
 pub struct Resource<W: WebRequest=ResolvedRequest>(pub W);
@@ -131,5 +137,5 @@ impl<W: WebRequest> Message for Resource<W>
 where
     W: Send + Sync + 'static
 {
-    type Result = Result<(), Result<W::Response, W::Error>>;
+    type Result = Result<(), ResourceProtection<W::Response>>;
 }

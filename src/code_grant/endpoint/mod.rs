@@ -37,12 +37,9 @@ pub use primitives::issuer::Issuer;
 pub use primitives::registrar::Registrar;
 pub use primitives::scope::Scope;
 
-use super::accesstoken::{
-    PrimitiveError as AccessTokenPrimitiveError};
+use super::accesstoken::{PrimitiveError as AccessTokenPrimitiveError};
 use super::authorization::ErrorUrl;
-use super::guard::{
-    /*Extension as GuardExtension,*/
-    Error as ResourceError};
+use super::guard::{Error as ResourceError};
 use super::error::{AuthorizationError, AccessTokenError};
 
 use url::Url;

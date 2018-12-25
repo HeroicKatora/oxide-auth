@@ -12,6 +12,7 @@ use super::actix_web::{HttpMessage, HttpRequest, HttpResponse};
 use super::actix_web::dev::UrlEncoded;
 use super::actix_web::http::header::{self, HeaderValue};
 use super::futures::{Async, Future, Poll};
+use super::message::{AuthorizationCode, AccessToken, Resource};
 
 use url::Url;
 use super::serde_urlencoded;
@@ -65,6 +66,31 @@ impl OAuthFuture {
             inner: request,
             body,
         }
+    }
+}
+
+impl OAuthRequest {
+    /// Utility method to turn this request into an actix message.
+    ///
+    /// The resulting message can be sent to an `Endpoint` actor to ask for an authorization code.
+    pub fn authorization_code(self) -> AuthorizationCode {
+        AuthorizationCode(self)
+    }
+
+    /// Utility method to turn this request into an actix message.
+    ///
+    /// The resulting message can be sent to an `Endpoint` actor to trade an authorization code
+    /// again an access token.
+    pub fn access_token(self) -> AccessToken {
+        AccessToken(self)
+    }
+
+    /// Utility method to turn this request into an actix message.
+    ///
+    /// The resulting message can be sent to an `Endpoint` actor to assert the presented
+    /// authorization token has appropriate permission to access some resource.
+    pub fn resource(self) -> Resource {
+        Resource(self)
     }
 }
 

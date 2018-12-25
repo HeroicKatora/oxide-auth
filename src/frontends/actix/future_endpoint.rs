@@ -161,6 +161,16 @@ struct ResourceFuture<W, C> where W: WebRequest {
     response: Option<W::Response>,
 }
 
+impl<W: WebResponse> ResourceProtection<W> {
+    /// Turn `self` into a standard error.
+    pub fn into_result(self) -> Result<W, W::Error> {
+        match self {
+            ResourceProtection::Respond(w) => Ok(w),
+            ResourceProtection::Error(err) => Err(err),
+        }
+    }
+}
+
 impl RegistrarProxy {
     pub fn new<R>(registrar: Addr<AsActor<R>>) -> Self 
         where R: Registrar + 'static

@@ -93,6 +93,20 @@ pub struct Vacant;
 /// A simple wrapper for functions and lambdas to be used as solicitors.
 pub struct FnSolicitor<F>(pub F);
 
+/// Use a predetermined grant and owner as solicitor.
+///
+/// Convenience wrapper when the owner and her/his consented to grant can be identified without
+/// further inspecting the request inserted into the flow. This may be the case for `WebRequest`
+/// implementations extracted from an original http request. This solicitor is obviously mostly
+/// useful for one-shot endpoints.
+pub struct ApprovedGrant {
+    /// The owner that approves of the grant.
+    pub owner: String,
+
+    /// The exact approved grant.
+    pub grant: PreGrant,
+}
+
 /// Like `AsRef<Registrar +'_>` but in a way that is expressible.
 ///
 /// You are not supposed to need to implement this.
@@ -156,8 +170,10 @@ pub trait OptIssuer {
     fn opt_mut(&mut self) -> Option<&mut Issuer>;
 }
 
-pub trait ResponseCreator<W: WebResponse> {
-    fn create(&mut self) -> W;
+/// Independent component responsible for instantiating responses.
+pub trait ResponseCreator<W: WebRequest> {
+    /// Will only be called at most once per flow execution.
+    fn create(&mut self, request: &mut W, kind: ResponseKind) -> W::Response;
 }
 
 type Authorization<'a, W> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), Vacant, &'a mut(OwnerSolicitor<W> + 'a), Vacant, Vacant>;
@@ -245,6 +261,15 @@ pub fn resource_flow<'a, W>(issuer: &'a mut Issuer, scopes: &'a [Scope])
     }
 }
 
+impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
+    /// Check, statically, that this is an endpoint for some request.
+    ///
+    /// This is mainly a utility method intended for compilation and integration tests.
+    pub fn assert<W: WebRequest>(self) -> Self where Self: Endpoint<W> {
+        self
+    }
+}
+
 impl<W, R, A, I, O, C, L> Endpoint<W> for Generic<R, A, I, O, C, L>
 where 
     W: WebRequest, 
@@ -253,7 +278,7 @@ where
     I: OptIssuer,
     O: OwnerSolicitor<W>,
     C: Scopes<W>,
-    L: ResponseCreator<W::Response>,
+    L: ResponseCreator<W>,
 {
     type Error = Error<W>;
 
@@ -277,8 +302,8 @@ where
         Some(&mut self.scopes)
     }
 
-    fn response(&mut self, _: &mut W, _: ResponseKind) -> Result<W::Response, Self::Error> {
-        Ok(self.response.create())
+    fn response(&mut self, request: &mut W, kind: ResponseKind) -> Result<W::Response, Self::Error> {
+        Ok(self.response.create(request, kind))
     }
 
     fn error(&mut self, err: OAuthError) -> Error<W> {
@@ -351,14 +376,29 @@ where
     }
 }
 
-impl<W: WebResponse> ResponseCreator<W> for Vacant where W: Default {
-    fn create(&mut self) -> W {
+impl<W: WebRequest> OwnerSolicitor<W> for ApprovedGrant {
+    /// Approve if the grant matches *exactly*.
+    ///
+    /// That is, `client_id`, `redirect_uri`, and `scope` of the pre-grant are all equivalent. In
+    /// particular, the requested scope must match exactly not only be a subset of the approved
+    /// scope.
+    fn check_consent(&mut self, _: &mut W, grant: &PreGrant) -> OwnerConsent<W::Response> {
+        if &self.grant == grant { 
+            OwnerConsent::Authorized(self.owner.clone()) 
+        } else {
+            OwnerConsent::Denied
+        }
+    }
+}
+
+impl<W: WebRequest> ResponseCreator<W> for Vacant where W::Response: Default {
+    fn create(&mut self, _: &mut W, _: ResponseKind) -> W::Response {
         Default::default()
     }
 }
 
-impl<W: WebResponse, F> ResponseCreator<W> for F where F: FnMut() -> W {
-    fn create(&mut self) -> W {
+impl<W: WebRequest, F> ResponseCreator<W> for F where F: FnMut() -> W::Response {
+    fn create(&mut self, _: &mut W, _: ResponseKind) -> W::Response {
         self()
     }
 }
