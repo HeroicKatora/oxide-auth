@@ -2,6 +2,24 @@ Details breaking changes and migration possibilities. Report missing
 information with an issue. For guides on larger migrations you may also request
 more detailed information.
 
+This migration notice denotes work-in-progress (WIP) or planned changes (NEXT)
+before major releases on git version and will be merged into a single log when
+a major release or breaking minor release (before 1.0) is made. Both are
+intended to provide advance notice of expected interface changes and may be
+shifted back in work log arbitrarily. In that case, they will be moved to the
+according migration note.
+
+This document is independent of the [release notes](Changes.md).
+
+## v0.4.0-preview.2 [NEXT]
+* Extensions are now implemented in such a way as to be used standalone.
+  While the `simple` frontend offers some trait based `System` to make use of
+  multiple independent extensions at the same time, this is no longer required
+  for other frontends.
+
+The tests asserting the guaranteed properties 
+[WIP] These restricted call properties have tests.
+
 ## v0.4.0-preview.1 [WIP]
 
 A HUGE refactor of the backend part of the library. For the `actix` part, see the
@@ -15,21 +33,17 @@ later turned out, this choice also introduced complicated inter-module
 dependencies that reduced the overall available design space. Sacrificing
 functionality for a small performance boost is not an acceptable tradeoff.
 
-[WIP]
 Documentation changes all around with an improved structure:
 * `code_grant` contains core algorithms.
 * `code_grant::endpoint` contains the generic `Endpoint`, `WebRequest`,
-  `WebResponse` and `xFlow` traits to generalize frontend implementations. Also
-  note the wording now refers to these features as 'Endpoint' related while
-  'frontend' is used for http-library specific components. When other OAuth
-  methods are supported, this may instead move to its own top-level module.
+  `WebResponse` and `xFlow` traits and structs to generalize frontend
+  implementations. Also note the wording now refers to these features as
+  'Endpoint' related while 'frontend' is used for http-library specific
+  components. When other OAuth methods are supported, this may instead move to
+  its own top-level module.
 * `frontends::simple` contains reusable abstractions for endpoints. That is, an
   an owning request and response struct. Similar abstractions previously existed
   for test purposes only.
-* [WIP] Extensions are now implemented in such a way as to be used standalone.
-  While the `simple` frontend offers some trait based `System` to make use of
-  multiple independent extensions at the same time, this is no longer required
-  for other frontends.
 
 [WIP]
 The following names have changed for consistency:
@@ -41,36 +55,32 @@ The following names have changed for consistency:
   role in conjunction with the resource owner and avoid confusing with directly
   'authorization' related types.
 
-This migration notice denotes WIP or planned changes on the git version and will
-be merged into a single log when a release is made. WIP changes are intended to
-provide advance notice of expected interface changes and may appear only in
-`preview.2` or later. In that case, they will be moved to the according
-migration note.
-
 ### Actix frontend
 
 The standardization of a simple, reusable `Endpoint` offers exiting new
 possibilites. Foremost, a simple newtype wrapper around this and other
-primitives imbues them with `Actor` powers and messaging [WIP]. Requests and
-responses are now more composable so the former now has a simpler representation
-and the necessity of tacking on owner owner consent information has been moved
-to messages entirely [WIP]. Messages for other primitive types have been added,
-so that even a `Registrar` or an `Issuer` can be run as their own actors. That
-might be very useful to attach them to a database backend.
+primitives imbues them with `Actor` powers and messaging. Requests and
+responses are now more composable so the former now has a simpler
+representation and the necessity of tacking on owner owner consent information
+has been moved to messages entirely. Messages for other primitive types have
+been added, so that even a `Registrar` or an `Issuer` can be run as their own
+actors. That might be very useful to attach them to a database backend.
 
 The initial construction of a `OAuthRequest` is now the result of an
 `OAuthFuture` that consumes the http request. This has simply been shifted from
 the actix message constructors. Since `OAuthRequest` now also implements
 `WebRequest` in a simple manner, many implementors will likely want to use a
 newtype style to further customize error types and response representations.
-Keep in mind that for a request to be useable as a message to an endpoint actor,
-the error types of the two have to agree. This restriction may be lifted in
-later versions.
+Keep in mind that for a request to be useable as a message to an endpoint
+actor, the error types of the two have to agree. This restriction may be lifted
+in later versions.
 
-[WIP]
-This specific frontend also offers another `Endpoint` variant that is
-constructed using futures. This special implementation buffers partial results
-from primitives to retry a flow when polling from one of its futures fails.
+Basic asynchronous handling of requests is provided with three top-level
+methods that return a boxed future of appropriate type. This leaves the
+internal representation open to future changes. The interface is currently more
+restrictive than necessary to keep the interface more stable.  This special
+implementation buffers partial results from primitives to retry a flow when
+polling from one of its futures fails.
 
 ### More or less comprehensive change list
 
@@ -108,6 +118,13 @@ Such types make it harder than necessary to create an interface with
 messages/actors/async. Since the `client` method had no other purpose than the
 equivalent usage shown above, this choice should be fairly uncontroversial.
 
+-----
+
+`Authorizer` and `Issuer` have gained a way to signal internal consistency
+failure in their token lookup methods. The return type changed from
+`Option<Grant>` to `Result<Option<Grant>, ()>`. If a custom implementation
+previously did not rely on returning an error response, just wrap it in an
+`Ok`.
 
 -----
 
@@ -123,14 +140,12 @@ to other pages before it is converted to a `WebResponse`, this logic is not
 universal for implementations for `WebResponse` but rather needs customization
 from the endpoint.
 
-[WIP] Endpoints and responses can also rely on call restrictions to these new
-methods. For example, all flows will at most call one `body_` variants of 
+Endpoints and responses can also rely on call restrictions to these new
+methods. For example, all flows will at most call one `body_` variants of
 `WebResponse` and `Endpoint::response` will be called at most once per flow
 execution. This could prove useful to high-performance implementations that
-want to recycle response instances and avoiding allocation. It should be 
+want to recycle response instances and avoiding allocation. It should be
 possible to use a `&mut _` as a `WebResponse` in an endpoint implementation.
-
-[WIP] These restricted call properties have tests.
 
 -----
 
@@ -156,6 +171,20 @@ additional representations in a non-breaking change (variants of public enums
 are strictly speaking breaking changes while new impls of crate types are not).
 As an added bonus, this change enabled many more zero-copy representations for
 query parameters.
+
+Rationale: The previous version was not ergonomic to use while tempting users
+into relying on underlying libraries to correct not deduplicate key-value
+pairs. Note that for example the following is incorrect:
+
+```
+//! serde_urlencoded::from_str::<HashMap<String, String>>(query)?.normalize();
+```
+
+Instead, collect all pairs and collect them:
+
+```
+serde_urlencoded::from_str::<Vec<(String, String)>>(query)?.into_iter().collect();
+```
 
 -----
 
@@ -199,16 +228,19 @@ no way to implemention `impl<T> From<T> for ErrorType`, of course.
 
 ----
 
-[WIP]
 Extension have been redesigned. Instead of the backend iterating over a set of
 extensions provided by the endpoint, the endpoint implementation now has full
 control over the input and output extension data in a single function call. The
 traits `AuthorizationExtension` etc. have been moved to the new
-`frontends::simple`.
+`frontends::simple`. They can NOT be used in the async portions of the actix
+frontend.
 
 Rationale: This is to allow groups of extensions working closely together, such
 as possibly for OpenID in the future. It also solves a few efficieny and design
 issues by leaving the representation more open to library users/frontends.
+Since extension do not provide guarantees on idempotency, they can not be
+simply retried. Therefore, the asynchronous interface of actix can not
+currently make use of them. Sorry.
 
 ----
 
