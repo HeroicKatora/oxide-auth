@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use code_grant::guard::{
+use code_grant::resource::{
     protect,
     Error as ResourceError,
     Endpoint as ResourceEndpoint,
@@ -87,7 +87,7 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
                 error: None,
                 access_token_error: None,
             },
-            ResourceError::InvalidRequest { .. } => ResponseKind::Invalid {
+            ResourceError::InvalidRequest { .. } => ResponseKind::BadRequest {
                 access_token_error: None,
             },
             ResourceError::PrimitiveError => return Err(self.endpoint.0.error(OAuthError::PrimitiveError)),

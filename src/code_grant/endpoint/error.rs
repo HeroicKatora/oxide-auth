@@ -14,22 +14,30 @@ pub enum OAuthError {
     DenySilently,
 
     /// One of the primitives used to complete the operation failed.
+    ///
+    /// This indicates a problem in the server configuration or the frontend library or the
+    /// implementation of the primitive underlying those two.
     PrimitiveError,
 
     /// The incoming request was malformed.
     ///
-    /// This implies that it did not change any internal state.
-    InvalidRequest,
+    /// This implies that it did not change any internal state. Note that this differs from an
+    /// `InvalidRequest` as in the OAuth specification. `BadRequest` is reported by a frontend
+    /// implementation of a request, due to http non-compliance, while an `InvalidRequest` is a
+    /// type of response to an authorization request by a user-agent that is sent to the specified
+    /// client (although it may be caused by a bad request).
+    BadRequest,
 }
 
 impl fmt::Display for OAuthError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        fmt.write_str("OAuthError")
+        match self {
+            OAuthError::DenySilently => fmt.write_str("OAuthError: Request should be silently denied"),
+            OAuthError::PrimitiveError => fmt.write_str("OAuthError: Server component failed"),
+            OAuthError::BadRequest => fmt.write_str("OAuthError: Bad request"),
+        }
     }
 }
 
 impl error::Error for OAuthError {
-    fn description(&self) -> &str {
-        "OAuthError"
-    }
 }

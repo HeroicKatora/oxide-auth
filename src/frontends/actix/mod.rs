@@ -52,11 +52,7 @@ impl<'a, State> OAuth for &'a HttpRequest<State> {
 
 impl fmt::Display for OAuthFailure {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            OAuthError::DenySilently => f.write_str("Suspicious request may be an attack"),
-            OAuthError::PrimitiveError => f.write_str("Server component failed during OAuth flow"),
-            OAuthError::InvalidRequest => f.write_str("Request was invalid"),
-        }
+        self.0.fmt(f)
     }
 }
 
@@ -67,7 +63,7 @@ impl ResponseError for OAuthFailure {
         match self.0 {
             OAuthError::DenySilently => HttpResponse::BadRequest().finish(),
             OAuthError::PrimitiveError => HttpResponse::InternalServerError().finish(),
-            OAuthError::InvalidRequest => HttpResponse::BadRequest().finish(),
+            OAuthError::BadRequest => HttpResponse::BadRequest().finish(),
         }
     }
 }

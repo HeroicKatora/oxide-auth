@@ -45,7 +45,6 @@ Documentation changes all around with an improved structure:
   an owning request and response struct. Similar abstractions previously existed
   for test purposes only.
 
-[WIP]
 The following names have changed for consistency:
 * Types of request-response mechanisms are now prefixed with the resource that
   the requesting party (i.e. the client) tries to access. In particular:
@@ -244,7 +243,6 @@ currently make use of them. Sorry.
 
 ----
 
-[WIP]
 Error variant namings and usages have been clarified. Specifically, such names
 should now correspond more closely to HTTP status codes where applicable.
 

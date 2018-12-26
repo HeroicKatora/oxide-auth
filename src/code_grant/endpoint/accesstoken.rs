@@ -95,7 +95,7 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(endpoint: &mut E, request: &mut R,
 {
     Ok(match error {
         TokenError::Invalid(mut json) => {
-            let mut response = endpoint.response(request, ResponseKind::Invalid {
+            let mut response = endpoint.response(request, ResponseKind::BadRequest {
                 access_token_error: Some(json.description()),
             })?;
             response.client_error()

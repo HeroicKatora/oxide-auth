@@ -45,7 +45,7 @@ pub use primitives::scope::Scope;
 
 use super::accesstoken::{PrimitiveError as AccessTokenPrimitiveError};
 use super::authorization::ErrorUrl;
-use super::guard::{Error as ResourceError};
+use super::resource::{Error as ResourceError};
 use super::error::{AuthorizationError, AccessTokenError};
 
 use url::Url;
@@ -118,7 +118,7 @@ pub enum ResponseKind<'a> {
     /// set in the case of an invalid request, containing additional information for the client.
     /// For example, an authorized client sending a malformed but authenticated request for an
     /// access token will receive additional hints on the cause of his mistake.
-    Invalid {
+    BadRequest {
         /// Information on an invalid-access-token-request error.
         ///
         /// Endpoints may modify this description to add additional explanatory text or a reference

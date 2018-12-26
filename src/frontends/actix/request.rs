@@ -244,20 +244,20 @@ impl WebRequest for OAuthRequest {
      fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
          self.query.as_ref()
              .map(|query| Cow::Borrowed(query as &QueryParameter))
-             .map_err(|_| OAuthError::InvalidRequest)
+             .map_err(|_| OAuthError::BadRequest)
      }
 
      fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
          self.body.as_ref()
              .map(|body| Cow::Borrowed(body as &QueryParameter))
-             .map_err(|_| OAuthError::InvalidRequest)
+             .map_err(|_| OAuthError::BadRequest)
      }
 
      fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error>{
          match &self.auth {
              &Ok(Some(ref string)) => Ok(Some(Cow::Borrowed(string))),
              &Ok(None) => Ok(None),
-             &Err(_) => Err(OAuthError::InvalidRequest)
+             &Err(_) => Err(OAuthError::BadRequest)
          }
      }
 }

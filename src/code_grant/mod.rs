@@ -17,7 +17,7 @@ pub mod accesstoken;
 pub mod authorization;
 
 /// Provides the handling for Resource Requests
-pub mod guard;
+pub mod resource;
 
 /// Polymorphic HTTP wrappers for code grant flows.
 pub mod endpoint;
