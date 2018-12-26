@@ -23,6 +23,12 @@
 //!
 //! After receiving an authorization grant, access token or access request, initiate the respective
 //! flow by collecting the [`Authorizer`], [`Issuer`], and [`Registrar`] instances. For example:
+//!
+//! [`WebRequest`]: trait.WebRequest.html
+//! [`WebResponse`]: trait.WebResponse.html
+//! [`Authorizer`]: ../../primitives/authorizer/trait.Authorizer.html
+//! [`Issuer`]: ../../primitives/issuer/trait.Issuer.html
+//! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
 mod authorization;
 mod accesstoken;
 mod error;

@@ -5,6 +5,16 @@
 //! implementation to implementation. Composability and usability are the main concerns for
 //! frontends, full feature support is a secondary concern.
 //!
+//! Usage
+//! -----
+//!
+//! First you need to enable the correct feature flag. Note that for the convenience of viewing
+//! this documentation, the version on `docs.rs` has all features enabled. The following frontends
+//! require the following features:
+//!
+//! * `actix`: `actix-frontend`
+//! * `rouille`: `rouille-frontend`
+//!
 //! Guide
 //! ------
 //!
@@ -16,16 +26,18 @@
 //! that the web interface consists of the following types:
 //!
 //! ```
-//! use std::collections::HashMap;
+//! use oxide_auth::frontends::dev::*;
+//!
 //! struct ExampleRequest {
 //!     /// The query part of the retrieved uri, conveniently pre-parsed.
-//!     query: Option<HashMap<String, String>>,
+//!     query: NormalizedParameter,
 //!
 //!     /// The value of the authorization header if any was wet.
 //!     authorization_header: Option<String>,
 //!
-//!     /// The body of the request, only if its content type was `application/x-form-urlencoded`
-//!     urlbody: Option<HashMap<String, String>>,
+//!     /// A correctly interpreted version of the body of the request, only if its content type
+//!     /// `application/x-form-urlencoded`
+//!     urlbody: Option<NormalizedParameter>,
 //! }
 //!
 //! struct ExampleResponse {
@@ -51,15 +63,16 @@
 //!
 //! ```
 //! # use std::collections::HashMap;
+//! use oxide_auth::frontends::dev::*;
 //! # struct ExampleRequest {
 //! #    /// The query part of the retrieved uri, conveniently pre-parsed.
-//! #    query: HashMap<String, String>,
+//! #    query: NormalizedParameter,
 //! #
 //! #    /// The value of the authorization header if any was wet.
 //! #    authorization_header: Option<String>,
 //! #
 //! #    /// The body of the request, only if its content type was `application/x-form-urlencoded`
-//! #    urlbody: Option<HashMap<String, String>>,
+//! #    urlbody: Option<NormalizedParameter>,
 //! # }
 //! #
 //! # struct ExampleResponse {
@@ -79,7 +92,6 @@
 //! #    body: Option<String>,
 //! # }
 //! # extern crate oxide_auth;
-//! use oxide_auth::frontends::dev::*;
 //! impl WebRequest for ExampleRequest {
 //!     // Declare the corresponding response type.
 //!     type Response = ExampleResponse;
@@ -104,7 +116,7 @@
 //! }
 //!
 //! impl WebResponse for ExampleResponse {
-//!     // Redeclare our error type, those two must be the same.
+//!     // Redeclare our error type as in the request, those two must be the same.
 //!     type Error = OAuthError;
 //!
 //!     fn ok(&mut self) -> Result<(), OAuthError> {
@@ -151,13 +163,17 @@
 //! # fn main() {}
 //! ```
 //!
-//! And we're done, the library is fully useable. In fact, the implementation for `rouille` is
-//! almost the same as what we just did. All that is missing is your web servers main loop to drive
-//! the thing and a look into the `code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow}`
-//! which will explain the usage of the above traits in the context of the Authorization Code Grant.
+//! And we're done, the library is fully useable. In fact, the implementation for `simple` is
+//! almost the same as what we just did with some minor extras. All that is missing is your web
+//! servers main loop to drive the thing and a look into the
+//! [`code_grant::endpoint::{AuthorizationFlow, GrantFlow, AccessFlow}`] which will explain the usage
+//! of the above traits in the context of the Authorization Code Grant.
 //!
 //! Of course, this style might not the intended way for some server libraries. In this case, you
-//! may want to provide additional wrappers.
+//! may want to provide additional wrappers. The `actix` frontend adds utilities for abstracting
+//! futures and actor messaging, for example.
+//!
+//! [`code_grant::endpoint::{AuthorizationFlow, GrantFlow, AccessFlow}`]: ../code_grant/endpoint/index.html
 //!
 
 pub mod simple;
@@ -176,5 +192,5 @@ pub mod dev {
     pub use std::borrow::Cow;
     pub use url::Url;
     pub use code_grant::endpoint::{Endpoint, WebRequest, WebResponse};
-    pub use code_grant::endpoint::{OAuthError, OwnerSolicitor, QueryParameter};
+    pub use code_grant::endpoint::{OAuthError, OwnerSolicitor, NormalizedParameter, QueryParameter};
 }

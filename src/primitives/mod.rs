@@ -1,4 +1,8 @@
 //! A collection of primites useful for more than one authorization method.
+//!
+//! There only is, as you might have noticed, only the code grant method. But abstracting away the
+//! underlying primitives provides an incentive to –e.g.– provide a database based implementation
+//! independently of a particular web server library (*wink*).
 
 use chrono::DateTime;
 use chrono::Utc;

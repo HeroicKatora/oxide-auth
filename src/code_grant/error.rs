@@ -51,7 +51,8 @@ impl AuthorizationErrorType {
     }
 }
 
-/// Represents parameters of an error in an [Authorization Error Response](Authorization Error)
+/// Represents parameters of an error in an [Authorization Error Response][Authorization Error].
+///
 /// [Authorization Error]: https://tools.ietf.org/html/rfc6749#section-4.2.2.1
 #[derive(Clone, Debug)]
 pub struct AuthorizationError {
@@ -63,6 +64,13 @@ pub struct AuthorizationError {
 impl AuthorizationError {
     pub(crate) fn set_type(&mut self, new_type: AuthorizationErrorType) {
         self.error = new_type;
+    }
+
+    /// Get the formal kind of error.
+    ///
+    /// This can not currently be changed as to uphold the inner invariants for RFC compliance.
+    pub fn kind(&mut self) -> AuthorizationErrorType {
+        self.error
     }
 
     /// Provide a short text explanation for the error.
@@ -124,8 +132,9 @@ impl AccessTokenErrorType {
     }
 }
 
-/// Represents parameters of an error in an [Issuing Error Response](Issuing Error)
-/// [ISsuing Error]: https://tools.ietf.org/html/rfc6749#section-5.2
+/// Represents parameters of an error in an [Issuing Error Response][Issuing Error].
+///
+/// [Issuing Error]: https://tools.ietf.org/html/rfc6749#section-5.2
 #[derive(Clone, Debug)]
 pub struct AccessTokenError {
     error: AccessTokenErrorType,
@@ -136,6 +145,13 @@ pub struct AccessTokenError {
 impl AccessTokenError {
     pub(crate) fn set_type(&mut self, new_type: AccessTokenErrorType) {
         self.error = new_type;
+    }
+
+    /// Get the formal kind of error.
+    ///
+    /// This can not currently be changed as to uphold the inner invariants for RFC compliance.
+    pub fn kind(&mut self) -> AccessTokenErrorType {
+        self.error
     }
 
     /// Provide a short text explanation for the error.
