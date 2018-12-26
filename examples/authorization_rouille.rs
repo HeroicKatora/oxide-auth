@@ -8,7 +8,7 @@ extern crate url;
 
 use rouille::{Request, Response, ResponseBody, Server};
 use oxide_auth::code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, ResourceFlow};
-use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint, WebError};
+use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint};
 
 use oxide_auth::primitives::{
     authorizer::Storage,
@@ -77,14 +77,14 @@ here</a> to begin the authorization process.
                 let mut locked = endpoint.lock().unwrap();
                 AuthorizationFlow::prepare(&mut *locked)
                     .expect("Can not fail")
-                    .execute(request).finish()
+                    .execute(request)
                     .unwrap_or_else(|_| Response::empty_400())
             },
             (POST) ["/authorize"] => {
                 let mut locked = endpoint.lock().unwrap();
                 AuthorizationFlow::prepare(&mut *locked)
                     .expect("Can not fail")
-                    .execute(request).finish()
+                    .execute(request)
                     .unwrap_or_else(|_| Response::empty_400())
             },
             (POST) ["/token"] => {

@@ -12,6 +12,7 @@
 //! this documentation, the version on `docs.rs` has all features enabled. The following frontends
 //! require the following features:
 //!
+//! * `simple`: None, this can also be a basis for other implementations
 //! * `actix`: `actix-frontend`
 //! * `rouille`: `rouille-frontend`
 //!

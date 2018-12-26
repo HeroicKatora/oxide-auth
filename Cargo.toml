@@ -62,3 +62,6 @@ required-features = ["rouille-frontend"]
 [[example]]
 name = "authorization_code"
 required-features = ["iron-frontend", "iron-example"]
+
+[package.metadata.docs.rs]
+features = ["actix-frontend", "rouille-frontend"]
