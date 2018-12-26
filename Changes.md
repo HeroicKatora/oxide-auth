@@ -1,4 +1,30 @@
-# v0.4 (preview, not stable)
+# v0.4.0-preview.1
+
+Ergonomics & Feature rewrite
+
+Replaces the frontend mechanism with a trait based system:
+ - Better configurability of underlying primitives
+ - Trait introduces central, dedicated error handling
+ - Expands the possible types for request and response representation
+
+These interfaces were improved:
+ - Names follow existing conventions more closely, such as http status codes
+ - Competing usages of 'authorization' has been replaced
+ - All requests, functions and flows are now named by their result:
+       AuthorizationFlow, AccessTokenFlow, ResourceFlow
+ - Actix frontend now supports basic async operations
+ - Ransformation wrappers for requests, e.g. MapErr to change error type
+ - Error types now have a stricter usage explanation
+
+Breaking changes:
+ - Everywhere. Read the migration notes for some help (or open an issue).
+ - Sorry. This was necessary to support an asynchronous server library.
+
+Fixed the following bugs:
+ - Errors in primitives leading to improper responses
+ - Misusage of error types within the library
+
+# v0.4.0-preview.0
 
 Ergonomics & Feature release
 

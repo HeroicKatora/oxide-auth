@@ -12,15 +12,19 @@ according migration note.
 This document is independent of the [release notes](Changes.md).
 
 ## v0.4.0-preview.2 [NEXT]
-* Extensions are now implemented in such a way as to be used standalone.
+* Extensions will be implemented in such a way as to be used standalone.
   While the `simple` frontend offers some trait based `System` to make use of
   multiple independent extensions at the same time, this is no longer required
   for other frontends.
 
-The tests asserting the guaranteed properties 
-[WIP] These restricted call properties have tests.
+The tests asserting the guaranteed properties will be written.
 
-## v0.4.0-preview.1 [WIP]
+Serde support for `NormalizedParameter` so that there is less confusion about
+how to construct them and the potential pitfalls of dropping duplicate
+keys-value pairs. Strongly assert their non-existence with the respective,
+dedicated error code.
+
+## v0.4.0-preview.1
 
 A HUGE refactor of the backend part of the library. For the `actix` part, see the
 relevant section.

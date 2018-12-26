@@ -1,7 +1,23 @@
 #!/bin/bash
+determine_new_version() {
+	grep "version = " Cargo.toml | sed -Ee 's/version = "(.*)"/\1/' | head -1
+}
 
-# new version is last parameter
-new_version="${!#}"
+check_notexists_version() {
+	# Does the api information start with: '{"errors":'
+	[[ $(wget "https://crates.io/api/v1/crates/image/$new_version" -qO -) == "{\"errors\":"* ]]
+}
+
+count_wip_marker() {
+	# WIP alone is not a marker
+	[[ -z $(grep "\[WIP\]" Migration.md Readme.md) ]]
+}
+
+check_release_changes() {
+	[[ -z $(grep "# v$new_version" Changes.md) ]]
+}
+
+new_version="$(determine_new_version)"
 
 # check it is a sane version number
 [[ -z $(grep -vE '[0-9a-zA-Z.-]*' <<< "$new_version" ) ]] || { echo "Fail: Check version number: ${new_version}"; exit 1; }
@@ -43,14 +59,13 @@ else
 	{ echo "Checking contributors needs GNU parallel, please make sure manually." 1>&2; }
 fi
 
+check_notexists_version || { echo "Version $version appears already published"; exit 1; }
+
 # Check there are no more [WIP] markers in Migrate and Readme
-[[ -z $(grep "WIP" Migration.md Readme.md) ]] || { echo "Fail: Work in progress in documentation"; exit 1; }
+count_wip_marker || { echo "Fail: Work in progress in documentation"; exit 1; }
 
 # Find a matching header in the changelog
-[[ -z $(grep "# v$new_version" Changes.md) ]] && { echo "Fail: No changelog regarding this release"; exit 1; }
-
-# Test that our version is actually the one in Cargo.toml
-[[ -z $(grep "version = \"$new_version\"" Cargo.toml) ]] && { echo "Fail: Version differs from cargo version"; exit 1; }
+check_release_changes && { echo "Fail: No changelog regarding this release"; exit 1; }
 
 # Packaging works. Note: does not publish the version.
 cargo package || { echo "Fail: cargo could not package successfully"; exit 1; }
