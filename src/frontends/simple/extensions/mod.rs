@@ -1,3 +1,6 @@
+//! Basic extension systems.
+//!
+//! Note that extensions will probably return in `v0.4` but not its preview versions.
 pub use code_grant::authorization::Request as AuthorizationRequest;
 pub use code_grant::accesstoken::Request as AccessTokenRequest;
 

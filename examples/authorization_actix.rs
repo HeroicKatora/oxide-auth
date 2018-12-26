@@ -7,15 +7,15 @@ extern crate futures;
 extern crate oxide_auth;
 extern crate url;
 
-use actix::{Actor, Addr, MailboxError};
-use actix_web::{server, App, HttpRequest, HttpResponse, Error as AWError, ResponseError};
-use actix_web::http::Method;
-use futures::{Future, future};
+use actix::{Actor, Addr};
+use actix_web::{server, App, HttpRequest, HttpResponse};
+use futures::Future;
 
-use oxide_auth::frontends::actix::*;
-use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Vacant};
-use oxide_auth::code_grant::endpoint::OAuthError;
+use oxide_auth::frontends::actix::{AsActor, OAuth, OAuthFailure, OAuthResponse, OwnerConsent, PreGrant, ResourceProtection};
+use oxide_auth::frontends::actix::{authorization, access_token, resource};
+use oxide_auth::frontends::simple::endpoint::FnSolicitor;
 use oxide_auth::primitives::prelude::*;
+
 use support::actix::dummy_client;
 use support::open_in_browser;
 

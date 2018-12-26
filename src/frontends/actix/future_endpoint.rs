@@ -14,10 +14,13 @@ use super::message as m;
 
 use super::actix::{Addr, MailboxError, Message, Recipient};
 use super::actix::dev::RecipientRequest;
-use super::actix_web::{HttpResponse, ResponseError};
 use super::futures::{Async, Future, Poll};
-use super::{AsActor, OAuthResponse};
+use super::AsActor;
 
+/// Run an authorization code request asynchonously using actor primitives.
+///
+/// Due to limitiations with the underlying primitives not yet being fully written with async in
+/// mind, there are no extensions and no custom `Endpoint` representations.
 pub fn authorization<R, A, S, W>(
     registrar: Addr<AsActor<R>>,
     authorizer: Addr<AsActor<A>>,
@@ -43,6 +46,10 @@ where
     })
 }
 
+/// Run an access token request asynchonously using actor primitives.
+///
+/// Due to limitiations with the underlying primitives not yet being fully written with async in
+/// mind, there are no extensions and no custom `Endpoint` representations.
 pub fn access_token<R, A, I, W>(
     registrar: Addr<AsActor<R>>,
     authorizer: Addr<AsActor<A>>,
@@ -68,6 +75,11 @@ where
     })
 }
 
+
+/// Test resource access asynchonously against actor primitives.
+///
+/// Due to limitiations with the underlying primitives not yet being fully written with async in
+/// mind, there are no extensions and no custom `Endpoint` representations.
 pub fn resource<I, W, C>(
     issuer: Addr<AsActor<I>>,
     scopes: C,
@@ -90,8 +102,23 @@ where
     })
 }
 
+/// A wrapper around a result allowing more specific interpretation.
+///
+/// Simplifies trait semantics while also providing additional documentation on the semantics of
+/// each variant. Conversion to a standard `Result` is of course easily possible.
 pub enum ResourceProtection<W: WebResponse> {
+    /// The error response to the failed access should be based on this.
+    ///
+    /// Ensures that the `WWW-Authenticate` header is set on the response and also has the status
+    /// code already set. While you should use this as a nice helper, it isn't exactly mandatory to
+    /// actually send a response based on this. Just don't allow access to the underlying resource.
     Respond(W),
+
+    /// Something went wrong while checking access.
+    ///
+    /// This is an internal server error (or a library issue) but it's not always wise to directly
+    /// indicate this to clients. The `OAuthError` variants help with this and `OAuthFailure` also
+    /// provides some sensible choices.
     Error(W::Error),
 }
 
@@ -188,6 +215,7 @@ impl RegistrarProxy {
         || self.check.borrow().is_waiting()
     }
 
+    #[allow(unused, dead_code)]
     pub fn error(&self) -> Option<MailboxError> {
         self.bound.borrow().error()
             .or(self.negotiate.borrow().error())
@@ -278,6 +306,7 @@ impl AuthorizerProxy {
         || self.extract.is_waiting()
     }
 
+    #[allow(unused, dead_code)]
     pub fn error(&self) -> Option<MailboxError> {
         self.authorize.error()
             .or(self.extract.error())
@@ -336,6 +365,7 @@ impl IssuerProxy {
         || self.recover_refresh.borrow().is_waiting()
     }
 
+    #[allow(unused, dead_code)]
     pub fn error(&self) -> Option<MailboxError> {
         self.issue.error()
             .or(self.recover_token.borrow().error())

@@ -1,7 +1,8 @@
 //! Provides actix message encapsulations.
 //!
 //! The http types, especially `HttpRequest` can not be shared across threads.  Therefore,
-//! the relevant information is extracted into special message types first.
+//! the relevant information is extracted into special message types first using the `OAuth` trait
+//! found in the module above.
 mod authorizer;
 mod issuer;
 mod registrar;

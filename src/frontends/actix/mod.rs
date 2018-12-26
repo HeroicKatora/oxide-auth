@@ -1,4 +1,7 @@
 //! Bindings and utilities for creating an oauth endpoint with actix.
+//!
+//! Use the provided methods to use code grant methods in an asynchronous fashion, or use an
+//! `AsActor<_>` to create an actor implementing endpoint functionality via messages.
 extern crate actix;
 extern crate actix_web;
 extern crate futures;
@@ -22,7 +25,7 @@ pub use code_grant::endpoint::OAuthError;
 pub use self::request::OAuthFuture;
 pub use self::request::OAuthRequest;
 pub use self::request::OAuthResponse;
-pub use code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow, PreGrant, OwnerConsent, OwnerSolicitor};
+pub use code_grant::endpoint::{PreGrant, OwnerConsent, OwnerSolicitor};
 
 pub use self::future_endpoint::{ResourceProtection, access_token, authorization, resource};
 

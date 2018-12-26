@@ -4,15 +4,20 @@ use primitives::grant::Grant;
 use super::super::actix::{Handler, Message};
 use super::super::AsActor;
 
+/// Command authorization of a grant.
 pub struct Authorize {
+    /// The grant to generate an authorization code for.
     pub grant: Grant,
 }
-
 impl Message for Authorize {
     type Result = Result<String, ()>;
 }
 
+/// Use up an authorization code.
 pub struct Extract {
+    /// The previously generated token.
+    ///
+    /// Each token should only be usable once.
     pub token: String,
 }
 

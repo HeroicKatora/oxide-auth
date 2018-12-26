@@ -10,7 +10,7 @@ use primitives::scope::Scope;
 
 use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
 use code_grant::endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, OAuthError, PreGrant, ResponseKind, Scopes};
-use code_grant::endpoint::{WebRequest, WebResponse};
+use code_grant::endpoint::WebRequest;
 
 /// Errors either caused by the underlying web types or the library.
 #[derive(Debug)]

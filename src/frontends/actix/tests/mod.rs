@@ -10,7 +10,7 @@ use code_grant::endpoint::{OAuthError, OwnerConsent};
 use frontends::simple::endpoint::FnSolicitor;
 use frontends::simple::request::{Body, MapErr, NoError, Request, Response, Status};
 
-use super::{AsActor, access_token, authorization, resource};
+use super::{AsActor, ResourceProtection, access_token, authorization, resource};
 use super::actix::{Actor, Addr, System, SystemRunner};
 
 use chrono::{Utc, Duration};
@@ -175,7 +175,7 @@ fn future_resource() {
 
     let () = match result {
         Ok(()) => (),
-        Err(Ok(resp)) => panic!("Should not be a response: {:?}", resp.into_inner()),
-        Err(Err(err)) => panic!("Should not be an oauth error: {:?}", err),
+        Err(ResourceProtection::Respond(resp)) => panic!("Should not be a response: {:?}", resp.into_inner()),
+        Err(ResourceProtection::Error(err)) => panic!("Should not be an oauth error: {:?}", err),
     };
 }
