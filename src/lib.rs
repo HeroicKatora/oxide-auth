@@ -1,7 +1,7 @@
 //! # oxide-auth
 //!
-//! A OAuth2 server library, for use in combination with iron or other frontends, featuring a set of
-//! configurable and pluggable backends.
+//! A OAuth2 server library, for use in combination with actix-web or other frontends, featuring a
+//! set of configurable and pluggable backends.
 //!
 //! ## About
 //!
