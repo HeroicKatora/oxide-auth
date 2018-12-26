@@ -15,7 +15,7 @@ use std::rc::Rc;
 use url::Url;
 use ring::{digest, pbkdf2};
 use ring::error::Unspecified;
-use rand;
+use ring::rand::{SystemRandom, SecureRandom};
 
 /// Registrars provie a way to interact with clients.
 ///
@@ -266,27 +266,56 @@ pub trait PasswordPolicy: Send + Sync {
     fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified>;
 }
 
-#[derive(Clone, Debug)]
 struct Pbkdf2 {
+    /// A prebuilt random, or constructing one as needed.
+    random: Option<SystemRandom>,
     iterations: u32,
 }
 
 impl Default for Pbkdf2 {
     fn default() -> Self {
-        Self::static_default().clone()
+        Pbkdf2 {
+            random: Some(SystemRandom::new()),
+            .. *Self::static_default()
+        }
+    }
+}
+
+impl Clone for Pbkdf2 {
+    fn clone(&self) -> Self {
+        Pbkdf2 {
+            random: Some(SystemRandom::new()),
+            .. *self
+        }
+    }
+}
+
+impl fmt::Debug for Pbkdf2 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Pbkdf2")
+            .field("iterations", &self.iterations)
+            .field("random", &())
+            .finish()
     }
 }
 
 impl Pbkdf2 {
     fn static_default() -> &'static Self {
         &Pbkdf2 {
+            random: None,
             iterations: 100_000,
         }
     }
 
     fn salt(&self, user_identifier: &[u8]) -> Vec<u8> {
         let mut vec = Vec::with_capacity(user_identifier.len() + 64);
-        let rnd_salt: [u8; 16] = rand::random();
+        let mut rnd_salt = [0; 16];
+
+        match self.random.as_ref() {
+            Some(random) => random.fill(&mut rnd_salt),
+            None => SystemRandom::new().fill(&mut rnd_salt),
+        }.expect("Failed to property initialize password storage salt");
+
         vec.extend_from_slice(user_identifier);
         vec.extend_from_slice(&rnd_salt[..]);
         vec

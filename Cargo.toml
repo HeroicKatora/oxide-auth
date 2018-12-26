@@ -18,7 +18,6 @@ chrono = "^0.4"
 serde = "^1.0"
 serde_derive = "^1.0"
 serde_json = "^1.0"
-rand = "^0.4"
 ring = "^0.13"
 rmp-serde = "^0.13"
 url = "^1.7"
@@ -39,11 +38,12 @@ urlencoded = { version = "^0.6", optional = true }
 [features]
 default = ["actix-frontend"]
 actix-frontend = ["actix", "actix-web", "futures", "serde_urlencoded"]
-gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures", "serde_urlencoded"]
-iron-frontend = ["iron", "urlencoded",]
 rouille-frontend = ["rouille", "serde_urlencoded"]
 
-iron-example = ["router"]
+# These frontends are disabled for now:
+# gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures", "serde_urlencoded"]
+# iron-frontend = ["iron", "urlencoded",]
+# iron-example = ["router"]
 
 [dev-dependencies]
 reqwest = "^0.9"
@@ -53,12 +53,12 @@ name = "authorization_actix"
 required-features = ["actix-frontend"]
 
 [[example]]
-name = "authorization_gotham"
-required-features = ["gotham-frontend"]
-
-[[example]]
 name = "authorization_rouille"
 required-features = ["rouille-frontend"]
+
+[[example]]
+name = "authorization_gotham"
+required-features = ["gotham-frontend"]
 
 [[example]]
 name = "authorization_code"

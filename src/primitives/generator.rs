@@ -16,7 +16,7 @@ use super::scope::Scope;
 use std::collections::HashMap;
 
 use base64::{encode, decode};
-use rand::{thread_rng, Rng};
+use ring::rand::{SystemRandom, SecureRandom};
 use ring;
 use rmp_serde;
 
@@ -36,19 +36,25 @@ pub trait TokenGenerator {
 /// Each byte is chosen randomly from the basic `rand::thread_rng`. This generator will always
 /// succeed.
 pub struct RandomGenerator {
+    random: SystemRandom,
     len: usize
 }
 
 impl RandomGenerator {
     /// Generates tokens with a specific byte length.
     pub fn new(length: usize) -> RandomGenerator {
-        RandomGenerator {len: length}
+        RandomGenerator {
+            random: SystemRandom::new(),
+            len: length
+        }
     }
 }
 
 impl TokenGenerator for RandomGenerator {
     fn generate(&self, _grant: &Grant) -> Result<String, ()> {
-        let result = thread_rng().gen_iter::<u8>().take(self.len).collect::<Vec<u8>>();
+        let mut result = vec![0; self.len];
+        self.random.fill(result.as_mut_slice())
+            .expect("Failed to generate random token");
         Ok(encode(&result))
     }
 }
