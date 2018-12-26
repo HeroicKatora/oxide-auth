@@ -70,4 +70,4 @@ check_release_changes && { echo "Fail: No changelog regarding this release"; exi
 # Packaging works. Note: does not publish the version.
 cargo package || { echo "Fail: cargo could not package successfully"; exit 1; }
 
-git tag -s "$is_force" "v$new_version"
+git tag -s $is_force "v$new_version"
