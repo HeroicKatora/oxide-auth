@@ -24,6 +24,11 @@ how to construct them and the potential pitfalls of dropping duplicate
 keys-value pairs. Strongly assert their non-existence with the respective,
 dedicated error code.
 
+[WIP] The `code_grant::endpoint::ResponseKind` enum has been encapsulated in a
+private struct with dedicated methods to retrieve status code and optional
+modification objects. With this change, additional information and
+customization can be added to the response kind without breaking the interface.
+
 ## v0.4.0-preview.1
 
 A HUGE refactor of the backend part of the library. For the `actix` part, see the
