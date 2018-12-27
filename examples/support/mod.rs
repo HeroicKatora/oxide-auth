@@ -21,20 +21,26 @@ use oxide_auth::code_grant::endpoint::PreGrant;
 /// Try to open the server url `http://localhost:8020` in the browser, or print a guiding statement
 /// to the console if this is not possible.
 pub fn open_in_browser() {
-    let target_addres = "http://localhost:8020/";
     use std::io::{Error, ErrorKind};
     use std::process::Command;
-    let can_open = if cfg!(target_os = "linux") {
+
+    let target_addres = "http://localhost:8020/";
+    let open_with = if cfg!(target_os = "linux") {
         Ok("x-www-browser")
     } else {
         Err(Error::new(ErrorKind::Other, "Open not supported"))
     };
-    can_open.and_then(|cmd| Command::new(cmd).arg(target_addres).status())
-        .and_then(|status| if status.success() { Ok(()) } else { Err(Error::new(ErrorKind::Other, "Non zero status")) })
+
+    open_with.and_then(|cmd| Command::new(cmd).arg(target_addres).status())
+        .and_then(|status| if status.success() {
+            Ok(())
+        } else { 
+            Err(Error::new(ErrorKind::Other, "Non zero status")) 
+        })
         .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
 }
 
-pub fn consent_page(route: String, grant: PreGrant) -> String {
+pub fn consent_page_html(route: String, grant: PreGrant) -> String {
     macro_rules! template {
         () => {
 "<html>'{0:}' (at {1:}) is requesting permission for '{2:}'

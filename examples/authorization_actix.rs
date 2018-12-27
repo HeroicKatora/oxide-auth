@@ -1,11 +1,10 @@
-#![cfg(feature = "actix-frontend")]
-
-mod support;
 extern crate actix;
 extern crate actix_web;
 extern crate futures;
 extern crate oxide_auth;
 extern crate url;
+
+mod support;
 
 use actix::{Actor, Addr};
 use actix_web::{server, App, HttpRequest, HttpResponse};
@@ -17,7 +16,7 @@ use oxide_auth::frontends::simple::endpoint::FnSolicitor;
 use oxide_auth::primitives::prelude::*;
 
 use support::actix::dummy_client;
-use support::open_in_browser;
+use support::{consent_page_html, open_in_browser};
 
 static DENY_TEXT: &str = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
@@ -139,13 +138,7 @@ pub fn main() {
 }
 
 fn consent_form(grant: PreGrant) -> HttpResponse {
-    let text = format!(
-        "<html>'{}' (at {}) is requesting permission for '{}'
-        <form method=\"post\">
-            <input type=\"submit\" value=\"Accept\" formaction=\"authorize?response_type=code&client_id={}\">
-            <input type=\"submit\" value=\"Deny\" formaction=\"authorize?response_type=code&client_id={}&deny=1\">
-        </form>
-        </html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
+    let text = consent_page_html("/authorize".into(), grant);
     HttpResponse::Ok()
         .content_type("text/html")
         .body(text)

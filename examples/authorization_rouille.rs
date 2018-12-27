@@ -1,15 +1,15 @@
-#![cfg(feature = "rouille-frontend")]
-mod support;
-
 #[macro_use]
 extern crate rouille;
 extern crate oxide_auth;
 extern crate url;
 
-use rouille::{Request, Response, ResponseBody, Server};
+mod support;
+
+use std::sync::Mutex;
+use std::thread;
+
 use oxide_auth::code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, ResourceFlow};
 use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint};
-
 use oxide_auth::primitives::{
     authorizer::Storage,
     issuer::TokenSigner,
@@ -17,11 +17,10 @@ use oxide_auth::primitives::{
     generator::RandomGenerator,
     scope::Scope,
 };
+use rouille::{Request, Response, ResponseBody, Server};
 
 use support::rouille::dummy_client;
-use support::open_in_browser;
-use std::sync::Mutex;
-use std::thread;
+use support::{consent_page_html, open_in_browser};
 
 /// Example of a main function of a rouille server supporting oauth.
 pub fn main() {
@@ -123,12 +122,7 @@ here</a> to begin the authorization process.
 /// the flow.
 fn solicitor(request: &mut &Request, grant: &PreGrant) -> OwnerConsent<Response> {
     if request.method() == "GET" {
-        let text = format!("<html>'{}' (at {}) is requesting permission for '{}'
-<form method=\"post\">
-    <input type=\"submit\" value=\"Accept\" formaction=\"authorize?response_type=code&client_id={}\">
-    <input type=\"submit\" value=\"Deny\" formaction=\"authorize?response_type=code&client_id={}&deny=1\">
-</form>
-</html>", grant.client_id, grant.redirect_uri, grant.scope, grant.client_id, grant.client_id);
+        let text = consent_page_html("/authorize".into(), grant.clone());
         let response = Response::html(text);
         OwnerConsent::InProgress(response)
     } else if request.method() == "POST" {
