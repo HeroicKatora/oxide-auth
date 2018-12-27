@@ -40,7 +40,11 @@ maintain this on my own currently and have limited time. I appreciate
 suggestions but sometimes the associate workload can seem daunting. That means
 that simplifications to the workflow are also *highly* appreciated.
 
-The code is [MIT licensed](docs/LICENSE).
+The code is [MIT licensed](docs/LICENSE). The license applies to all parts of
+the source code, its documentation and supplementary files unless otherwise
+indicated. It does NOT apply to the replicated full-text copies of referenced
+RFCs which were included for the sake of completion. These are distributed as
+permitted by [IETF Trust License 4–Section 3.c.i][IETF4].
 
 [actix]: https://crates.io/crates/actix-web
 [example folder]: examples/
@@ -48,4 +52,4 @@ The code is [MIT licensed](docs/LICENSE).
 [CHANGES]: Changes.md
 [MIGRATION]: Migration.md
 [CONTRIBUTING]: docs/CONTRIBUTING.md
-
+[IETF4]: https://trustee.ietf.org/license-info/IETF-TLP-4.htm
