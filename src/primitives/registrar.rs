@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::rc::Rc;
 
 use url::Url;
@@ -436,6 +436,34 @@ impl<R: Registrar + ?Sized> Registrar for Rc<R> {
 }
 
 impl<R: Registrar + ?Sized> Registrar for Arc<R> {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        (**self).bound_redirect(bound)
+    }
+
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        (**self).negotiate(bound, scope)
+    }
+
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
+        (**self).check(client_id, passphrase)
+    }
+}
+
+impl<'s, R: Registrar + ?Sized + 's> Registrar for MutexGuard<'s, R> {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        (**self).bound_redirect(bound)
+    }
+
+    fn negotiate(&self, bound: BoundClient, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        (**self).negotiate(bound, scope)
+    }
+
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
+        (**self).check(client_id, passphrase)
+    }
+}
+
+impl<'s, R: Registrar + ?Sized + 's> Registrar for RwLockWriteGuard<'s, R> {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         (**self).bound_redirect(bound)
     }
