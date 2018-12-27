@@ -2,25 +2,38 @@
 extern crate rocket;
 extern crate serde_urlencoded;
 
+use std::fmt;
 use std::io::Cursor;
+use std::marker::PhantomData;
 
-use self::rocket::{Request, Response};
+use self::rocket::{Data, Request, Response};
 use self::rocket::http::{ContentType, Status};
 use self::rocket::http::hyper::header;
 use self::rocket::request::FromRequest;
+use self::rocket::response::{self, Responder};
 use self::rocket::outcome::Outcome;
 
-use code_grant::endpoint::{NormalizedParameter, WebRequest, WebResponse};
+use code_grant::endpoint::{Endpoint, NormalizedParameter, WebRequest, WebResponse};
+use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
 use frontends::dev::*;
 
 pub use frontends::simple::endpoint::Generic;
 pub use frontends::simple::request::NoError;
 
-pub struct OAuthRequest<'a, 'r> {
-    request: &'a Request<'r>,
+/// Request guard that also buffers OAuth data internally.
+///
+/// `WebRequest` etc. is implemented for the basic `rocket::Request<'r>` as well. Both have the
+/// same error and result types but of course we can not simply implement the former as a request
+/// guard with special semantics. Therefore, we wrap in here and at the same time buffer all the
+/// computed state such as parameter checking and normalization.
+pub struct OAuthRequest<'r> {
+    auth: Option<String>,
     query: Result<NormalizedParameter, WebError>,
-    body: Result<NormalizedParameter, WebError>,
+    body: Result<Option<NormalizedParameter>, WebError>,
+    lifetime: PhantomData<&'r ()>,
 }
+
+pub struct AuthorizationCode<E, W>(E, W);
 
 #[derive(Clone, Copy, Debug)]
 pub enum WebError {
@@ -30,12 +43,18 @@ pub enum WebError {
     /// parameters are necessary for OAuth processing.
     Encoding,
 
+    /// The body was needed but not provided.
+    BodyNeeded,
+
     /// Form data was requested but the request was not a form.
     NotAForm,
 }
 
-impl<'a, 'r> OAuthRequest<'a, 'r> {
-    pub fn new(request: &'a Request<'r>) -> Self {
+impl<'r> OAuthRequest<'r> {
+    /// Create the request data from request headers.
+    ///
+    /// Some oauth methods need additionally the body data which you can attach later.
+    pub fn new<'a>(request: &'a Request<'r>) -> Self {
         let query = request.uri().query().unwrap_or("");
         let query = match serde_urlencoded::from_str::<Vec<(String, String)>>(query) {
             Ok(query) => Ok(query.into_iter().collect()),
@@ -43,21 +62,48 @@ impl<'a, 'r> OAuthRequest<'a, 'r> {
         };
 
         let body = match request.content_type() {
-            Some(ct) if *ct == ContentType::Form => {
-                Ok(NormalizedParameter::default())
-            },
+            Some(ct) if *ct == ContentType::Form => Ok(None),
             _ => Err(WebError::NotAForm),
         };
 
+        let mut all_auth = request.headers().get("Authorization");
+        let optional = all_auth.next();
+
+        // Duplicate auth header, just treat it as no authorization.
+        let auth = if let Some(_) = all_auth.next() {
+            None
+        } else {
+            optional.map(str::to_owned)
+        };
+
         OAuthRequest {
-            request,
+            auth,
             query,
             body,
+            lifetime: PhantomData,
+        }
+    }
+
+    /// Provide the body of the request.
+    ///
+    /// Some, but not all operations, require reading their data from a urlencoded POST body. To
+    /// simplify the implementation of primitives and handlers, this type is the central request
+    /// type for both these use cases. When you forget to provide the body to a request, the oauth
+    /// system will return an error the moment the request is used.
+    pub fn add_body(&mut self, data: Data) {
+        // Nothing to do if we already have a body, or already generated an error. This includes
+        // the case where the content type does not indicate a form, as the error is silent until a
+        // body is explicitely requested.
+        if let Ok(None) = self.body {
+            match serde_urlencoded::from_reader::<Vec<(String, String)>, _>(data.open()) {
+                Ok(vec) => self.body = Ok(Some(vec.into_iter().collect())),
+                Err(_) => self.body = Err(WebError::Encoding),
+            }
         }
     }
 }
 
-impl<'a, 'r> WebRequest for OAuthRequest<'a, 'r> {
+impl<'r> WebRequest for OAuthRequest<'r> {
     type Error = WebError;
     type Response = Response<'r>;
 
@@ -70,21 +116,14 @@ impl<'a, 'r> WebRequest for OAuthRequest<'a, 'r> {
 
     fn urlbody(&mut self) ->  Result<Cow<QueryParameter + 'static>, Self::Error> {
         match self.body.as_ref() {
-            Ok(body) => Ok(Cow::Borrowed(body as &QueryParameter)),
+            Ok(None) => Err(WebError::BodyNeeded),
+            Ok(Some(body)) => Ok(Cow::Borrowed(body as &QueryParameter)),
             Err(err) => Err(*err),
         }
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
-        let mut all = self.request.headers().get("Authorization");
-        let optional = all.next();
-
-        // Duplicate auth header, just treat it as no authorization.
-        if let Some(_) = all.next() {
-            Ok(None)
-        } else {
-            Ok(optional.map(Cow::Borrowed))
-        }
+        Ok(self.auth.as_ref().map(String::as_str).map(Cow::Borrowed))
     }
 }
 
@@ -126,7 +165,7 @@ impl<'r> WebResponse for Response<'r> {
     }
 }
 
-impl<'a, 'r> FromRequest<'a, 'r> for OAuthRequest<'a, 'r> {
+impl<'a, 'r> FromRequest<'a, 'r> for OAuthRequest<'r> {
     type Error = NoError;
 
     fn from_request(request: &'a Request<'r>) -> Outcome<Self, (Status, Self::Error), ()> {
@@ -134,3 +173,26 @@ impl<'a, 'r> FromRequest<'a, 'r> for OAuthRequest<'a, 'r> {
     }
 }
 
+impl<'r> Responder<'r> for WebError {
+    fn respond_to(self, _: &Request) -> response::Result<'r> {
+        match self {
+            WebError::Encoding => Err(Status::BadRequest),
+            WebError::NotAForm => Err(Status::BadRequest),
+            WebError::BodyNeeded => Err(Status::InternalServerError),
+        }
+    }
+}
+
+impl<'r, E> Responder<'r> for AuthorizationCode<E, OAuthRequest<'r>>
+where
+    E: Endpoint<OAuthRequest<'r>>,
+    E::Error: Responder<'r> + fmt::Debug,
+{
+    fn respond_to(self, _r: &Request) -> response::Result<'r> {
+        let AuthorizationCode(endpoint, request) = self;
+        let result = AuthorizationFlow::prepare(endpoint)
+            .and_then(|mut flow| flow.execute(request));
+
+        Responder::respond_to(result, _r)
+    }
+}
