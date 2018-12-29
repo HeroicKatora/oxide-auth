@@ -122,7 +122,7 @@ here</a> to begin the authorization process.
 /// the flow.
 fn solicitor(request: &mut &Request, grant: &PreGrant) -> OwnerConsent<Response> {
     if request.method() == "GET" {
-        let text = consent_page_html("/authorize".into(), grant.clone());
+        let text = consent_page_html("/authorize".into(), grant);
         let response = Response::html(text);
         OwnerConsent::InProgress(response)
     } else if request.method() == "POST" {

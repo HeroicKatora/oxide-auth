@@ -42,7 +42,7 @@ fn authorize_consent<'r>(oauth: OAuthRequest<'r>, allow: Option<bool>, state: St
 {
     let allowed = allow.unwrap_or(false);
     state.endpoint()
-        .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| consent_post(allowed, grant)))
+        .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| consent_decision(allowed, grant)))
         .to_authorization()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
@@ -95,6 +95,7 @@ fn main() {
             token,
             protected_resource
         ])
+        // We only attach the test client here because there can only be one rocket.
         .attach(support_rocket::ClientFairing)
         .manage(MyState::preconfigured())
         .launch();
@@ -136,7 +137,7 @@ fn consent_form<'r>(_: &mut OAuthRequest<'r>, grant: &PreGrant) -> OwnerConsent<
         .finalize())
 }
 
-fn consent_post<'r>(allowed: bool, _: &PreGrant) -> OwnerConsent<Response<'r>> {
+fn consent_decision<'r>(allowed: bool, _: &PreGrant) -> OwnerConsent<Response<'r>> {
     if allowed { 
         OwnerConsent::Authorized("dummy user".into()) 
     } else {

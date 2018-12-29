@@ -68,24 +68,24 @@ pub fn main() {
                         .and_then(|request| authorization(
                             state.registrar,
                             state.authorizer,
-                            FnSolicitor(|_: &mut _, grant: &_| handle_get(grant)),
+                            FnSolicitor(|_: &mut _, grant: &_| in_progress_response(grant)),
                             request,
                             OAuthResponse::default()))
                         .map(|response| response.get_or_consent_with(consent_form))
-                        .map_err(OAuthFailure)
+                        .map_err(OAuthFailure::from)
                 });
                 r.post().a(|req: &HttpRequest<State>| {
                     let state = req.state().clone();
-                    let denied = req.query_string().contains("deny");
+                    let allowed = req.query_string().contains("allow");
                     req.oauth2()
                         .and_then(move |request| authorization(
                             state.registrar,
                             state.authorizer,
-                            FnSolicitor(move |_: &mut _, grant: &_| handle_post(denied, grant)),
+                            FnSolicitor(move |_: &mut _, grant: &_| consent_decision(allowed, grant)),
                             request,
                             OAuthResponse::default()))
                         .map(OAuthResponse::unwrap)
-                        .map_err(OAuthFailure)
+                        .map_err(OAuthFailure::from)
                 });
             })
             .resource("/token", |r| r.post().a(|req: &HttpRequest<State>| {
@@ -98,7 +98,7 @@ pub fn main() {
                             request,
                             OAuthResponse::default()))
                     .map(OAuthResponse::unwrap)
-                    .map_err(OAuthFailure)
+                    .map_err(OAuthFailure::from)
             }))
             .resource("/", |r| r.get().a(|req: &HttpRequest<State>| {
                 let state = req.state().clone();
@@ -118,7 +118,7 @@ pub fn main() {
                             response.set_body(DENY_TEXT);
                             Ok(response)
                         },
-                        ResourceProtection::Error(err) => Err(OAuthFailure(err)),
+                        ResourceProtection::Error(err) => Err(OAuthFailure::from(err)),
                     })
             }))
         )
@@ -137,27 +137,29 @@ pub fn main() {
     let _ = sys.run();
 }
 
+
+/// A simple implementation of the first part of an authentication handler.
+///
+/// This will display a page to the user asking for his permission to proceed. The submitted form
+/// will then trigger the other authorization handler which actually completes the flow.
 fn consent_form(grant: PreGrant) -> HttpResponse {
-    let text = consent_page_html("/authorize".into(), grant);
     HttpResponse::Ok()
         .content_type("text/html")
-        .body(text)
+        .body(consent_page_html("/authorize".into(), &grant))
 }
 
-/// A simple implementation of the first part of an authentication handler. This will
-/// display a page to the user asking for his permission to proceed. The submitted form
-/// will then trigger the other authorization handler which actually completes the flow.
-fn handle_get(grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+fn in_progress_response(grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
     OwnerConsent::InProgress(OAuthResponse::consent_form(grant.clone()))
 }
 
-/// Handle form submission by a user, completing the authorization flow. The resource owner
-/// either accepted or denied the request.
-fn handle_post(denied: bool, _: &PreGrant) -> OwnerConsent<OAuthResponse> {
+/// Handle form submission by a user, completing the authorization flow.
+///
+/// The resource owner either accepted or denied the request.
+fn consent_decision(allowed: bool, _: &PreGrant) -> OwnerConsent<OAuthResponse> {
     // No real user authentication is done here, in production you SHOULD use session keys or equivalent
-    if denied {
-        OwnerConsent::Denied
-    } else {
+    if allowed {
         OwnerConsent::Authorized("dummy user".to_string())
+    } else {
+        OwnerConsent::Denied
     }
 }

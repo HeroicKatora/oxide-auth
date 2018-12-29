@@ -42,7 +42,7 @@ pub struct AsActor<P>(pub P);
 ///
 /// Implements the `actix_web::ResponseError` trait so it can be used as an error in a route.
 #[derive(Debug)]
-pub struct OAuthFailure(pub OAuthError);
+pub struct OAuthFailure(OAuthError);
 
 impl<'a, State> OAuth for &'a HttpRequest<State> {
     fn oauth2(self) -> OAuthFuture {
@@ -53,6 +53,12 @@ impl<'a, State> OAuth for &'a HttpRequest<State> {
 impl fmt::Display for OAuthFailure {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl From<OAuthError> for OAuthFailure {
+    fn from(err: OAuthError) -> Self {
+        OAuthFailure(err)
     }
 }
 
