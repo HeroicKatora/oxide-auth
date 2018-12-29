@@ -40,7 +40,7 @@ pub fn open_in_browser() {
         .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
 }
 
-pub fn consent_page_html(route: String, grant: PreGrant) -> String {
+pub fn consent_page_html(route: &str, grant: &PreGrant) -> String {
     macro_rules! template {
         () => {
 "<html>'{0:}' (at {1:}) is requesting permission for '{2:}'

@@ -37,7 +37,7 @@ pub enum Error<W: WebRequest> {
 /// Included types are assumed to be implemented independently, with no major connections. All
 /// attributes are public, so there is no inner invariant. The maintained invariants are already
 /// statically encoded in the type coices.
-pub struct Generic<R, A, I, S, C, L> {
+pub struct Generic<R, A, I, S=Vacant, C=Vacant, L=Vacant> {
     /// The registrar implementation of `Vacant`.
     pub registrar: R,
 
@@ -262,11 +262,49 @@ pub fn resource_flow<'a, W>(issuer: &'a mut Issuer, scopes: &'a [Scope])
 }
 
 impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
+    pub fn with_solicitor<N>(self, new_solicitor: N) -> Generic<R, A, I, N, C, L> {
+        Generic {
+            registrar: self.registrar,
+            authorizer: self.authorizer,
+            issuer: self.issuer,
+            solicitor: new_solicitor,
+            scopes: self.scopes,
+            response: self.response,
+        }
+    }
+
+    /// Create an authorizer flow.
+    ///
+    /// Opposed to `AuthorizationFlow::prepare` this statically ensures that the construction
+    /// succeeds.
+    pub fn as_authorization<W: WebRequest>(self) -> AuthorizationFlow<Self, W>
+    where
+        Self: Endpoint<W>,
+        R: Registrar,
+        A: Authorizer,
+    {
+        match AuthorizationFlow::prepare(self) {
+            Ok(flow) => flow,
+            Err(_) => unreachable!(),
+        }
+    }
+
     /// Check, statically, that this is an endpoint for some request.
     ///
     /// This is mainly a utility method intended for compilation and integration tests.
     pub fn assert<W: WebRequest>(self) -> Self where Self: Endpoint<W> {
         self
+    }
+}
+
+impl<W: WebRequest> Error<W> {
+    pub fn pack<P>(self) -> P
+        where OAuthError: Into<P>, W::Error: Into<P>,
+    {
+        match self {
+            Error::Web(err) => err.into(),
+            Error::OAuth(oauth) => oauth.into(),
+        }
     }
 }
 

@@ -5,7 +5,7 @@ use std::fmt;
 /// interest to the server. See the documentation for each enum variant for more documentation on
 /// each as some may have an expected response. These include badly formatted headers or url encoded
 /// body, unexpected parameters, or security relevant required parameters.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OAuthError {
     /// Deny authorization to the client by essentially dropping the request.
     ///

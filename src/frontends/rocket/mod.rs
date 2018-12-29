@@ -2,6 +2,8 @@
 extern crate rocket;
 extern crate serde_urlencoded;
 
+mod failure;
+
 use std::fmt;
 use std::io::Cursor;
 use std::marker::PhantomData;
@@ -19,6 +21,7 @@ use frontends::dev::*;
 
 pub use frontends::simple::endpoint::Generic;
 pub use frontends::simple::request::NoError;
+pub use self::failure::OAuthFailure;
 
 /// Request guard that also buffers OAuth data internally.
 ///
