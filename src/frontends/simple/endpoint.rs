@@ -273,6 +273,17 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
         }
     }
 
+    pub fn with_scopes<S>(self, new_scopes: S) -> Generic<R, A, I, O, S, L> {
+        Generic {
+            registrar: self.registrar,
+            authorizer: self.authorizer,
+            issuer: self.issuer,
+            solicitor: self.solicitor,
+            scopes: new_scopes,
+            response: self.response,
+        }
+    }
+
     /// Create an authorizer flow.
     ///
     /// Opposed to `AuthorizationFlow::prepare` this statically ensures that the construction

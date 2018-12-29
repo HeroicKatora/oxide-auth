@@ -32,7 +32,7 @@ impl Fairing for ClientFairing {
             .manage(ClientState {
                 token: Mutex::new(None),
             })
-            .mount("/clientside", routes![oauth_endpoint, client_view]))
+            .mount("/clientside", routes![oauth_endpoint, client_view, client_debug]))
     }
 }
 
@@ -86,6 +86,14 @@ fn client_view<'r>(guard: Token<'r>) -> Result<Html<String>, Custom<&'static str
     Ok(Html(display_page))
 }
 
+#[get("/debug")]
+fn client_debug<'r>(guard: Token<'r>) -> String {
+    match *guard.inner {
+        Some(ref token) => token.to_owned(),
+        None => "".to_owned(),
+    }
+}
+
 fn retrieve_token(code: String) -> Result<String, String> {
     // Construct a request against http://localhost:8020/token, the access token endpoint
     let client = reqwest::Client::new();
@@ -94,7 +102,7 @@ fn retrieve_token(code: String) -> Result<String, String> {
     params.insert("grant_type", "authorization_code");
     params.insert("client_id", "LocalClient");
     params.insert("code", &code);
-    params.insert("redirect_uri", "http://localhost:8021/endpoint");
+    params.insert("redirect_uri", "http://localhost:8000/clientside/endpoint");
     let access_token_request = client
         .post("http://localhost:8000/token")
         .form(&params).build().unwrap();
@@ -126,7 +134,7 @@ fn retrieve_protected_page(token: &str) -> Result<String, String> {
 
     // Request the page with the oauth token
     let page_request = client
-        .get("http://localhost:8020/")
+        .get("http://localhost:8000/")
         .header(header::AUTHORIZATION, "Bearer ".to_string() + token)
         .build()
         .unwrap();

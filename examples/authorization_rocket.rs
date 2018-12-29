@@ -71,6 +71,7 @@ here</a> to begin the authorization process.
 ";
 
     let protect = state.endpoint()
+        .with_scopes(vec!["default-scope".parse().unwrap()])
         .to_resource()
         .execute(oauth);
     match protect {
