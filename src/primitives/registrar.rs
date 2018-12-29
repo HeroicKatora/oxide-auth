@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
+use std::iter::{Extend, FromIterator};
 use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::rc::Rc;
 
@@ -376,6 +377,20 @@ impl ClientMap {
         policy
             .as_ref().map(|boxed| &**boxed)
             .unwrap_or(Pbkdf2::static_default())
+    }
+}
+
+impl Extend<Client> for ClientMap {
+    fn extend<I>(&mut self, iter: I) where I: IntoIterator<Item=Client> {
+        iter.into_iter().for_each(|client| self.register_client(client))
+    }
+}
+
+impl FromIterator<Client> for ClientMap {
+    fn from_iter<I>(iter: I) -> Self where I: IntoIterator<Item=Client> {
+        let mut into = ClientMap::new();
+        into.extend(iter);
+        into
     }
 }
 

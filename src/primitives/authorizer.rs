@@ -6,6 +6,7 @@
 //! side request, it will then check the given parameters to determine the authorization of such
 //! clients.
 use std::collections::HashMap;
+use std::sync::{MutexGuard, RwLockWriteGuard};
 
 use super::grant::Grant;
 use super::generator::TokenGenerator;
@@ -52,6 +53,26 @@ impl<'a, A: Authorizer + ?Sized> Authorizer for &'a mut A {
 }
 
 impl<A: Authorizer + ?Sized> Authorizer for Box<A> {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        (**self).authorize(grant)
+    }
+
+    fn extract(&mut self, code: &str) -> Result<Option<Grant>, ()> {
+        (**self).extract(code)
+    }
+}
+
+impl<'a, A: Authorizer + ?Sized> Authorizer for MutexGuard<'a, A> {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        (**self).authorize(grant)
+    }
+
+    fn extract(&mut self, code: &str) -> Result<Option<Grant>, ()> {
+        (**self).extract(code)
+    }
+}
+
+impl<'a, A: Authorizer + ?Sized> Authorizer for RwLockWriteGuard<'a, A> {
     fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
         (**self).authorize(grant)
     }

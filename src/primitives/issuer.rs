@@ -4,6 +4,7 @@
 //! renewed. There exist two fundamental implementation as well, one utilizing in memory hash maps
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
+use std::sync::{MutexGuard, RwLockWriteGuard};
 
 use super::Time;
 use super::grant::Grant;
@@ -142,6 +143,34 @@ impl<'s, I: Issuer + ?Sized> Issuer for &'s mut I {
 }
 
 impl<I: Issuer + ?Sized> Issuer for Box<I> {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        (**self).issue(grant)
+    }
+
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        (**self).recover_token(token)
+    }
+
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        (**self).recover_refresh(token)
+    }
+}
+
+impl<'s, I: Issuer + ?Sized> Issuer for MutexGuard<'s, I> {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        (**self).issue(grant)
+    }
+
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        (**self).recover_token(token)
+    }
+
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        (**self).recover_refresh(token)
+    }
+}
+
+impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (**self).issue(grant)
     }
