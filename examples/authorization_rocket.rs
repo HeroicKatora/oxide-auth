@@ -19,7 +19,7 @@ use rocket::{Data, State, Response, http};
 use rocket::http::ContentType;
 use rocket::response::Responder;
 
-use support::consent_page_html;
+use support::{consent_page_html, rocket as support_rocket};
 
 struct MyState {
     registrar: Mutex<ClientMap>,
@@ -94,6 +94,7 @@ fn main() {
             token,
             protected_resource
         ])
+        .attach(support_rocket::ClientFairing)
         .manage(MyState::preconfigured())
         .launch();
 }
@@ -103,7 +104,7 @@ impl MyState {
         MyState {
             registrar: Mutex::new(vec![
                 Client::public("LocalClient",
-                    "http://localhost:8021/endpoint".parse().unwrap(),
+                    "http://localhost:8000/clientside/endpoint".parse().unwrap(),
                     "default-scope".parse().unwrap())
             ].into_iter().collect()),
             authorizer: Mutex::new(Storage::new(RandomGenerator::new(16))),
