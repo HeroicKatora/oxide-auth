@@ -277,13 +277,45 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
     ///
     /// Opposed to `AuthorizationFlow::prepare` this statically ensures that the construction
     /// succeeds.
-    pub fn as_authorization<W: WebRequest>(self) -> AuthorizationFlow<Self, W>
+    pub fn to_authorization<W: WebRequest>(self) -> AuthorizationFlow<Self, W>
     where
         Self: Endpoint<W>,
         R: Registrar,
         A: Authorizer,
     {
         match AuthorizationFlow::prepare(self) {
+            Ok(flow) => flow,
+            Err(_) => unreachable!(),
+        }
+    }
+
+    /// Create an access token flow.
+    ///
+    /// Opposed to `AccessTokenFlow::prepare` this statically ensures that the construction
+    /// succeeds.
+    pub fn to_access_token<W: WebRequest>(self) -> AccessTokenFlow<Self, W>
+    where
+        Self: Endpoint<W>,
+        R: Registrar,
+        A: Authorizer,
+        I: Issuer,
+    {
+        match AccessTokenFlow::prepare(self) {
+            Ok(flow) => flow,
+            Err(_) => unreachable!(),
+        }
+    }
+
+    /// Create a resource access flow.
+    ///
+    /// Opposed to `ResourceFlow::prepare` this statically ensures that the construction
+    /// succeeds.
+    pub fn to_resource<W: WebRequest>(self) -> ResourceFlow<Self, W>
+    where
+        Self: Endpoint<W>,
+        I: Issuer,
+    {
+        match ResourceFlow::prepare(self) {
             Ok(flow) => flow,
             Err(_) => unreachable!(),
         }

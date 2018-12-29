@@ -16,6 +16,8 @@ use oxide_auth::frontends::rocket::{OAuthRequest, OAuthFailure};
 use oxide_auth::primitives::prelude::*;
 
 use rocket::{Data, State, Response, http};
+use rocket::http::ContentType;
+use rocket::response::Responder;
 
 use support::consent_page_html;
 
@@ -28,27 +30,60 @@ struct MyState {
 #[get("/authorize")]
 fn authorize<'r>(oauth: OAuthRequest<'r>, state: State<MyState>) -> Result<Response<'r>, OAuthFailure> {
     state.endpoint()
-        .with_solicitor(FnSolicitor(solicit_get))
-        .as_authorization()
+        .with_solicitor(FnSolicitor(consent_form))
+        .to_authorization()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
 
-#[post("/authorize?<deny>")]
-fn authorize_consent<'r>(oauth: OAuthRequest<'r>, deny: Option<bool>) -> Response<'r> {
-    let consent = deny.unwrap_or(true);
-    unimplemented!()
+#[post("/authorize?<allow>")]
+fn authorize_consent<'r>(oauth: OAuthRequest<'r>, allow: Option<bool>, state: State<MyState>)
+    -> Result<Response<'r> , OAuthFailure>
+{
+    let allowed = allow.unwrap_or(false);
+    state.endpoint()
+        .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| consent_post(allowed, grant)))
+        .to_authorization()
+        .execute(oauth)
+        .map_err(|err| err.pack::<OAuthFailure>())
 }
 
 #[post("/token", data="<body>")]
-fn token<'r>(mut oauth: OAuthRequest<'r>, body: Data) -> Response<'r> {
+fn token<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
+    -> Result<Response<'r>, OAuthFailure>
+{
     oauth.add_body(body);
-    unimplemented!()
+    state.endpoint()
+        .to_access_token()
+        .execute(oauth)
+        .map_err(|err| err.pack::<OAuthFailure>())
 }
 
 #[get("/")]
-fn protected_resource(nah: OAuthRequest) -> &'static str {
-    unimplemented!()
+fn protected_resource<'r>(oauth: OAuthRequest<'r>, state: State<MyState>)
+    -> impl Responder<'r>
+{
+    const DENY_TEXT: &str = "<html>
+This page should be accessed via an oauth token from the client in the example. Click
+<a href=\"/authorize?response_type=code&client_id=LocalClient\">
+here</a> to begin the authorization process.
+</html>
+";
+
+    let protect = state.endpoint()
+        .to_resource()
+        .execute(oauth);
+    match protect {
+        Ok(()) => Ok("Hello, world"),
+        Err(Ok(response)) => {
+            let error = Response::build_from(response)
+                .header(ContentType::HTML)
+                .sized_body(io::Cursor::new(DENY_TEXT))
+                .finalize();
+            Err(Ok(error))
+        },
+        Err(Err(err)) => Err(Err(err.pack::<OAuthFailure>())),
+    }
 }
 
 fn main() {
@@ -91,10 +126,18 @@ impl MyState {
     }
 }
 
-fn solicit_get<'r>(oauth: &mut OAuthRequest<'r>, grant: &PreGrant) -> OwnerConsent<Response<'r>> {
+fn consent_form<'r>(_: &mut OAuthRequest<'r>, grant: &PreGrant) -> OwnerConsent<Response<'r>> {
     OwnerConsent::InProgress(Response::build()
         .status(http::Status::Ok)
         .header(http::ContentType::HTML)
         .sized_body(io::Cursor::new(consent_page_html("/authorize", grant)))
         .finalize())
+}
+
+fn consent_post<'r>(allowed: bool, _: &PreGrant) -> OwnerConsent<Response<'r>> {
+    if allowed { 
+        OwnerConsent::Authorized("dummy user".into()) 
+    } else {
+        OwnerConsent::Denied 
+    }
 }
