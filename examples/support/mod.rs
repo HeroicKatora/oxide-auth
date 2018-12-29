@@ -45,8 +45,8 @@ pub fn consent_page_html(route: &str, grant: &PreGrant) -> String {
         () => {
 "<html>'{0:}' (at {1:}) is requesting permission for '{2:}'
 <form method=\"post\">
-    <input type=\"submit\" value=\"Accept\" formaction=\"{4:}?response_type=code&client_id={3:}\">
-    <input type=\"submit\" value=\"Deny\" formaction=\"{4:}?response_type=code&client_id={3:}&deny=1\">
+    <input type=\"submit\" value=\"Accept\" formaction=\"{4:}?response_type=code&client_id={3:}&allow=true\">
+    <input type=\"submit\" value=\"Deny\" formaction=\"{4:}?response_type=code&client_id={3:}\">
 </form>
 </html>"
         };
