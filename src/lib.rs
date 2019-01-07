@@ -13,16 +13,9 @@
 //! The `actix` frontend, included as a default feature, provides bindings to create an endpoint in
 //! `actix-web`.
 //!
-//! ## Example
-//!
-//! A fully featured [example][actix example] is realized with actix.
-//!
-//!
-//! > `$ cargo run --example authorization_actix`
-//!
 //! # Use cases
 //!
-//! Versatility is a primary goal.  Consequently, there are sever different scenarios in which
+//! Versatility is a primary goal.  Consequently, there are several different scenarios in which
 //! this library will be useful.  Of course all of them are related to server side use of OAuth2
 //! protocol.
 //!
@@ -50,14 +43,21 @@
 //! This means using TLS for communication over http (although there are currently discussions to
 //! consider communication to `localhost` as always occuring in a secure context).
 //!
-//! For more information, see the documentation of [`code_grant::frontend`]
+//! For more information, see the documentation of [`code_grant::endpoint`] and [`frontends`].
+//!
+//! ## Example
+//!
+//! A fully featured [web server example][actix example] is realized with actix.
+//!
+//! > `$ cargo run --example actix`
 //!
 //! [`WebRequest`]: code_grant/frontend/trait.WebRequest.html
 //! [`WebResponse`]: code_grant/frontend/trait.WebResponse.html
-//! [`code_grant::frontend`]: code_grant/frontend/index.html
+//! [`code_grant::endpoint`]: code_grant/endpoint/index.html
 //! [`frontends`]: frontends/index.html
 //! [`primitives`]: primitives/index.html
 //! [actix example]: examples/authorization_code.rs
+//!
 #![warn(missing_docs)]
 
 extern crate base64;

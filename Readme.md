@@ -13,7 +13,7 @@ is as easily pluggable as the backend.
 Example
 -------------
 
-> `$ cargo run --example authorization_actix`
+> `$ cargo run --example actix`
 
 In the [example folder] you can find an [interactive example]. This configures
 a server, registers a public client and initializes a resource requiring an
