@@ -262,6 +262,7 @@ pub fn resource_flow<'a, W>(issuer: &'a mut Issuer, scopes: &'a [Scope])
 }
 
 impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
+    /// Change the used solicitor.
     pub fn with_solicitor<N>(self, new_solicitor: N) -> Generic<R, A, I, N, C, L> {
         Generic {
             registrar: self.registrar,
@@ -273,6 +274,7 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
         }
     }
 
+    /// Change the used scopes.
     pub fn with_scopes<S>(self, new_scopes: S) -> Generic<R, A, I, O, S, L> {
         Generic {
             registrar: self.registrar,
@@ -341,6 +343,13 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
 }
 
 impl<W: WebRequest> Error<W> {
+    /// Convert into a single error type.
+    ///
+    /// Note that the additional information whether the error occurred in the web components or
+    /// during the flow needs to be implicitely contained in the types. Otherwise, this information
+    /// is lost and you should use or provide a `From<Error<W>>` implementation instead. This
+    /// method is still useful for frontends providing a standard error type that interacts with
+    /// their web server library.
     pub fn pack<P>(self) -> P
         where OAuthError: Into<P>, W::Error: Into<P>,
     {
