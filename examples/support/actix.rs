@@ -5,11 +5,25 @@ extern crate serde_json;
 
 use self::reqwest::header;
 use self::actix_web::*;
+use self::actix_web::App;
 
 use std::collections::HashMap;
 use std::io::Read;
+use std::sync::RwLock;
 
-pub fn dummy_client(request: &HttpRequest) -> HttpResponse {
+#[derive(Default)]
+pub struct State {
+    token: RwLock<Option<String>>,
+    token_map: RwLock<Option<String>>,
+}
+
+pub fn dummy_client() -> App<State> {
+    App::with_state(State::default())
+        .handler("/endpoint", endpoint_impl)
+        .handler("/", get_with_token)
+}
+
+fn endpoint_impl(request: &HttpRequest<State>) -> HttpResponse {
     if let Some(cause) = request.query().get("error") {
         return HttpResponse::BadRequest()
             .body(format!("Error during owner authorization: {:?}", cause))
@@ -49,10 +63,36 @@ pub fn dummy_client(request: &HttpRequest) -> HttpResponse {
             .body(token);
     }
 
+    let token = token_map.get("access_token").unwrap();
+    let token_map = serde_json::to_string_pretty(&token_map).unwrap();
+    let token_map = token_map.replace(",", ",</br>");
+
+    let mut set_map = request.state().token_map.write().unwrap();
+    *set_map = Some(token_map);
+
+    let mut set_token = request.state().token.write().unwrap();
+    *set_token = Some(token.to_string());
+
+    HttpResponse::Found()
+        .header("Location", "/")
+        .finish()
+}
+
+fn get_with_token(request: &HttpRequest<State>) -> HttpResponse {
+    let token = request.state().token.read().unwrap();
+    let token = match *token {
+        None => return HttpResponse::Ok().body("No token yet"),
+        Some(ref token) => token,
+    };
+
+    let token_map = request.state().token_map.read().unwrap();
+    let token_map = token_map.as_ref().unwrap();
+
+    let client = reqwest::Client::new();
     // Request the page with the oauth token
     let page_request = client
         .get("http://localhost:8020/")
-        .header(header::AUTHORIZATION, "Bearer ".to_string() + token_map.get("access_token").unwrap())
+        .header(header::AUTHORIZATION, "Bearer ".to_string() + token)
         .build()
         .unwrap();
     let mut page_response = match client.execute(page_request) {
@@ -63,7 +103,6 @@ pub fn dummy_client(request: &HttpRequest) -> HttpResponse {
     let mut protected_page = String::new();
     page_response.read_to_string(&mut protected_page).unwrap();
 
-    let token = serde_json::to_string_pretty(&token_map).unwrap();
     let token = token.replace(",", ",</br>");
     let display_page = format!(
         "<html><style>
@@ -76,7 +115,7 @@ pub fn dummy_client(request: &HttpRequest) -> HttpResponse {
         <a href=\"http://localhost:8020/\">http://localhost:8020/</a>.
         Its contents are:
         <article>{}</article>
-        </main></html>", token, protected_page);
+        </main></html>", token_map, protected_page);
 
     HttpResponse::Ok()
         .content_type("text/html")

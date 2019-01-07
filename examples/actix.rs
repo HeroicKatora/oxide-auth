@@ -123,7 +123,7 @@ pub fn main() {
         .expect("Failed to bind to socket")
         .start();
 
-    server::new(|| App::new().handler("/endpoint", support::actix::dummy_client))
+    server::new(support::actix::dummy_client)
         .bind("localhost:8021")
         .expect("Failed to start dummy client")
         .start();
