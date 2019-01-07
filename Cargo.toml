@@ -28,7 +28,6 @@ gotham = { version = "^0.2", optional = true }
 gotham_derive = { version = "^0.2", optional = true }
 hyper = { version = "^0.11", optional = true }
 mime = { version = "^0.3", optional = true }
-iron = { version = "^0.6", optional = true }
 futures = { version = "^0.1", optional = true }
 router = { version = "^0.6", optional = true }  # Only for iron example
 rocket = { version = "^0.4", optional = true }
@@ -44,31 +43,25 @@ rocket-frontend = ["rocket", "serde_urlencoded"]
 
 # These frontends are disabled for now:
 # gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures", "serde_urlencoded"]
-# iron-frontend = ["iron", "urlencoded",]
-# iron-example = ["router"]
 
 [dev-dependencies]
 reqwest = "^0.9"
 
 [[example]]
-name = "authorization_actix"
+name = "actix"
 required-features = ["actix-frontend"]
 
 [[example]]
-name = "authorization_rouille"
+name = "rouille"
 required-features = ["rouille-frontend"]
 
 [[example]]
-name = "authorization_rocket"
+name = "rocket"
 required-features = ["rocket-frontend"]
 
 [[example]]
 name = "authorization_gotham"
 required-features = ["gotham-frontend"]
-
-[[example]]
-name = "authorization_code"
-required-features = ["iron-frontend", "iron-example"]
 
 [package.metadata.docs.rs]
 features = ["actix-frontend", "rocket-frontend", "rouille-frontend"]
