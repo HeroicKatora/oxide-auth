@@ -71,4 +71,4 @@ name = "authorization_code"
 required-features = ["iron-frontend", "iron-example"]
 
 [package.metadata.docs.rs]
-features = ["actix-frontend", "rouille-frontend"]
+features = ["actix-frontend", "rocket-frontend", "rouille-frontend"]
