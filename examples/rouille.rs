@@ -10,17 +10,8 @@ use std::thread;
 
 use oxide_auth::code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, ResourceFlow};
 use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint};
-use oxide_auth::primitives::{
-    authorizer::Storage,
-    issuer::TokenSigner,
-    registrar::{Client, ClientMap},
-    generator::RandomGenerator,
-    scope::Scope,
-};
+use oxide_auth::primitives::prelude::*;
 use rouille::{Request, Response, ResponseBody, Server};
-
-use support::rouille::dummy_client;
-use support::{consent_page_html, open_in_browser};
 
 /// Example of a main function of a rouille server supporting oauth.
 pub fn main() {
@@ -104,13 +95,13 @@ here</a> to begin the authorization process.
     );
     // Start a dummy client instance which simply relays the token/response
     let client = thread::spawn(||
-        Server::new(("localhost", 8021), dummy_client)
+        Server::new(("localhost", 8021), support::rouille::dummy_client)
             .expect("Failed to start client")
             .run()
     );
 
     // Try to direct the browser to an url initiating the flow
-    open_in_browser();
+    support::open_in_browser();
     join.join().expect("Failed to run");
     client.join().expect("Failed to run client");
 }
@@ -122,15 +113,15 @@ here</a> to begin the authorization process.
 /// the flow.
 fn solicitor(request: &mut &Request, grant: &PreGrant) -> OwnerConsent<Response> {
     if request.method() == "GET" {
-        let text = consent_page_html("/authorize".into(), grant);
+        let text = support::consent_page_html("/authorize".into(), grant);
         let response = Response::html(text);
         OwnerConsent::InProgress(response)
     } else if request.method() == "POST" {
         // No real user authentication is done here, in production you MUST use session keys or equivalent
-        if let Some(_) = request.get_param("deny") {
-            OwnerConsent::Denied
-        } else {
+        if let Some(_) = request.get_param("allow") {
             OwnerConsent::Authorized("dummy user".to_string())
+        } else {
+            OwnerConsent::Denied
         }
     } else {
         unreachable!("Authorization only mounted on GET and POST")

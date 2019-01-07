@@ -9,8 +9,7 @@ mod support;
 use std::io;
 use std::sync::Mutex;
 
-use oxide_auth::code_grant::endpoint::{AuthorizationFlow};
-use oxide_auth::code_grant::endpoint::{Endpoint, OAuthError, OwnerConsent, PreGrant};
+use oxide_auth::code_grant::endpoint::{OwnerConsent, PreGrant};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::frontends::rocket::{OAuthRequest, OAuthFailure};
 use oxide_auth::primitives::prelude::*;
@@ -18,8 +17,6 @@ use oxide_auth::primitives::prelude::*;
 use rocket::{Data, State, Response, http};
 use rocket::http::ContentType;
 use rocket::response::Responder;
-
-use support::{consent_page_html, rocket as support_rocket};
 
 struct MyState {
     registrar: Mutex<ClientMap>,
@@ -96,7 +93,7 @@ fn main() {
             protected_resource
         ])
         // We only attach the test client here because there can only be one rocket.
-        .attach(support_rocket::ClientFairing)
+        .attach(support::rocket::ClientFairing)
         .manage(MyState::preconfigured())
         .launch();
 }
@@ -133,7 +130,7 @@ fn consent_form<'r>(_: &mut OAuthRequest<'r>, grant: &PreGrant) -> OwnerConsent<
     OwnerConsent::InProgress(Response::build()
         .status(http::Status::Ok)
         .header(http::ContentType::HTML)
-        .sized_body(io::Cursor::new(consent_page_html("/authorize", grant)))
+        .sized_body(io::Cursor::new(support::consent_page_html("/authorize", grant)))
         .finalize())
 }
 

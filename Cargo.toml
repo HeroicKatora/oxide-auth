@@ -11,6 +11,8 @@ keywords = ["oauth", "server", "oauth2"]
 categories = ["web-programming::http-server", "authentication"]
 license = "MIT"
 
+autoexamples = false
+
 
 [dependencies]
 base64 = "^0.9"

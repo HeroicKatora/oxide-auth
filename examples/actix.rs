@@ -15,9 +15,6 @@ use oxide_auth::frontends::actix::{authorization, access_token, resource};
 use oxide_auth::frontends::simple::endpoint::FnSolicitor;
 use oxide_auth::primitives::prelude::*;
 
-use support::actix::dummy_client;
-use support::{consent_page_html, open_in_browser};
-
 static DENY_TEXT: &str = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
@@ -126,14 +123,14 @@ pub fn main() {
         .expect("Failed to bind to socket")
         .start();
 
-    server::new(|| App::new().handler("/endpoint", dummy_client))
+    server::new(|| App::new().handler("/endpoint", support::actix::dummy_client))
         .bind("localhost:8021")
         .expect("Failed to start dummy client")
         .start();
 
     actix::System::current().arbiter()
         .do_send(actix::msgs::Execute::new(
-            || -> Result<(), ()> { Ok(open_in_browser()) }));
+            || -> Result<(), ()> { Ok(support::open_in_browser()) }));
     let _ = sys.run();
 }
 
@@ -145,7 +142,7 @@ pub fn main() {
 fn consent_form(grant: PreGrant) -> HttpResponse {
     HttpResponse::Ok()
         .content_type("text/html")
-        .body(consent_page_html("/authorize".into(), &grant))
+        .body(support::consent_page_html("/authorize".into(), &grant))
 }
 
 fn in_progress_response(grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
