@@ -141,9 +141,11 @@ pub mod tests {
         let mut storage = AuthMap::new(RandomGenerator::new(16));
         simple_test_suite(&mut storage);
 
+        /*
         let assertion_token_instance = Assertion::new(
             SigningKey::new(&SHA256, b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s="));
         let mut storage = AuthMap::new(assertion_token_instance.tag("authorizer"));
         simple_test_suite(&mut storage);
+        */
     }
 }

@@ -28,7 +28,7 @@ pub trait TagGrant {
     ///
     /// The exact guarantees and uses depend on the specific implementation. Implementation which
     /// do not support some grant may return an error instead.
-    fn tag(&self, &Grant) -> Result<String, ()>;
+    fn tag(&mut self, &Grant) -> Result<String, ()>;
 }
 
 /// Generates tokens from random bytes.
@@ -51,7 +51,7 @@ impl RandomGenerator {
 }
 
 impl TagGrant for RandomGenerator {
-    fn tag(&self, _grant: &Grant) -> Result<String, ()> {
+    fn tag(&mut self, _grant: &Grant) -> Result<String, ()> {
         let mut result = vec![0; self.len];
         self.random.fill(result.as_mut_slice())
             .expect("Failed to generate random token");
@@ -132,10 +132,18 @@ impl Assertion {
 }
 
 impl<'a> TaggedAssertion<'a> {
+    /// Sign the grant for this usage.
+    ///
+    /// This commits to a token that can be used–according to the usage tag–while the endpoint can
+    /// trust in it belonging to the encoded grant.
+    pub fn sign(&self, grant: &Grant) -> Result<String, ()> {
+        self.0.generate_tagged(grant, self.1)
+    }
+
     /// Inverse operation of generate, retrieve the underlying token.
     ///
     /// Result in an Err if either the signature is invalid or if the tag does not match the
-    /// expected tag given to this assertion.
+    /// expected usage tag given to this assertion.
     pub fn extract<'b>(&self, token: &'b str) -> Result<Grant, ()> {
         self.0.extract(token).and_then(|(token, tag)| {
             if tag == self.1 {
@@ -144,12 +152,6 @@ impl<'a> TaggedAssertion<'a> {
                 Err(())
             }
         })
-    }
-}
-
-impl<'a> TagGrant for TaggedAssertion<'a> {
-    fn tag(&self, grant: &Grant) -> Result<String, ()> {
-        self.0.generate_tagged(grant, self.1)
     }
 }
 

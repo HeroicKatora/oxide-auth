@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use primitives::authorizer::{Authorizer, Storage};
+use primitives::authorizer::{Authorizer, AuthMap};
 use primitives::generator::RandomGenerator;
 use primitives::issuer::{Issuer, TokenSigner};
 use primitives::registrar::{Client, ClientMap};
@@ -17,7 +17,7 @@ use chrono::{Utc, Duration};
 use serde_json;
 
 struct Setup {
-    authorizer: Addr<AsActor<Storage<RandomGenerator>>>,
+    authorizer: Addr<AsActor<AuthMap<RandomGenerator>>>,
     registrar: Addr<AsActor<ClientMap>>,
     issuer: Addr<AsActor<TokenSigner>>,
     runner: SystemRunner,
@@ -31,7 +31,7 @@ impl Setup {
 
         let scope = EXAMPLE_SCOPE.parse().unwrap();
 
-        let mut authorizer = Storage::new(RandomGenerator::new(16));
+        let mut authorizer = AuthMap::new(RandomGenerator::new(16));
         let mut registrar = ClientMap::new();
         let mut issuer = TokenSigner::ephemeral();
 

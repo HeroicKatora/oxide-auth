@@ -38,16 +38,19 @@ Primitives have been renamed:
   with `generator::Assertion` by providing a variant of `TaggedAssertion` that
   has `Send + Sync + 'static` and provides an impl of `TagGrant` [WIP].
 
-[WIP]
 Generally rebuilt `generator::TagGrant`–previously `generator::TokenGenerator`:
 * `fn generate(&self, ..)` to `fn generate(&mut self)`. But for the standard
   implementations–which do not have any internal mutable state–the impl is also
-  provided for `&_`, `Rc<_>` and `Arc<_>`. Ties into the next bullet point.
+  provided for `&_`, `Rc<_>` and `Arc<_>` [WIP]. Ties into the next bullet point.
 * Removed the generics from `AuthMap` and `TokenMap`. Both now assert
   additional `Send + Sync + 'static` bounds on their generator arguments and
   then box them.  This is sufficient for all `TagGrant` implementations
   provided here.  While any shared internal mutable state must now be synced
-  internally, I suggest avoiding this if possible anyways.
+  internally, I suggest avoiding this if possible anyways. [WIP]
+* `TaggedAssertion` no longer implements this trait. Since the signature was
+  deterministic, this has silently broken the security of `TokenMap` by issuing
+  the same access and refresh tokens. Since refresh was not provided, that did
+  not matter :)
 
 ## v0.4.0-preview.1
 

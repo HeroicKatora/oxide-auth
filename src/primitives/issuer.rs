@@ -187,28 +187,22 @@ impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
 
 impl Issuer for TokenSigner {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
-        let token = self.signer.tag("token").tag(&grant)?;
-        let refresh = self.signer.tag("refresh").tag(&grant)?;
-        Ok(IssuedToken {
-            token,
-            refresh,
-            until: grant.until
-        })
+        (&mut&*self).issue(grant)
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.signer.tag("token").extract(token).ok())
+        (&&*self).recover_token(token)
     }
 
     fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.signer.tag("refresh").extract(token).ok())
+        (&&*self).recover_refresh(token)
     }
 }
 
 impl<'a> Issuer for &'a TokenSigner {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
-        let token = self.signer.tag("token").tag(&grant)?;
-        let refresh = self.signer.tag("refresh").tag(&grant)?;
+        let token = self.signer.tag("token").sign(&grant)?;
+        let refresh = self.signer.tag("refresh").sign(&grant)?;
         Ok(IssuedToken {
             token,
             refresh,

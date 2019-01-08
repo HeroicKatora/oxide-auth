@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use primitives::authorizer::Storage;
+use primitives::authorizer::AuthMap;
 use primitives::registrar::{Client, ClientMap};
 
 use code_grant::endpoint::{OwnerSolicitor};
@@ -14,13 +14,13 @@ use super::defaults::*;
 
 struct AuthorizationSetup {
     registrar: ClientMap,
-    authorizer: Storage<TestGenerator>,
+    authorizer: AuthMap<TestGenerator>,
 }
 
 impl AuthorizationSetup {
     fn new() -> AuthorizationSetup {
         let mut registrar = ClientMap::new();
-        let authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+        let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
             EXAMPLE_REDIRECT_URI.parse().unwrap(),

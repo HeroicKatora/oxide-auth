@@ -1,4 +1,4 @@
-use primitives::authorizer::Storage;
+use primitives::authorizer::AuthMap;
 use primitives::issuer::TokenMap;
 use primitives::grant::{Grant, Extensions};
 use primitives::registrar::{Client, ClientMap};
@@ -17,7 +17,7 @@ use super::defaults::*;
 
 struct AccessTokenSetup {
     registrar: ClientMap,
-    authorizer: Storage<TestGenerator>,
+    authorizer: AuthMap<TestGenerator>,
     issuer: TokenMap<TestGenerator>,
     authtoken: String,
     basic_authorization: String,
@@ -27,7 +27,7 @@ impl AccessTokenSetup {
     fn private_client() -> Self {
         use primitives::authorizer::Authorizer;
         let mut registrar = ClientMap::new();
-        let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
@@ -62,7 +62,7 @@ impl AccessTokenSetup {
     fn public_client() -> Self {
         use primitives::authorizer::Authorizer;
         let mut registrar = ClientMap::new();
-        let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
         let client = Client::public(EXAMPLE_CLIENT_ID,

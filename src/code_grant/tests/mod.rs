@@ -1,5 +1,5 @@
 use super::endpoint::*;
-use primitives::generator::TokenGenerator;
+use primitives::generator::TagGrant;
 use primitives::registrar::PreGrant;
 use primitives::grant::Grant;
 
@@ -141,8 +141,8 @@ impl WebResponse for CraftedResponse {
 
 struct TestGenerator(String);
 
-impl TokenGenerator for TestGenerator {
-    fn generate(&self, _grant: &Grant) -> Result<String, ()> {
+impl TagGrant for TestGenerator {
+    fn tag(&mut self, _grant: &Grant) -> Result<String, ()> {
         Ok(self.0.clone())
     }
 }
