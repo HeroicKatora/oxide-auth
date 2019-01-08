@@ -8,7 +8,7 @@ use std::sync::{MutexGuard, RwLockWriteGuard};
 
 use super::Time;
 use super::grant::Grant;
-use super::generator::{TokenGenerator, Assertion};
+use super::generator::{TagGrant, Assertion};
 
 use ring::digest::SHA256;
 use ring::hmac::SigningKey;
@@ -50,29 +50,30 @@ pub struct IssuedToken {
 /// Keeps track of access and refresh tokens by a hash-map.
 ///
 /// The generator is itself trait based and can be chosen during construction. It is assumed to not
-/// be possible for two different grants to generate the same token in the issuer.
-pub struct TokenMap<G: TokenGenerator> {
+/// be possible (or at least very unlikely during their overlapping lifetime) for two different
+/// grants to generate the same token in the grant tagger.
+pub struct TokenMap<G: TagGrant> {
     generator: G,
     access: HashMap<String, Grant>,
     refresh: HashMap<String, Grant>,
 }
 
-impl<G: TokenGenerator> TokenMap<G> {
+impl<G: TagGrant> TokenMap<G> {
     /// Construct a `TokenMap` from the given generator.
     pub fn new(generator: G) -> Self {
         Self {
-            generator: generator,
+            generator,
             access: HashMap::new(),
             refresh: HashMap::new(),
         }
     }
 }
 
-impl<G: TokenGenerator> Issuer for TokenMap<G> {
+impl<G: TagGrant> Issuer for TokenMap<G> {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         let (token, refresh) = {
-            let token = self.generator.generate(&grant)?;
-            let refresh = self.generator.generate(&grant)?;
+            let token = self.generator.tag(&grant)?;
+            let refresh = self.generator.tag(&grant)?;
             (token, refresh)
         };
 
@@ -93,8 +94,8 @@ impl<G: TokenGenerator> Issuer for TokenMap<G> {
 
 /// Signs grants instead of storing them.
 ///
-/// Although this token instance allows preservation of memory, it also implies that tokens, once
-/// issued, are harder to revoke.
+/// Although this token instance allows preservation of memory it also implies that tokens, once
+/// issued, are impossible to revoke.
 pub struct TokenSigner {
     signer: Assertion,
 }
@@ -186,9 +187,13 @@ impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
 
 impl Issuer for TokenSigner {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
-        let token = self.signer.tag("token").generate(&grant)?;
-        let refresh = self.signer.tag("refresh").generate(&grant)?;
-        Ok(IssuedToken {token, refresh, until: grant.until})
+        let token = self.signer.tag("token").tag(&grant)?;
+        let refresh = self.signer.tag("refresh").tag(&grant)?;
+        Ok(IssuedToken {
+            token,
+            refresh,
+            until: grant.until
+        })
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
@@ -202,9 +207,13 @@ impl Issuer for TokenSigner {
 
 impl<'a> Issuer for &'a TokenSigner {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
-        let token = self.signer.tag("token").generate(&grant)?;
-        let refresh = self.signer.tag("refresh").generate(&grant)?;
-        Ok(IssuedToken {token, refresh, until: grant.until})
+        let token = self.signer.tag("token").tag(&grant)?;
+        let refresh = self.signer.tag("refresh").tag(&grant)?;
+        Ok(IssuedToken {
+            token,
+            refresh,
+            until: grant.until,
+        })
     }
 
     fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {

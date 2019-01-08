@@ -21,7 +21,7 @@ type Time = DateTime<Utc>;
 pub mod prelude {
     pub use super::authorizer::{Authorizer, AuthMap};
     pub use super::issuer::{IssuedToken, Issuer, TokenMap, TokenSigner};
-    pub use super::generator::{TokenGenerator, RandomGenerator};
+    pub use super::generator::{Assertion, TagGrant, RandomGenerator};
     pub use super::registrar::{Registrar, Client, ClientUrl, ClientMap, PreGrant};
     pub use super::scope::Scope;
 }

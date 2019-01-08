@@ -23,12 +23,12 @@ use rmp_serde;
 /// Generic token for a specific grant.
 ///
 /// The interface may be reused for authentication codes, bearer tokens and refresh tokens.
-pub trait TokenGenerator {
+pub trait TagGrant {
     /// For example sign a grant or generate a random token.
     ///
     /// The exact guarantees and uses depend on the specific implementation. Implementation which
     /// do not support some grant may return an error instead.
-    fn generate(&self, &Grant) -> Result<String, ()>;
+    fn tag(&self, &Grant) -> Result<String, ()>;
 }
 
 /// Generates tokens from random bytes.
@@ -50,8 +50,8 @@ impl RandomGenerator {
     }
 }
 
-impl TokenGenerator for RandomGenerator {
-    fn generate(&self, _grant: &Grant) -> Result<String, ()> {
+impl TagGrant for RandomGenerator {
+    fn tag(&self, _grant: &Grant) -> Result<String, ()> {
         let mut result = vec![0; self.len];
         self.random.fill(result.as_mut_slice())
             .expect("Failed to generate random token");
@@ -147,8 +147,8 @@ impl<'a> TaggedAssertion<'a> {
     }
 }
 
-impl<'a> TokenGenerator for TaggedAssertion<'a> {
-    fn generate(&self, grant: &Grant) -> Result<String, ()> {
+impl<'a> TagGrant for TaggedAssertion<'a> {
+    fn tag(&self, grant: &Grant) -> Result<String, ()> {
         self.0.generate_tagged(grant, self.1)
     }
 }

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{MutexGuard, RwLockWriteGuard};
 
 use super::grant::Grant;
-use super::generator::TokenGenerator;
+use super::generator::TagGrant;
 
 /// Authorizers create and manage authorization codes.
 ///
@@ -29,17 +29,17 @@ pub trait Authorizer {
 /// This authorizer saves a mapping of generated strings to their associated grants. The generator
 /// is itself trait based and can be chosen during construction. It is assumed to not be possible
 /// for two different grants to generate the same token in the issuer.
-pub struct AuthMap<I: TokenGenerator> {
-    issuer: I,
+pub struct AuthMap<I: TagGrant> {
+    tagger: I,
     tokens: HashMap<String, Grant>
 }
 
 
-impl<I: TokenGenerator> AuthMap<I> {
+impl<I: TagGrant> AuthMap<I> {
     /// Create a hash map authorizer with the given issuer as a backend.
-    pub fn new(issuer: I) -> Self {
+    pub fn new(tagger: I) -> Self {
         AuthMap {
-            issuer: issuer,
+            tagger,
             tokens: HashMap::new(),
         }
     }
@@ -85,9 +85,9 @@ impl<'a, A: Authorizer + ?Sized> Authorizer for RwLockWriteGuard<'a, A> {
     }
 }
 
-impl<I: TokenGenerator> Authorizer for AuthMap<I> {
+impl<I: TagGrant> Authorizer for AuthMap<I> {
     fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
-        let token = self.issuer.generate(&grant)?;
+        let token = self.tagger.tag(&grant)?;
         self.tokens.insert(token.clone(), grant);
         Ok(token)
     }
