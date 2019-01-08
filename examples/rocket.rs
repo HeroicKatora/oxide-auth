@@ -20,7 +20,7 @@ use rocket::response::Responder;
 
 struct MyState {
     registrar: Mutex<ClientMap>,
-    authorizer: Mutex<Storage<RandomGenerator>>,
+    authorizer: Mutex<AuthMap<RandomGenerator>>,
     issuer: Mutex<TokenSigner>,
 }
 
@@ -106,7 +106,7 @@ impl MyState {
                     "http://localhost:8000/clientside/endpoint".parse().unwrap(),
                     "default-scope".parse().unwrap())
             ].into_iter().collect()),
-            authorizer: Mutex::new(Storage::new(RandomGenerator::new(16))),
+            authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
             issuer: Mutex::new(TokenSigner::ephemeral()),
         }
     }

@@ -25,7 +25,7 @@ here</a> to begin the authorization process.
 #[derive(Clone)]
 struct State {
     registrar: Addr<AsActor<ClientMap>>,
-    authorizer: Addr<AsActor<Storage<RandomGenerator>>>,
+    authorizer: Addr<AsActor<AuthMap<RandomGenerator>>>,
     issuer: Addr<AsActor<TokenSigner>>,
     scopes: &'static [Scope],
 }
@@ -41,7 +41,7 @@ pub fn main() {
         "default".parse().unwrap()); // Allowed client scope
     clients.register_client(client);
 
-    let authorizer = Storage::new(RandomGenerator::new(16));
+    let authorizer = AuthMap::new(RandomGenerator::new(16));
     let issuer = TokenSigner::ephemeral();
 
     let scopes = vec!["default".parse().unwrap()].into_boxed_slice();

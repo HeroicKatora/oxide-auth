@@ -29,6 +29,26 @@ private struct with dedicated methods to retrieve status code and optional
 modification objects. With this change, additional information and
 customization can be added to the response kind without breaking the interface.
 
+Primitives have been renamed:
+* `authorizer::Storage` to `authorizer::AuthMap`. This is more in line with
+  other primitives backed by an in-memory (hash-)map.
+* `generator::TokenGenerator` to `generator::TagGrant`. Additional emphasis on
+  the fact that the generated tokens should be collision resistant for
+  different grants but need not be deterministic [WIP]. Also has better interop
+  with `generator::Assertion` by providing a variant of `TaggedAssertion` that
+  has `Send + Sync + 'static` and provides an impl of `TagGrant` [WIP].
+
+[WIP]
+Generally rebuilt `generator::TagGrant`–previously `generator::TokenGenerator`:
+* `fn generate(&self, ..)` to `fn generate(&mut self)`. But for the standard
+  implementations–which do not have any internal mutable state–the impl is also
+  provided for `&_`, `Rc<_>` and `Arc<_>`. Ties into the next bullet point.
+* Removed the generics from `AuthMap` and `TokenMap`. Both now assert
+  additional `Send + Sync + 'static` bounds on their generator arguments and
+  then box them.  This is sufficient for all `TagGrant` implementations
+  provided here.  While any shared internal mutable state must now be synced
+  internally, I suggest avoiding this if possible anyways.
+
 ## v0.4.0-preview.1
 
 A HUGE refactor of the backend part of the library. For the `actix` part, see the

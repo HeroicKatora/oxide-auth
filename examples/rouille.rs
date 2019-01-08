@@ -27,7 +27,7 @@ pub fn main() {
     };
 
     // Authorization tokens are 16 byte random keys to a memory hash map.
-    let authorizer = Storage::new(RandomGenerator::new(16));
+    let authorizer = AuthMap::new(RandomGenerator::new(16));
 
     // Bearer tokens are signed (but not encrypted) using a passphrase.
     let issuer = TokenSigner::ephemeral();

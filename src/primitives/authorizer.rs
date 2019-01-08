@@ -29,16 +29,19 @@ pub trait Authorizer {
 /// This authorizer saves a mapping of generated strings to their associated grants. The generator
 /// is itself trait based and can be chosen during construction. It is assumed to not be possible
 /// for two different grants to generate the same token in the issuer.
-pub struct Storage<I: TokenGenerator> {
+pub struct AuthMap<I: TokenGenerator> {
     issuer: I,
     tokens: HashMap<String, Grant>
 }
 
 
-impl<I: TokenGenerator> Storage<I> {
+impl<I: TokenGenerator> AuthMap<I> {
     /// Create a hash map authorizer with the given issuer as a backend.
-    pub fn new(issuer: I) -> Storage<I> {
-        Storage {issuer: issuer, tokens: HashMap::new()}
+    pub fn new(issuer: I) -> Self {
+        AuthMap {
+            issuer: issuer,
+            tokens: HashMap::new(),
+        }
     }
 }
 
@@ -82,7 +85,7 @@ impl<'a, A: Authorizer + ?Sized> Authorizer for RwLockWriteGuard<'a, A> {
     }
 }
 
-impl<I: TokenGenerator> Authorizer for Storage<I> {
+impl<I: TokenGenerator> Authorizer for AuthMap<I> {
     fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
         let token = self.issuer.generate(&grant)?;
         self.tokens.insert(token.clone(), grant);
@@ -135,12 +138,12 @@ pub mod tests {
         use ring::hmac::SigningKey;
         use ring::digest::SHA256;
 
-        let mut storage = Storage::new(RandomGenerator::new(16));
+        let mut storage = AuthMap::new(RandomGenerator::new(16));
         simple_test_suite(&mut storage);
 
         let assertion_token_instance = Assertion::new(
             SigningKey::new(&SHA256, b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s="));
-        let mut storage = Storage::new(assertion_token_instance.tag("authorizer"));
+        let mut storage = AuthMap::new(assertion_token_instance.tag("authorizer"));
         simple_test_suite(&mut storage);
     }
 }

@@ -19,7 +19,7 @@ type Time = DateTime<Utc>;
 
 /// Commonly used primitives for frontends and backends.
 pub mod prelude {
-    pub use super::authorizer::{Authorizer, Storage};
+    pub use super::authorizer::{Authorizer, AuthMap};
     pub use super::issuer::{IssuedToken, Issuer, TokenMap, TokenSigner};
     pub use super::generator::{TokenGenerator, RandomGenerator};
     pub use super::registrar::{Registrar, Client, ClientUrl, ClientMap, PreGrant};
