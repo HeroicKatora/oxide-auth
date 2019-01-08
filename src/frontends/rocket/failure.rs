@@ -1,7 +1,7 @@
 use super::WebError;
 use code_grant::endpoint::OAuthError;
 
-use super::rocket::{Request, Response};
+use super::rocket::Request;
 use super::rocket::http::Status;
 use super::rocket::response::{Responder, Result};
 use self::OAuthError::*;

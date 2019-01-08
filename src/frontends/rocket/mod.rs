@@ -16,7 +16,6 @@ use self::rocket::response::{self, Responder};
 use self::rocket::outcome::Outcome;
 
 use code_grant::endpoint::{Endpoint, NormalizedParameter, WebRequest, WebResponse};
-use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
 use frontends::dev::*;
 
 pub use frontends::simple::endpoint::Generic;
@@ -36,8 +35,11 @@ pub struct OAuthRequest<'r> {
     lifetime: PhantomData<&'r ()>,
 }
 
-pub struct AuthorizationCode<E, W>(E, W);
-
+/// Request error at the http layer.
+///
+/// For performance and consistency reasons, the processing of a request body and data is delayed
+/// until it is actually required. This in turn means that some invalid requests will only be
+/// caught during the OAuth process. The possible errors are collected in this type.
 #[derive(Clone, Copy, Debug)]
 pub enum WebError {
     /// A parameter was encoded incorrectly.
@@ -183,19 +185,5 @@ impl<'r> Responder<'r> for WebError {
             WebError::NotAForm => Err(Status::BadRequest),
             WebError::BodyNeeded => Err(Status::InternalServerError),
         }
-    }
-}
-
-impl<'r, E> Responder<'r> for AuthorizationCode<E, OAuthRequest<'r>>
-where
-    E: Endpoint<OAuthRequest<'r>>,
-    E::Error: Responder<'r> + fmt::Debug,
-{
-    fn respond_to(self, _r: &Request) -> response::Result<'r> {
-        let AuthorizationCode(endpoint, request) = self;
-        let result = AuthorizationFlow::prepare(endpoint)
-            .and_then(|mut flow| flow.execute(request));
-
-        Responder::respond_to(result, _r)
     }
 }
