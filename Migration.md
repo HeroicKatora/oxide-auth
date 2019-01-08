@@ -11,7 +11,7 @@ according migration note.
 
 This document is independent of the [release notes](Changes.md).
 
-## v0.4.0-preview.2 [NEXT]
+## v0.4.0-rc.0 [WIP]
 * Extensions will be implemented in such a way as to be used standalone.
   While the `simple` frontend offers some trait based `System` to make use of
   multiple independent extensions at the same time, this is no longer required
