@@ -9,7 +9,8 @@ use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
 use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
-use code_grant::endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, OAuthError, PreGrant, ResponseKind, Scopes};
+use code_grant::endpoint::{Endpoint, OAuthError, PreGrant, Template, Scopes};
+use code_grant::endpoint::{OwnerConsent, OwnerSolicitor};
 use code_grant::endpoint::WebRequest;
 
 /// Errors either caused by the underlying web types or the library.
@@ -173,7 +174,7 @@ pub trait OptIssuer {
 /// Independent component responsible for instantiating responses.
 pub trait ResponseCreator<W: WebRequest> {
     /// Will only be called at most once per flow execution.
-    fn create(&mut self, request: &mut W, kind: ResponseKind) -> W::Response;
+    fn create(&mut self, request: &mut W, kind: Template) -> W::Response;
 }
 
 type Authorization<'a, W> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), Vacant, &'a mut(OwnerSolicitor<W> + 'a), Vacant, Vacant>;
@@ -392,7 +393,7 @@ where
         Some(&mut self.scopes)
     }
 
-    fn response(&mut self, request: &mut W, kind: ResponseKind) -> Result<W::Response, Self::Error> {
+    fn response(&mut self, request: &mut W, kind: Template) -> Result<W::Response, Self::Error> {
         Ok(self.response.create(request, kind))
     }
 
@@ -482,13 +483,13 @@ impl<W: WebRequest> OwnerSolicitor<W> for ApprovedGrant {
 }
 
 impl<W: WebRequest> ResponseCreator<W> for Vacant where W::Response: Default {
-    fn create(&mut self, _: &mut W, _: ResponseKind) -> W::Response {
+    fn create(&mut self, _: &mut W, _: Template) -> W::Response {
         Default::default()
     }
 }
 
 impl<W: WebRequest, F> ResponseCreator<W> for F where F: FnMut() -> W::Response {
-    fn create(&mut self, _: &mut W, _: ResponseKind) -> W::Response {
+    fn create(&mut self, _: &mut W, _: Template) -> W::Response {
         self()
     }
 }

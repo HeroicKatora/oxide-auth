@@ -72,10 +72,34 @@ pub enum OwnerConsent<Response: WebResponse> {
     Error(Response::Error),
 }
 
-/// Lists the differnet reasons for creating a response to the client.
+/// Modifiable reason for creating a response to the client.
 ///
 /// Not all responses indicate failure. A redirect will also occur in the a regular of providing an
-/// access token to the third party client.
+/// access token to the third party client. When an error is present (see several methods) it is
+/// mostly possible to customize it. This hook provides advanced endpoints with the opportunity to
+/// set additional parameters and informational messages before they are encoded.
+#[derive(Debug)]
+pub struct Template<'a> {
+    inner: InnerTemplate<'a>,
+}
+
+/// The general manner of the response.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ResponseStatus {
+    /// The response is issued because the requesting party was not authorized.
+    Unauthorized,
+
+    /// The response redirects in the code grant flow.
+    Redirect,
+
+    /// The request was malformed.
+    BadRequest,
+
+    /// This response is normal and expected.
+    Ok,
+}
+
+/// Encapsulated different types of responses reasons.
 ///
 /// Each variant contains some form of context information about the response. This can be used either
 /// purely informational or in some cases provides additional customization points. The addition of
@@ -84,7 +108,7 @@ pub enum OwnerConsent<Response: WebResponse> {
 /// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
 /// think the pros or cons should be evaluated differently.
 #[derive(Debug)]
-pub enum ResponseKind<'a> {
+enum InnerTemplate<'a> {
     /// Authorization to access the resource has not been granted.
     Unauthorized {
         /// The underlying cause for denying access.
@@ -272,7 +296,7 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// The endpoint can rely on this being called at most once for each flow, if it wants
     /// to preallocate the response or return a handle on an existing prototype.
-    fn response(&mut self, request: &mut Request, kind: ResponseKind) 
+    fn response(&mut self, request: &mut Request, kind: Template) 
         -> Result<Request::Response, Self::Error>;
 
     /// Wrap an error.
@@ -280,6 +304,76 @@ pub trait Endpoint<Request: WebRequest> {
 
     /// Wrap an error in the request/response types.
     fn web_error(&mut self, err: Request::Error) -> Self::Error;
+}
+
+impl<'a> Template<'a> {
+    /// The corresponding status code.
+    pub fn status(&self) -> ResponseStatus {
+        match self.inner {
+            InnerTemplate::Unauthorized { .. } => ResponseStatus::Unauthorized,
+            InnerTemplate::Redirect {.. } => ResponseStatus::Redirect,
+            InnerTemplate::BadRequest {.. } => ResponseStatus::BadRequest,
+            InnerTemplate::Ok => ResponseStatus::Ok,
+        }
+    }
+
+    /// Supplementary information about an error in the authorization code flow.
+    ///
+    /// The referenced object can be inspected and manipulated to provided additional information
+    /// that is specific to this server or endpoint. Such information could be an error page with
+    /// explanatory information or a customized message.
+    ///
+    /// ```
+    /// # use oxide_auth::code_grant::endpoint::Template;
+    /// fn explain(mut template: Template) {
+    ///     if let Some(error) = template.authorization_error() {
+    ///         eprintln!("[authorization] An error occurred: {:?}", error.kind());
+    ///         error.explain("This server is still in its infancy. Sorry.");
+    ///         error.explain_uri("/authorization_error.html".parse().unwrap());
+    ///     }
+    /// }
+    /// ```
+    pub fn authorization_error(&mut self) -> Option<&mut AuthorizationError> {
+        match &mut self.inner {
+            InnerTemplate::Redirect { authorization_error, .. } => reborrow(authorization_error),
+            _ => None,
+        }
+    }
+
+    /// Supplementary information about an error in the access token flow.
+    ///
+    /// The referenced object can be inspected and manipulated to provided additional information
+    /// that is specific to this server or endpoint. Such information could be an error page with
+    /// explanatory information or a customized message.
+    ///
+    /// ```
+    /// # use oxide_auth::code_grant::endpoint::Template;
+    /// fn explain(mut template: Template) {
+    ///     if let Some(error) = template.access_token_error() {
+    ///         eprintln!("[access_code] An error occurred: {:?}", error.kind());
+    ///         error.explain("This server is still in its infancy. Sorry.");
+    ///         error.explain_uri("/access_token_error.html".parse().unwrap());
+    ///     }
+    /// }
+    /// ```
+    pub fn access_token_error(&mut self) -> Option<&mut AccessTokenError> {
+        match &mut self.inner {
+            InnerTemplate::Unauthorized { access_token_error, .. } => reborrow(access_token_error),
+            InnerTemplate::BadRequest { access_token_error, .. } => reborrow(access_token_error),
+            _ => None,
+        }
+    }
+}
+
+/// Reborrow contained optional reference.
+///
+/// Slightly tweaked from an `Into`, there is `Option<&'a mut T>` from `&'a mut Option<T>`.
+fn reborrow<'a, T>(opt: &'a mut Option<&mut T>) -> Option<&'a mut T> {
+    match opt {
+        // Magically does correct lifetime coercision.
+        Some(inner) => Some(inner),
+        None => None,
+    }
 }
 
 impl<'a, W: WebRequest> WebRequest for &'a mut W {
@@ -326,7 +420,7 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
         (**self).scopes()
     }
 
-    fn response(&mut self, request: &mut R, kind: ResponseKind) -> Result<R::Response, Self::Error> {
+    fn response(&mut self, request: &mut R, kind: Template) -> Result<R::Response, Self::Error> {
         (**self).response(request, kind)
     }
 
@@ -386,3 +480,10 @@ impl<'a, W: WebRequest, S: Scopes<W> + 'a + ?Sized> Scopes<W> for Box<S> {
         (**self).scopes(request)
     }
 }
+
+impl<'a> From<InnerTemplate<'a>> for Template<'a> {
+    fn from(inner: InnerTemplate<'a>) -> Self {
+        Template { inner }
+    }
+}
+

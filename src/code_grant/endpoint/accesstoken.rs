@@ -83,7 +83,7 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             Ok(token) => token,
         };
 
-        let mut response = self.endpoint.0.response(&mut request, ResponseKind::Ok)?;
+        let mut response = self.endpoint.0.response(&mut request, InnerTemplate::Ok.into())?;
         response.body_json(&token.to_json())
             .map_err(|err| self.endpoint.0.web_error(err))?;
         Ok(response)
@@ -95,9 +95,9 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(endpoint: &mut E, request: &mut R,
 {
     Ok(match error {
         TokenError::Invalid(mut json) => {
-            let mut response = endpoint.response(request, ResponseKind::BadRequest {
+            let mut response = endpoint.response(request, InnerTemplate::BadRequest {
                 access_token_error: Some(json.description()),
-            })?;
+            }.into())?;
             response.client_error()
                 .map_err(|err| endpoint.web_error(err))?;
             response.body_json(&json.to_json())
@@ -105,10 +105,10 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(endpoint: &mut E, request: &mut R,
             response
         },
         TokenError::Unauthorized(mut json, scheme) =>{
-            let mut response = endpoint.response(request, ResponseKind::Unauthorized {
+            let mut response = endpoint.response(request, InnerTemplate::Unauthorized {
                 error: None,
                 access_token_error: Some(json.description()),
-            })?;
+            }.into())?;
             response.unauthorized(&scheme)
                 .map_err(|err| endpoint.web_error(err))?;
             response.body_json(&json.to_json())

@@ -15,19 +15,20 @@ This document is independent of the [release notes](Changes.md).
 * Extensions will be implemented in such a way as to be used standalone.
   While the `simple` frontend offers some trait based `System` to make use of
   multiple independent extensions at the same time, this is no longer required
-  for other frontends.
+  for other frontends. [WIP]
 
-The tests asserting the guaranteed properties will be written.
+The tests asserting the guaranteed properties will be written. [WIP]
 
 Serde support for `NormalizedParameter` so that there is less confusion about
 how to construct them and the potential pitfalls of dropping duplicate
 keys-value pairs. Strongly assert their non-existence with the respective,
-dedicated error code.
+dedicated error code. The frontends duly use this to make good examples. [WIP]
 
-[WIP] The `code_grant::endpoint::ResponseKind` enum has been encapsulated in a
-private struct with dedicated methods to retrieve status code and optional
-modification objects. With this change, additional information and
-customization can be added to the response kind without breaking the interface.
+The `code_grant::endpoint::ResponseKind` enum has been encapsulated in a
+private struct (`code_grant::endpoint::Template`) with dedicated methods to
+retrieve status code and optional modification objects. With this change,
+additional information and customization can be added to the response kind
+without breaking the interface.
 
 Primitives have been renamed:
 * `authorizer::Storage` to `authorizer::AuthMap`. This is more in line with
@@ -46,7 +47,7 @@ Generally rebuilt `generator::TagGrant`–previously `generator::TokenGenerator`
   additional `Send + Sync + 'static` bounds on their generator arguments and
   then box them.  This is sufficient for all `TagGrant` implementations
   provided here.  While any shared internal mutable state must now be synced
-  internally, I suggest avoiding this if possible anyways. [WIP]
+  internally, I suggest avoiding this if possible anyways. [WIP] [preliminary]
 * `TaggedAssertion` no longer implements this trait. Since the signature was
   deterministic, this has silently broken the security of `TokenMap` by issuing
   the same access and refresh tokens. Since refresh was not provided, that did

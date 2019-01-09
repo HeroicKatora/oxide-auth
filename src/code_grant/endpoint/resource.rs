@@ -78,22 +78,23 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     }
 
     fn denied(&mut self, request: &mut R, error: ResourceError) -> Result<R::Response, E::Error> {
-        let kind = match &error {
-            ResourceError::AccessDenied { .. } => ResponseKind::Unauthorized {
+        let template = match &error {
+            ResourceError::AccessDenied { .. } => InnerTemplate::Unauthorized {
                 error: None,
                 access_token_error: None,
             },
-            ResourceError::NoAuthentication { .. } => ResponseKind::Unauthorized {
+            ResourceError::NoAuthentication { .. } => InnerTemplate::Unauthorized {
                 error: None,
                 access_token_error: None,
             },
-            ResourceError::InvalidRequest { .. } => ResponseKind::BadRequest {
+            ResourceError::InvalidRequest { .. } => InnerTemplate::BadRequest {
                 access_token_error: None,
             },
-            ResourceError::PrimitiveError => return Err(self.endpoint.0.error(OAuthError::PrimitiveError)),
+            ResourceError::PrimitiveError 
+                => return Err(self.endpoint.0.error(OAuthError::PrimitiveError)),
         };
 
-        let mut response = self.endpoint.0.response(request, kind)?;
+        let mut response = self.endpoint.0.response(request, template.into())?;
         response.unauthorized(&error.www_authenticate())
             .map_err(|err| self.endpoint.0.web_error(err))?;
 
