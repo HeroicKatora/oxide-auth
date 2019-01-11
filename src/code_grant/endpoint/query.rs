@@ -1,9 +1,13 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
+use std::fmt;
 use std::iter::FromIterator;
 use std::hash::Hash;
 use std::rc::Rc;
 use std::sync::Arc;
+
+use serde::de;
+use serde::Deserializer;
 
 /// Allows access to the query parameters in an url or a body.
 ///
@@ -61,6 +65,11 @@ unsafe impl QueryParameter for NormalizedParameter {
 }
 
 impl NormalizedParameter {
+    /// Create an empty map.
+    pub fn new() -> Self {
+        NormalizedParameter::default()
+    }
+
     /// Insert a key-value-pair or mark key as dead if already present.
     ///
     /// Since each key must appear at most once, we do not remove it from the map but instead mark
@@ -75,6 +84,35 @@ impl NormalizedParameter {
 impl Borrow<QueryParameter> for NormalizedParameter {
     fn borrow(&self) -> &(QueryParameter + 'static) {
         self
+    }
+}
+
+impl<'de> de::Deserialize<'de> for NormalizedParameter {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        struct Visitor(NormalizedParameter);
+
+        impl<'a> de::Visitor<'a> for Visitor {
+            type Value = NormalizedParameter;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a sequence of key-value-pairs")
+            }
+
+            fn visit_seq<A>(mut self, mut access: A) -> Result<Self::Value, A::Error>
+                where A: de::SeqAccess<'a>
+            {
+                while let Some((key, value)) = access.next_element::<(String, String)>()? {
+                    self.0.insert_or_poison(key.into(), value.into())
+                }
+
+                Ok(self.0)
+            }
+        }
+
+        let visitor = Visitor(NormalizedParameter::default());
+        deserializer.deserialize_seq(visitor)
     }
 }
 

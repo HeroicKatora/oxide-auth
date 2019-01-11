@@ -217,7 +217,7 @@ impl AccessFailure {
 
 impl Error {
     /// Convert the guard error into the content used in an WWW-Authenticate header.
-    pub fn www_authenticate(self) -> String {
+    pub(crate) fn www_authenticate(self) -> String {
         let mut header = BearerHeader::new();
         match self {
             Error::AccessDenied { failure, authenticate, } => {
