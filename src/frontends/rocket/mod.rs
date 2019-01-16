@@ -4,7 +4,6 @@ extern crate serde_urlencoded;
 
 mod failure;
 
-use std::fmt;
 use std::io::Cursor;
 use std::marker::PhantomData;
 
@@ -15,7 +14,7 @@ use self::rocket::request::FromRequest;
 use self::rocket::response::{self, Responder};
 use self::rocket::outcome::Outcome;
 
-use code_grant::endpoint::{Endpoint, NormalizedParameter, WebRequest, WebResponse};
+use code_grant::endpoint::{NormalizedParameter, WebRequest, WebResponse};
 use frontends::dev::*;
 
 pub use frontends::simple::endpoint::Generic;
@@ -61,8 +60,8 @@ impl<'r> OAuthRequest<'r> {
     /// Some oauth methods need additionally the body data which you can attach later.
     pub fn new<'a>(request: &'a Request<'r>) -> Self {
         let query = request.uri().query().unwrap_or("");
-        let query = match serde_urlencoded::from_str::<Vec<(String, String)>>(query) {
-            Ok(query) => Ok(query.into_iter().collect()),
+        let query = match serde_urlencoded::from_str(query) {
+            Ok(query) => Ok(query),
             Err(_) => Err(WebError::Encoding),
         };
 
@@ -100,8 +99,8 @@ impl<'r> OAuthRequest<'r> {
         // the case where the content type does not indicate a form, as the error is silent until a
         // body is explicitely requested.
         if let Ok(None) = self.body {
-            match serde_urlencoded::from_reader::<Vec<(String, String)>, _>(data.open()) {
-                Ok(vec) => self.body = Ok(Some(vec.into_iter().collect())),
+            match serde_urlencoded::from_reader(data.open()) {
+                Ok(query) => self.body = Ok(Some(query)),
                 Err(_) => self.body = Err(WebError::Encoding),
             }
         }

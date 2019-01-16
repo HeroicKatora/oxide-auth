@@ -22,7 +22,7 @@ The tests asserting the guaranteed properties will be written. [WIP]
 Serde support for `NormalizedParameter` so that there is less confusion about
 how to construct them and the potential pitfalls of dropping duplicate
 keys-value pairs. Strongly assert their non-existence with the respective,
-dedicated error code. The frontends duly use this to make good examples. [WIP]
+dedicated error code. The frontends duly use this to make good examples.
 
 The `code_grant::endpoint::ResponseKind` enum has been encapsulated in a
 private struct (`code_grant::endpoint::Template`) with dedicated methods to

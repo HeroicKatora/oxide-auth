@@ -20,7 +20,7 @@ use super::serde_urlencoded;
 /// A future for all OAuth related data.
 pub struct OAuthFuture {
     inner: HttpRequest,
-    body: Option<UrlEncoded<HttpRequest, Vec<(String, String)>>>,
+    body: Option<UrlEncoded<HttpRequest, NormalizedParameter>>,
 }
 
 /// Sendable struct implementing `WebRequest`.
@@ -201,15 +201,15 @@ impl Future for OAuthFuture {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let body = match self.body.as_mut().map(Future::poll) {
             Some(Ok(Async::NotReady)) => return Ok(Async::NotReady),
-            Some(Ok(Async::Ready(body))) => Ok(body.into_iter().collect()),
+            Some(Ok(Async::Ready(body))) => Ok(body),
             Some(Err(_)) => Err(()),
             None => Err(()),
         };
 
         // We can not trust actix not deduplicating keys.
-        let query = match self.inner.uri().query().map(serde_urlencoded::from_str::<Vec<(String, String)>>) {
+        let query = match self.inner.uri().query().map(serde_urlencoded::from_str) {
             None => Ok(NormalizedParameter::default()),
-            Some(Ok(query)) => Ok(query.into_iter().collect()),
+            Some(Ok(query)) => Ok(query),
             Some(Err(_)) => Err(()),
         };
 

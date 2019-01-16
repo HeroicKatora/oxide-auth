@@ -32,9 +32,9 @@ impl<'a> WebRequest for &'a Request {
 
     fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
         let query = self.raw_query_string();
-        let data: Vec<(String, String)> = serde_urlencoded::from_str(query)
+        let data = serde_urlencoded::from_str(query)
             .map_err(|_| WebError::Encoding)?;
-        Ok(Cow::Owned(data.into_iter().collect()))
+        Ok(Cow::Owned(data))
     }
 
     fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
@@ -44,9 +44,9 @@ impl<'a> WebRequest for &'a Request {
         }
 
         let body = self.data().ok_or(WebError::Encoding)?;
-        let data: Vec<(String, String)> = serde_urlencoded::from_reader(body)
+        let data = serde_urlencoded::from_reader(body)
             .map_err(|_| WebError::Encoding)?;
-        Ok(Cow::Owned(data.into_iter().collect()))
+        Ok(Cow::Owned(data))
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
@@ -102,9 +102,10 @@ mod tests {
     
     #[test]
     fn multi_query() {
-        let mut request = &Request::fake_http("GET", "/authorize?param=a&param=b", vec![], vec![]);
+        let mut request = &Request::fake_http("GET", "/authorize?fine=val&param=a&param=b", vec![], vec![]);
         let query = WebRequest::query(&mut request).unwrap();
 
-        assert!(query.unique_value("param").is_none());
+        assert_eq!(Some(Cow::Borrowed("val")), query.unique_value("fine"));
+        assert_eq!(None, query.unique_value("param"));
     }
 }
