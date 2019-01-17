@@ -35,23 +35,26 @@ Primitives have been renamed:
   other primitives backed by an in-memory (hash-)map.
 * `generator::TokenGenerator` to `generator::TagGrant`. Additional emphasis on
   the fact that the generated tokens should be collision resistant for
-  different grants but need not be deterministic [WIP]. Also has better interop
-  with `generator::Assertion` by providing a variant of `TaggedAssertion` that
-  has `Send + Sync + 'static` and provides an impl of `TagGrant` [WIP].
+  different grants but need not be deterministic (acts similar to a
+  non-verifiable signature scheme). Also has better interop with
+  `generator::Assertion` by providing a variant of `TaggedAssertion` that
+  has `Send + Sync + 'static` and provides an impl of `TagGrant`.
 
 Generally rebuilt `generator::TagGrant`–previously `generator::TokenGenerator`:
-* `fn generate(&self, ..)` to `fn generate(&mut self)`. But for the standard
-  implementations–which do not have any internal mutable state–the impl is also
-  provided for `&_`, `Rc<_>` and `Arc<_>` [WIP]. Ties into the next bullet point.
+* `fn generate(&self, ..)` to `fn generate(&mut self, u64, &Grant)`. But for
+  the standard implementations–which do not have any internal mutable state–the
+  impl is also provided for `&_`, `Rc<_>` and `Arc<_>` [WIP]. Ties into the
+  next bullet point.
 * Removed the generics from `AuthMap` and `TokenMap`. Both now assert
   additional `Send + Sync + 'static` bounds on their generator arguments and
   then box them.  This is sufficient for all `TagGrant` implementations
   provided here.  While any shared internal mutable state must now be synced
   internally, I suggest avoiding this if possible anyways. [WIP] [preliminary]
-* `TaggedAssertion` no longer implements this trait. Since the signature was
-  deterministic, this has silently broken the security of `TokenMap` by issuing
-  the same access and refresh tokens. Since refresh was not provided, that did
-  not matter :)
+* `TaggedAssertion` now implements this trait differently. Since the signature
+  was deterministic, this has silently broken the security of `TokenMap` by
+  issuing the same access and refresh tokens. Since refresh was not provided,
+  that did not matter :) The new `counter` that has to be kept by such
+  authorizers/issuers makes this interaction secure even for repeating grants.
 
 ## v0.4.0-preview.1
 
