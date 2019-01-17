@@ -142,7 +142,7 @@ impl WebResponse for CraftedResponse {
 struct TestGenerator(String);
 
 impl TagGrant for TestGenerator {
-    fn tag(&mut self, _grant: &Grant) -> Result<String, ()> {
+    fn tag(&mut self, _: u64, _grant: &Grant) -> Result<String, ()> {
         Ok(self.0.clone())
     }
 }

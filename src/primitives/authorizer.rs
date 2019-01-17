@@ -31,6 +31,7 @@ pub trait Authorizer {
 /// for two different grants to generate the same token in the issuer.
 pub struct AuthMap<I: TagGrant> {
     tagger: I,
+    usage: u64,
     tokens: HashMap<String, Grant>
 }
 
@@ -40,6 +41,7 @@ impl<I: TagGrant> AuthMap<I> {
     pub fn new(tagger: I) -> Self {
         AuthMap {
             tagger,
+            usage: 0,
             tokens: HashMap::new(),
         }
     }
@@ -87,8 +89,14 @@ impl<'a, A: Authorizer + ?Sized> Authorizer for RwLockWriteGuard<'a, A> {
 
 impl<I: TagGrant> Authorizer for AuthMap<I> {
     fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
-        let token = self.tagger.tag(&grant)?;
+        // The (usage, grant) tuple needs to be unique. Since this wraps after 2^64 operations, we
+        // expect the validity time of the grant to have changed by then. This works when you don't
+        // set your system time forward/backward ~20billion seconds, assuming ~10^9 operations per
+        // second.
+        let next_usage = self.usage.wrapping_add(1);
+        let token = self.tagger.tag(next_usage - 1, &grant)?;
         self.tokens.insert(token.clone(), grant);
+        self.usage = next_usage;
         Ok(token)
     }
 
@@ -103,6 +111,7 @@ pub mod tests {
     use super::*;
     use chrono::Utc;
     use primitives::grant::Extensions;
+    use primitives::generator::{Assertion, RandomGenerator};
 
     /// Tests some invariants that should be upheld by all authorizers.
     ///
@@ -130,22 +139,42 @@ pub mod tests {
         if authorizer.extract(&token).unwrap().is_some() {
             panic!("Token must only be usable once");
         }
+
+        // Authorize the same token again.
+        let token_again = authorizer.authorize(grant.clone())
+            .expect("Authorization should not fail here");
+        // We don't produce the same token twice.
+        assert_ne!(token, token_again);
     }
 
     #[test]
-    fn test_storage() {
-        use primitives::generator::{Assertion, RandomGenerator};
+    fn random_test_suite() {
+        let mut storage = AuthMap::new(RandomGenerator::new(16));
+        simple_test_suite(&mut storage);
+    }
+
+    #[test]
+    fn signing_test_suite() {
         use ring::hmac::SigningKey;
         use ring::digest::SHA256;
 
-        let mut storage = AuthMap::new(RandomGenerator::new(16));
-        simple_test_suite(&mut storage);
-
-        /*
         let assertion_token_instance = Assertion::new(
             SigningKey::new(&SHA256, b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s="));
-        let mut storage = AuthMap::new(assertion_token_instance.tag("authorizer"));
+        let mut storage = AuthMap::new(assertion_token_instance);
         simple_test_suite(&mut storage);
-        */
+    }
+
+    #[test]
+    #[should_panic]
+    fn bad_generator() {
+        struct BadGenerator;
+        impl TagGrant for BadGenerator {
+            fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+                Ok("YOLO.HowBadCanItBeToRepeatTokens?".into())
+            }
+        }
+
+        let mut storage = AuthMap::new(BadGenerator);
+        simple_test_suite(&mut storage);
     }
 }

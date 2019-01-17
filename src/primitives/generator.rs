@@ -23,12 +23,22 @@ use rmp_serde;
 /// Generic token for a specific grant.
 ///
 /// The interface may be reused for authentication codes, bearer tokens and refresh tokens.
+///
+/// ## Requirements on implementations
+///
+/// When queried without repetition (users will change the `usage` counter each time), this
+/// method MUST be indistinguishable from a random function. This should be the crypgraphic
+/// requirements for signature schemes without requiring the verification property (the
+/// function need no be deterministic). This enables two popular choices: actual signature
+/// schemes and (pseudo-)random generators that ignore all input.
+///
+/// The requirement is derived from the fact that one should not be able to derive the tag for
+/// another token from ones own. Since there may be multiple tokens for a grant, the `usage`
+/// counter makes it possible for `Authorizer` and `Issuer` implementations to differentiate
+/// between these.
 pub trait TagGrant {
-    /// For example sign a grant or generate a random token.
-    ///
-    /// The exact guarantees and uses depend on the specific implementation. Implementation which
-    /// do not support some grant may return an error instead.
-    fn tag(&mut self, &Grant) -> Result<String, ()>;
+    /// For example sign the input parameters or generate a random token.
+    fn tag(&mut self, usage: u64, grant: &Grant) -> Result<String, ()>;
 }
 
 /// Generates tokens from random bytes.
@@ -51,7 +61,7 @@ impl RandomGenerator {
 }
 
 impl TagGrant for RandomGenerator {
-    fn tag(&mut self, _grant: &Grant) -> Result<String, ()> {
+    fn tag(&mut self, _: u64, _grant: &Grant) -> Result<String, ()> {
         let mut result = vec![0; self.len];
         self.random.fill(result.as_mut_slice())
             .expect("Failed to generate random token");
@@ -106,7 +116,7 @@ pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 impl Assertion {
     /// Construct an Assertion generator from a secret, private signing key.
     pub fn new(key: ring::hmac::SigningKey) -> Assertion {
-        Assertion { secret: key}
+        Assertion { secret: key }
     }
 
     /// Get a reference to generator for the given tag.
@@ -118,15 +128,28 @@ impl Assertion {
         let decoded = decode(token).map_err(|_| ())?;
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
         ring::hmac::verify_with_own_key(&self.secret, &assertion.0, &assertion.1).map_err(|_| ())?;
-        let (serde_grant, tag): (SerdeAssertionGrant, String)
+        let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String)
             = rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
         Ok((serde_grant.grant(), tag))
     }
 
-    fn generate_tagged(&self, grant: &Grant, tag: &str) -> Result<String, ()> {
+    fn signature(&self, data: &[u8]) -> ring::hmac::Signature {
+        ring::hmac::sign(&self.secret, data)
+    }
+
+    fn counted_signature(&self, counter: u64, grant: &Grant) 
+        -> Result<String, ()>
+    {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
-        let tosign = rmp_serde::to_vec(&(serde_grant, tag)).unwrap();
-        let signature = ring::hmac::sign(&self.secret, &tosign);
+        let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
+        let signature = self.signature(&tosign);
+        Ok(base64::encode(&signature))
+    }
+
+    fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
+        let serde_grant = SerdeAssertionGrant::try_from(grant)?;
+        let tosign = rmp_serde::to_vec(&(counter, serde_grant, tag)).unwrap();
+        let signature = self.signature(&tosign);
         Ok(encode(&rmp_serde::to_vec(&AssertGrant(tosign, signature.as_ref().to_vec())).unwrap()))
     }
 }
@@ -135,9 +158,12 @@ impl<'a> TaggedAssertion<'a> {
     /// Sign the grant for this usage.
     ///
     /// This commits to a token that can be used–according to the usage tag–while the endpoint can
-    /// trust in it belonging to the encoded grant.
-    pub fn sign(&self, grant: &Grant) -> Result<String, ()> {
-        self.0.generate_tagged(grant, self.1)
+    /// trust in it belonging to the encoded grant. `counter` must be unique for each call to this
+    /// function, similar to an IV to prevent accidentally producing the same token for the same
+    /// grant (which may have multiple tokens). Note that the `tag` will be recovered and checked
+    /// while the IV will not.
+    pub fn sign(&self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.0.generate_tagged(counter, grant, self.1)
     }
 
     /// Inverse operation of generate, retrieve the underlying token.
@@ -152,6 +178,18 @@ impl<'a> TaggedAssertion<'a> {
                 Err(())
             }
         })
+    }
+}
+
+impl TagGrant for Assertion {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.counted_signature(counter, grant)
+    }
+}
+
+impl<'a> TagGrant for &'a Assertion {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.counted_signature(counter, grant)
     }
 }
 
