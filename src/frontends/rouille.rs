@@ -7,7 +7,7 @@ extern crate serde_urlencoded;
 
 use std::borrow::Cow;
 
-use code_grant::endpoint::{QueryParameter, WebRequest, WebResponse};
+use endpoint::{QueryParameter, WebRequest, WebResponse};
 
 use self::rouille::{Request, Response, ResponseBody};
 use url::Url;

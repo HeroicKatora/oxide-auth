@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use primitives::authorizer::AuthMap;
 use primitives::registrar::{Client, ClientMap};
 
-use code_grant::endpoint::{OwnerSolicitor};
+use endpoint::{OwnerSolicitor};
 
 use frontends::simple::endpoint::authorization_flow;
 

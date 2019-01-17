@@ -6,8 +6,8 @@ use primitives::issuer::{Issuer, IssuedToken};
 use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::scope::Scope;
 use primitives::grant::Grant;
-use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
-use code_grant::endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest, WebResponse};
+use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
+use endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest, WebResponse};
 use frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
 
 use super::message as m;

@@ -9,7 +9,7 @@ mod support;
 use std::io;
 use std::sync::Mutex;
 
-use oxide_auth::code_grant::endpoint::{OwnerConsent, PreGrant};
+use oxide_auth::endpoint::{OwnerConsent, PreGrant};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::frontends::rocket::{OAuthRequest, OAuthFailure};
 use oxide_auth::primitives::prelude::*;

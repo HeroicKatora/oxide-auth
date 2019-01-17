@@ -14,7 +14,7 @@ use self::rocket::request::FromRequest;
 use self::rocket::response::{self, Responder};
 use self::rocket::outcome::Outcome;
 
-use code_grant::endpoint::{NormalizedParameter, WebRequest, WebResponse};
+use endpoint::{NormalizedParameter, WebRequest, WebResponse};
 use frontends::dev::*;
 
 pub use frontends::simple::endpoint::Generic;

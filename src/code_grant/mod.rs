@@ -19,12 +19,6 @@ pub mod authorization;
 /// Provides the handling for Resource Requests
 pub mod resource;
 
-/// Polymorphic HTTP wrappers for code grant flows.
-pub mod endpoint;
-
 pub mod extensions;
-
-#[cfg(test)]
-mod tests;
 
 pub mod error;

@@ -1,4 +1,4 @@
-use super::endpoint::*;
+use endpoint::*;
 use primitives::generator::TagGrant;
 use primitives::registrar::PreGrant;
 use primitives::grant::Grant;

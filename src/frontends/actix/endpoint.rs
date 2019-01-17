@@ -1,6 +1,6 @@
 //! Provides a configurable actor with the functionality of a code grant frontend.
-use code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow};
-use code_grant::endpoint::{Endpoint, WebRequest};
+use endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow};
+use endpoint::{Endpoint, WebRequest};
 
 use super::actix::{Actor, Context, Handler};
 use super::message::{AccessToken, AuthorizationCode, Resource};

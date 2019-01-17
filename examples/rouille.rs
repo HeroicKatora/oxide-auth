@@ -8,7 +8,7 @@ mod support;
 use std::sync::Mutex;
 use std::thread;
 
-use oxide_auth::code_grant::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, ResourceFlow};
+use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, ResourceFlow};
 use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint};
 use oxide_auth::primitives::prelude::*;
 use rouille::{Request, Response, ResponseBody, Server};

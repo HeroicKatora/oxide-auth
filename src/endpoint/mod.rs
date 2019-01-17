@@ -1,4 +1,4 @@
-//! General algorithms for endpoints.
+//! Polymorphic HTTP wrappers for code grant authorization and other flows.
 //!
 //! An endpoint is concerned with executing the abstract behaviours given by the backend in terms
 //! of the actions of the endpoint types. This means translating Redirect errors to the correct
@@ -35,6 +35,9 @@ mod error;
 mod resource;
 mod query;
 
+#[cfg(test)]
+mod tests;
+
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
@@ -43,10 +46,10 @@ pub use primitives::issuer::Issuer;
 pub use primitives::registrar::Registrar;
 pub use primitives::scope::Scope;
 
-use super::accesstoken::{PrimitiveError as AccessTokenPrimitiveError};
-use super::authorization::ErrorUrl;
-use super::resource::{Error as ResourceError};
-use super::error::{AuthorizationError, AccessTokenError};
+use code_grant::accesstoken::{PrimitiveError as AccessTokenPrimitiveError};
+use code_grant::authorization::ErrorUrl;
+use code_grant::resource::{Error as ResourceError};
+use code_grant::error::{AuthorizationError, AccessTokenError};
 
 use url::Url;
 
@@ -324,7 +327,7 @@ impl<'a> Template<'a> {
     /// explanatory information or a customized message.
     ///
     /// ```
-    /// # use oxide_auth::code_grant::endpoint::Template;
+    /// # use oxide_auth::endpoint::Template;
     /// fn explain(mut template: Template) {
     ///     if let Some(error) = template.authorization_error() {
     ///         eprintln!("[authorization] An error occurred: {:?}", error.kind());
@@ -347,7 +350,7 @@ impl<'a> Template<'a> {
     /// explanatory information or a customized message.
     ///
     /// ```
-    /// # use oxide_auth::code_grant::endpoint::Template;
+    /// # use oxide_auth::endpoint::Template;
     /// fn explain(mut template: Template) {
     ///     if let Some(error) = template.access_token_error() {
     ///         eprintln!("[access_code] An error occurred: {:?}", error.kind());

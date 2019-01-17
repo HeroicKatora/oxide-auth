@@ -12,12 +12,19 @@ according migration note.
 This document is independent of the [release notes](Changes.md).
 
 ## v0.4.0-rc.0 [WIP]
-* Extensions will be implemented in such a way as to be used standalone.
-  While the `simple` frontend offers some trait based `System` to make use of
-  multiple independent extensions at the same time, this is no longer required
-  for other frontends. [WIP]
+`code_grant::endpoint` has been moved to a top-level module `endpoint`. This
+should hint to the fact that the code grant authorization will maybe not be the
+only supported method.
 
-The tests asserting the guaranteed properties will be written. [WIP]
+The basic `gotham` frontend has been revived [WIP].
+
+Extensions will be implemented in such a way as to be used standalone.
+While the `simple` frontend offers some trait based `System` to make use of
+multiple independent extensions at the same time, this is no longer required
+for other frontends. [WIP]
+
+The tests asserting the guaranteed properties on calls to `WebRequest`-methods
+by flow implementations will be written. [WIP]
 
 Serde support for `NormalizedParameter` so that there is less confusion about
 how to construct them and the potential pitfalls of dropping duplicate

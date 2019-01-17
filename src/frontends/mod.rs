@@ -194,6 +194,6 @@ pub mod rocket;
 pub mod dev {
     pub use std::borrow::Cow;
     pub use url::Url;
-    pub use code_grant::endpoint::{Endpoint, WebRequest, WebResponse};
-    pub use code_grant::endpoint::{OAuthError, OwnerSolicitor, NormalizedParameter, QueryParameter};
+    pub use endpoint::{Endpoint, WebRequest, WebResponse};
+    pub use endpoint::{OAuthError, OwnerSolicitor, NormalizedParameter, QueryParameter};
 }

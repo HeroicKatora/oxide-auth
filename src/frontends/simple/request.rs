@@ -1,7 +1,7 @@
 //! Simple, owning request and response types.
 use std::marker::PhantomData;
 
-use code_grant::endpoint::{QueryParameter, WebRequest, WebResponse};
+use endpoint::{QueryParameter, WebRequest, WebResponse};
 
 use std::borrow::Cow;
 use std::collections::HashMap;

@@ -16,7 +16,7 @@ pub mod actix;
 #[cfg(feature = "rocket-frontend")]
 pub mod rocket;
 
-use oxide_auth::code_grant::endpoint::PreGrant;
+use oxide_auth::endpoint::PreGrant;
 
 /// Try to open the server url `http://localhost:8020` in the browser, or print a guiding statement
 /// to the console if this is not possible.

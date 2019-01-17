@@ -8,10 +8,10 @@ use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
-use code_grant::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
-use code_grant::endpoint::{Endpoint, OAuthError, PreGrant, Template, Scopes};
-use code_grant::endpoint::{OwnerConsent, OwnerSolicitor};
-use code_grant::endpoint::WebRequest;
+use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
+use endpoint::{Endpoint, OAuthError, PreGrant, Template, Scopes};
+use endpoint::{OwnerConsent, OwnerSolicitor};
+use endpoint::WebRequest;
 
 /// Errors either caused by the underlying web types or the library.
 #[derive(Debug)]

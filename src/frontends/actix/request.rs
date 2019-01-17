@@ -5,7 +5,7 @@
 //! future yielding the specific message to be sent to the endpoint.
 use std::borrow::Cow;
 
-use code_grant::endpoint::{OAuthError, NormalizedParameter, PreGrant, QueryParameter, WebRequest, WebResponse};
+use endpoint::{OAuthError, NormalizedParameter, PreGrant, QueryParameter, WebRequest, WebResponse};
 use frontends::simple::request::{Body, Response, Status};
 
 use super::actix_web::{HttpMessage, HttpRequest, HttpResponse};

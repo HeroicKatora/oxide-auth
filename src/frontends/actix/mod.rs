@@ -21,11 +21,10 @@ use self::actix_web::{HttpRequest, HttpResponse};
 use self::actix_web::ResponseError;
 
 // pub use self::endpoint::CodeGrantEndpoint;
-pub use code_grant::endpoint::OAuthError;
+pub use endpoint::{PreGrant, OAuthError, OwnerConsent, OwnerSolicitor};
 pub use self::request::OAuthFuture;
 pub use self::request::OAuthRequest;
 pub use self::request::OAuthResponse;
-pub use code_grant::endpoint::{PreGrant, OwnerConsent, OwnerSolicitor};
 
 pub use self::future_endpoint::{ResourceProtection, access_token, authorization, resource};
 

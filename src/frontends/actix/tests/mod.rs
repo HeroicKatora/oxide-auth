@@ -6,7 +6,7 @@ use primitives::issuer::{Issuer, TokenSigner};
 use primitives::registrar::{Client, ClientMap};
 use primitives::grant::{Extensions, Grant};
 
-use code_grant::endpoint::{OAuthError, OwnerConsent};
+use endpoint::{OAuthError, OwnerConsent};
 use frontends::simple::endpoint::FnSolicitor;
 use frontends::simple::request::{Body, MapErr, NoError, Request, Response, Status};
 

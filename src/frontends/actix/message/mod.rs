@@ -11,7 +11,7 @@ use super::actix::prelude::Message;
 
 use super::ResourceProtection;
 use super::request::{OAuthRequest as ResolvedRequest};
-use code_grant::endpoint::WebRequest;
+use endpoint::WebRequest;
 
 pub use self::authorizer::{Authorize, Extract};
 pub use self::issuer::{Issue, RecoverToken, RecoverRefresh};
