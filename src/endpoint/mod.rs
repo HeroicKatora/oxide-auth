@@ -46,7 +46,6 @@ pub use primitives::issuer::Issuer;
 pub use primitives::registrar::Registrar;
 pub use primitives::scope::Scope;
 
-use code_grant::accesstoken::{PrimitiveError as AccessTokenPrimitiveError};
 use code_grant::authorization::ErrorUrl;
 use code_grant::resource::{Error as ResourceError};
 use code_grant::error::{AuthorizationError, AccessTokenError};
@@ -286,15 +285,6 @@ pub trait Endpoint<Request: WebRequest> {
     /// request.
     fn scopes(&mut self) -> Option<&mut Scopes<Request>>;
 
-    /// Try to recover from a primitive error during access token flow.
-    ///
-    /// Depending on an endpoints additional information about its primitives or extensions, it may
-    /// try to recover from this error by resetting states and returning a `TryAgain` overall. The
-    /// default implementation returns with an opaque, converted `OAuthError::PrimitiveError`.
-    fn access_token_error(&mut self, _error: AccessTokenPrimitiveError) -> Self::Error {
-        self.error(OAuthError::PrimitiveError)
-    }
-
     /// Generate a prototype response.
     ///
     /// The endpoint can rely on this being called at most once for each flow, if it wants
@@ -409,10 +399,6 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
 
     fn issuer_mut(&mut self) -> Option<&mut Issuer> {
         (**self).issuer_mut()
-    }
-
-    fn access_token_error(&mut self, error: AccessTokenPrimitiveError) -> Self::Error {
-        (**self).access_token_error(error)
     }
 
     fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<R>> {

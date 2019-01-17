@@ -11,19 +11,22 @@ use primitives::grant::{Extensions};
 ///
 /// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
 /// other types.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct System<
     Authorization=Arc<AuthorizationExtension>,
-    AccessToken=Arc<AccessTokenExtension>
-> {
+    AccessToken=Arc<AccessTokenExtension>> 
+{
     authorization: Vec<Authorization>,
     access_token: Vec<AccessToken>,
 }
 
 impl<Auth, Acc> System<Auth, Acc> {
     /// Create an empty extension system.
-    pub fn new() {
-        Default::default()
+    pub fn new() -> Self {
+        System {
+            authorization: vec![],
+            access_token: vec![],
+        }
     }
 
     /// Add an authorization extension.
@@ -34,6 +37,12 @@ impl<Auth, Acc> System<Auth, Acc> {
     /// Add an access token extension.
     pub fn access_token(&mut self, extension: Acc) {
         self.access_token.push(extension)
+    }
+}
+
+impl<Auth, Acc> Default for System<Auth, Acc> {
+    fn default() -> Self {
+        System::new()
     }
 }
 

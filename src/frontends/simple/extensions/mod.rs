@@ -4,6 +4,7 @@
 pub use code_grant::authorization::Request as AuthorizationRequest;
 pub use code_grant::accesstoken::Request as AccessTokenRequest;
 
+mod extended;
 mod pkce;
 mod system;
 
@@ -11,6 +12,7 @@ use std::borrow::{Cow, ToOwned};
 use std::rc::Rc;
 use std::sync::Arc;
 
+pub use self::extended::Extended;
 pub use self::system::System;
 use primitives::grant::{Extension as ExtensionData, GrantExtension};
 
