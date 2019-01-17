@@ -14,6 +14,8 @@ use super::{Url, Time};
 use super::scope::Scope;
 
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Arc;
 
 use base64::{encode, decode};
 use ring::rand::{SystemRandom, SecureRandom};
@@ -58,14 +60,12 @@ impl RandomGenerator {
             len: length
         }
     }
-}
 
-impl TagGrant for RandomGenerator {
-    fn tag(&mut self, _: u64, _grant: &Grant) -> Result<String, ()> {
+    fn generate(&self) -> String {
         let mut result = vec![0; self.len];
         self.random.fill(result.as_mut_slice())
             .expect("Failed to generate random token");
-        Ok(encode(&result))
+        encode(&result)
     }
 }
 
@@ -181,6 +181,43 @@ impl<'a> TaggedAssertion<'a> {
     }
 }
 
+impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for Box<T> {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        (&mut **self).tag(counter, grant)
+    }
+}
+
+impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for &'a mut T {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        (&mut **self).tag(counter, grant)
+    }
+}
+
+impl TagGrant for RandomGenerator {
+    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+        Ok(self.generate())
+    }
+}
+
+impl<'a> TagGrant for &'a RandomGenerator {
+    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+        Ok(self.generate())
+    }
+}
+
+impl TagGrant for Rc<RandomGenerator> {
+    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+        Ok(self.generate())
+    }
+}
+
+impl TagGrant for Arc<RandomGenerator> {
+    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+        Ok(self.generate())
+    }
+}
+
+
 impl TagGrant for Assertion {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
@@ -192,6 +229,19 @@ impl<'a> TagGrant for &'a Assertion {
         self.counted_signature(counter, grant)
     }
 }
+
+impl TagGrant for Rc<Assertion> {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.counted_signature(counter, grant)
+    }
+}
+
+impl TagGrant for Arc<Assertion> {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.counted_signature(counter, grant)
+    }
+}
+
 
 mod scope_serde {
     use primitives::scope::Scope;

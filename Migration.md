@@ -43,8 +43,7 @@ Primitives have been renamed:
 Generally rebuilt `generator::TagGrant`–previously `generator::TokenGenerator`:
 * `fn generate(&self, ..)` to `fn generate(&mut self, u64, &Grant)`. But for
   the standard implementations–which do not have any internal mutable state–the
-  impl is also provided for `&_`, `Rc<_>` and `Arc<_>` [WIP]. Ties into the
-  next bullet point.
+  impl is also provided for `&_`, `Rc<_>` and `Arc<_>`.
 * Removed the generics from `AuthMap` and `TokenMap`. Both now assert
   additional `Send + Sync + 'static` bounds on their generator arguments and
   then box them.  This is sufficient for all `TagGrant` implementations
