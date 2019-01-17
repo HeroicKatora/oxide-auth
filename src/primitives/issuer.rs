@@ -53,7 +53,7 @@ pub struct IssuedToken {
 /// The generator is itself trait based and can be chosen during construction. It is assumed to not
 /// be possible (or at least very unlikely during their overlapping lifetime) for two different
 /// grants to generate the same token in the grant tagger.
-pub struct TokenMap<G: TagGrant> {
+pub struct TokenMap<G: TagGrant=Box<TagGrant + Send + Sync + 'static>> {
     generator: G,
     usage: u64,
     access: HashMap<String, Grant>,

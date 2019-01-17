@@ -326,3 +326,19 @@ impl SerdeAssertionGrant {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ring::digest::SHA256;
+    use ring::hmac::SigningKey;
+
+    #[test]
+    #[allow(dead_code, unused)]
+    fn assert_send_sync_static() {
+        fn uses<T: Send + Sync + 'static>(arg: T) { }
+        let _ = uses(RandomGenerator::new(16));
+        let fake_key = SigningKey::new(&SHA256, &[0u8; 16]);
+        let _ = uses(Assertion::new(fake_key));
+    }
+}

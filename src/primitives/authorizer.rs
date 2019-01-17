@@ -29,7 +29,7 @@ pub trait Authorizer {
 /// This authorizer saves a mapping of generated strings to their associated grants. The generator
 /// is itself trait based and can be chosen during construction. It is assumed to not be possible
 /// for two different grants to generate the same token in the issuer.
-pub struct AuthMap<I: TagGrant> {
+pub struct AuthMap<I: TagGrant=Box<TagGrant + Send + Sync + 'static>> {
     tagger: I,
     usage: u64,
     tokens: HashMap<String, Grant>
