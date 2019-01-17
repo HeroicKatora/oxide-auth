@@ -6,9 +6,11 @@ extern crate url;
 
 mod support;
 
+use std::thread;
+
 use actix::{Actor, Addr};
 use actix_web::{server, App, HttpRequest, HttpResponse};
-use futures::Future;
+use futures::{Future, future};
 
 use oxide_auth::frontends::actix::{AsActor, OAuth, OAuthFailure, OAuthResponse, OwnerConsent, PreGrant, ResourceProtection};
 use oxide_auth::frontends::actix::{authorization, access_token, resource};
@@ -32,7 +34,7 @@ struct State {
 
 /// Example of a main function of a rouille server supporting oauth.
 pub fn main() {
-    let sys = actix::System::new("HttpServerClient");
+    let mut sys = actix::System::new("HttpServerClient");
 
     let mut clients  = ClientMap::new();
     // Register a dummy client instance
@@ -128,9 +130,13 @@ pub fn main() {
         .expect("Failed to start dummy client")
         .start();
 
-    actix::System::current().arbiter()
-        .do_send(actix::msgs::Execute::new(
-            || -> Result<(), ()> { Ok(support::open_in_browser()) }));
+    // Start, then open in browser, don't care about this finishing.
+    let _: Result<(), ()> = sys.block_on(future::lazy(|| {
+        let _ = thread::spawn(support::open_in_browser);
+        future::ok(())
+    }));
+
+    // Run the rest of the system.
     let _ = sys.run();
 }
 
