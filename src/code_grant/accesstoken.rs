@@ -7,7 +7,7 @@ use serde_json;
 use code_grant::error::{AccessTokenError, AccessTokenErrorType};
 use primitives::authorizer::Authorizer;
 use primitives::issuer::{IssuedToken, Issuer};
-use primitives::grant::{Extension as ExtensionData, Extensions, Grant, GrantExtension};
+use primitives::grant::{Extensions, Grant};
 use primitives::registrar::{Registrar, RegistrarError};
 
 /// Trait based retrieval of parameters necessary for access token request handling.
@@ -37,30 +37,19 @@ pub trait Request {
     fn extension(&self, key: &str) -> Option<Cow<str>>;
 }
 
-/// An extension reacting to an access token request with a provided access token.
-pub trait Extension: GrantExtension {
-    /// Process an access token request, utilizing the extensions stored data if any.
-    ///
-    /// The semantics are equivalent to that of `CodeExtension` except that any data which was
-    /// returned as a response to the authorization code request is provided as an additional
-    /// parameter.
-    fn extend_access_token(&self, &Request, Option<ExtensionData>) 
-        -> std::result::Result<Option<ExtensionData>, ()>;
-}
-
-/// A system of extensions provided additional data.
+/// A system of addons provided additional data.
 ///
-/// An endpoint not having any extension may use `&()` as the result of system.
-pub trait ExtensionSystem {
+/// An endpoint not having any extension may use `&mut ()` as the result of system.
+pub trait Extension {
     /// Inspect the request and extension data to produce extension data.
     ///
     /// The input data comes from the extension data produced in the handling of the
     /// authorization code request.
-    fn extend(&self, request: &Request, data: Extensions) -> std::result::Result<Extensions, ()>;
+    fn extend(&mut self, request: &Request, data: Extensions) -> std::result::Result<Extensions, ()>;
 }
 
-impl ExtensionSystem for () {
-    fn extend(&self, _: &Request, _: Extensions) -> std::result::Result<Extensions, ()> {
+impl Extension for () {
+    fn extend(&mut self, _: &Request, _: Extensions) -> std::result::Result<Extensions, ()> {
         Ok(Extensions::new())
     }
 }
@@ -82,8 +71,8 @@ pub trait Endpoint {
 
     /// The system of used extension, extending responses.
     ///
-    /// It is possible to use `&()`.
-    fn extensions(&self) -> &ExtensionSystem;
+    /// It is possible to use `&mut ()`.
+    fn extension(&mut self) -> & mut Extension;
 }
 
 /// Try to redeem an authorization code.
@@ -144,8 +133,7 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
     }
 
     let code_extensions = saved_params.extensions;
-    let access_extensions = handler.extensions().extend(request, code_extensions);
-
+    let access_extensions = handler.extension().extend(request, code_extensions);
     let access_extensions = match access_extensions {
         Ok(extensions) => extensions,
         Err(_) =>  return Err(Error::invalid()),

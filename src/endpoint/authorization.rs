@@ -1,7 +1,7 @@
 use code_grant::authorization::{
     authorization_code,
     Error as AuthorizationError,
-    Extension as AuthorizationExtension,
+    Extension,
     Endpoint as AuthorizationEndpoint,
     Request as AuthorizationRequest,
     Pending};
@@ -13,7 +13,11 @@ pub struct AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     endpoint: WrappedAuthorization<E, R>,
 }
 
-struct WrappedAuthorization<E: Endpoint<R>, R: WebRequest>(E, PhantomData<R>);
+struct WrappedAuthorization<E: Endpoint<R>, R: WebRequest> {
+    inner: E,
+    extension_fallback: (),
+    r_type: PhantomData<R>,
+}
 
 struct WrappedRequest<'a, R: WebRequest + 'a> {
     /// Original request.
@@ -94,7 +98,11 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         }
 
         Ok(AuthorizationFlow {
-            endpoint: WrappedAuthorization(endpoint, PhantomData),
+            endpoint: WrappedAuthorization {
+                inner: endpoint,
+                extension_fallback: (),
+                r_type: PhantomData,
+            },
         })
     }
 
@@ -109,11 +117,11 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     /// previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
         let negotiated = authorization_code(
-            &self.endpoint,
+            &mut self.endpoint,
             &WrappedRequest::new(&mut request));
 
         let inner = match negotiated {
-            Err(err) => match authorization_error(&mut self.endpoint.0, &mut request, err) {
+            Err(err) => match authorization_error(&mut self.endpoint.inner, &mut request, err) {
                 Ok(response) => AuthorizationPartialInner::Failed {
                     request,
                     response,
@@ -189,7 +197,7 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
             OwnerConsent::Denied => self.deny(),
             OwnerConsent::InProgress(resp) => self.in_progress(resp),
             OwnerConsent::Authorized(who) => self.authorize(who),
-            OwnerConsent::Error(err) => (self.request, Err(self.endpoint.0.web_error(err))),
+            OwnerConsent::Error(err) => (self.request, Err(self.endpoint.inner.web_error(err))),
         }
     }
 
@@ -206,7 +214,7 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// Denies the request, the client is not allowed access.
     fn deny(mut self) -> (R, Result<R::Response, E::Error>) {
         let result = self.pending.deny();
-        let result = Self::convert_result(result, &mut self.endpoint.0, &mut self.request);
+        let result = Self::convert_result(result, &mut self.endpoint.inner, &mut self.request);
 
         (self.request, result)
     }
@@ -214,7 +222,7 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// Tells the system that the resource owner with the given id has approved the grant.
     fn authorize(mut self, who: String) -> (R, Result<R::Response, E::Error>) {
         let result = self.pending.authorize(self.endpoint, who.into());
-        let result = Self::convert_result(result, &mut self.endpoint.0, &mut self.request);
+        let result = Self::convert_result(result, &mut self.endpoint.inner, &mut self.request);
 
         (self.request, result)
     }
@@ -238,22 +246,21 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
 
 impl<E: Endpoint<R>, R: WebRequest> WrappedAuthorization<E, R> {
     fn owner_solicitor(&mut self) -> &mut OwnerSolicitor<R> {
-        self.0.owner_solicitor().unwrap()
+        self.inner.owner_solicitor().unwrap()
     }
 }
 
 impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorization<E, R> {
     fn registrar(&self) -> &Registrar {
-        self.0.registrar().unwrap()
+        self.inner.registrar().unwrap()
     }
 
     fn authorizer(&mut self) -> &mut Authorizer {
-        self.0.authorizer_mut().unwrap()
+        self.inner.authorizer_mut().unwrap()
     }
 
-    fn extensions(&self) -> Box<Iterator<Item=&AuthorizationExtension>> {
-        // FIXME: forward extensions
-        Box::new(None.into_iter())
+    fn extension(&mut self) -> &mut Extension {
+        &mut self.extension_fallback
     }
 }
 

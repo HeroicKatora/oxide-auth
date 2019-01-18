@@ -7,22 +7,7 @@ use chrono::{Duration, Utc};
 use code_grant::error::{AuthorizationError, AuthorizationErrorType};
 use primitives::authorizer::Authorizer;
 use primitives::registrar::{ClientUrl, Registrar, RegistrarError, PreGrant};
-use primitives::grant::{Extensions, GrantExtension, Extension as ExtensionData, Grant};
-
-/// An extension reacting to an initial authorization code request.
-pub trait Extension: GrantExtension {
-    /// Provides data for this request of signals faulty data.
-    ///
-    /// There may be two main types of extensions:
-    /// - Extensions storing additional information about the client
-    /// - Validators asserting additional requirements
-    ///
-    /// Derived information which needs to be bound to the returned grant can be stored in an
-    /// encoded form by returning `Ok(extension_data)` while errors can be signaled via `Err(())`.
-    /// Extensions can also store their pure existance by initializing the extension struct without
-    /// data. Specifically, the data can be used in a corresponding `AccessTokenExtension`.
-    fn extend_code(&self, &Request) -> StdResult<Option<ExtensionData>, ()>;
-}
+use primitives::grant::{Extensions, Grant};
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait Request {
@@ -51,6 +36,20 @@ pub trait Request {
     fn extension(&self, key: &str) -> Option<Cow<str>>;
 }
 
+/// A system of addons provided additional data.
+///
+/// An endpoint not having any extension may use `&mut ()` as the result of system.
+pub trait Extension {
+    /// Inspect the request to produce extension data.
+    fn extend(&mut self, request: &Request) -> std::result::Result<Extensions, ()>;
+}
+
+impl Extension for () {
+    fn extend(&mut self, _: &Request) -> std::result::Result<Extensions, ()> {
+        Ok(Extensions::new())
+    }
+}
+
 /// Required functionality to respond to authorization code requests.
 ///
 /// Each method will only be invoked exactly once when processing a correct and authorized request,
@@ -63,8 +62,10 @@ pub trait Endpoint {
     /// Generate an authorization code for a given grant.
     fn authorizer(&mut self) -> &mut Authorizer;
 
-    /// The list of extensions of this endpoint.
-    fn extensions(&self) -> Box<Iterator<Item=&Extension>>;
+    /// An extension implementation of this endpoint.
+    ///
+    /// It is possible to use `&mut ()`.
+    fn extension(&mut self) -> &mut Extension;
 }
 
 /// Retrieve allowed scope and redirect url from the registrar.
@@ -76,7 +77,7 @@ pub trait Endpoint {
 /// If the client is not registered, the request will otherwise be ignored, if the request has
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
-pub fn authorization_code(handler: &Endpoint, request: &Request)
+pub fn authorization_code(handler: &mut Endpoint, request: &Request)
 -> self::Result<Pending> {
     if !request.valid() {
         return Err(Error::Ignore)
@@ -130,19 +131,13 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
         Some(Ok(scope)) => Some(scope),
     };
 
-    let mut grant_extensions = Extensions::new();
-
-    for extension_instance in handler.extensions() {
-        match extension_instance.extend_code(request) {
-            Err(_) => {
-                prepared_error.description().set_type(AuthorizationErrorType::InvalidRequest);
-                return Err(Error::Redirect(prepared_error))
-            },
-            Ok(Some(extension)) =>
-                grant_extensions.set(&extension_instance, extension),
-            Ok(None) => (),
-        }
-    }
+    let grant_extension = match handler.extension().extend(request) {
+        Ok(extension_data) => extension_data,
+        Err(()) => {
+            prepared_error.description().set_type(AuthorizationErrorType::InvalidRequest);
+            return Err(Error::Redirect(prepared_error))
+        },
+    };
 
     let pre_grant = handler.registrar()
         .negotiate(bound_client, scope)
@@ -157,7 +152,7 @@ pub fn authorization_code(handler: &Endpoint, request: &Request)
     Ok(Pending {
         pre_grant,
         state: state.map(|cow| cow.into_owned()),
-        extensions: grant_extensions,
+        extensions: grant_extension,
     })
 }
 

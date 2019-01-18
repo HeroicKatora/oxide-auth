@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use code_grant::accesstoken::{
     access_token,
     Error as TokenError,
-    ExtensionSystem,
+    Extension,
     Endpoint as TokenEndpoint,
     Request as TokenRequest};
 
@@ -20,7 +20,11 @@ pub struct AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     endpoint: WrappedToken<E, R>,
 }
 
-struct WrappedToken<E: Endpoint<R>, R: WebRequest>(E, PhantomData<R>);
+struct WrappedToken<E: Endpoint<R>, R: WebRequest> {
+    inner: E, 
+    extension_fallback: (),
+    r_type: PhantomData<R>, 
+}
 
 struct WrappedRequest<'a, R: WebRequest + 'a> {
     /// Original request.
@@ -63,7 +67,11 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         }
 
         Ok(AccessTokenFlow {
-            endpoint: WrappedToken(endpoint, PhantomData),
+            endpoint: WrappedToken {
+                inner: endpoint,
+                extension_fallback: (),
+                r_type: PhantomData
+            },
         })
     }
 
@@ -79,13 +87,13 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             &WrappedRequest::new(&mut request));
 
         let token = match issued {
-            Err(error) => return token_error(&mut self.endpoint.0, &mut request, error),
+            Err(error) => return token_error(&mut self.endpoint.inner, &mut request, error),
             Ok(token) => token,
         };
 
-        let mut response = self.endpoint.0.response(&mut request, InnerTemplate::Ok.into())?;
+        let mut response = self.endpoint.inner.response(&mut request, InnerTemplate::Ok.into())?;
         response.body_json(&token.to_json())
-            .map_err(|err| self.endpoint.0.web_error(err))?;
+            .map_err(|err| self.endpoint.inner.web_error(err))?;
         Ok(response)
     }
 }
@@ -124,19 +132,19 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(endpoint: &mut E, request: &mut R,
 
 impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
     fn registrar(&self) -> &Registrar {
-        self.0.registrar().unwrap()
+        self.inner.registrar().unwrap()
     }
 
     fn authorizer(&mut self) -> &mut Authorizer {
-        self.0.authorizer_mut().unwrap()
+        self.inner.authorizer_mut().unwrap()
     }
 
     fn issuer(&mut self) -> &mut Issuer {
-        self.0.issuer_mut().unwrap()
+        self.inner.issuer_mut().unwrap()
     }
 
-    fn extensions(&self) -> &ExtensionSystem {
-        &()
+    fn extension(&mut self) -> &mut Extension {
+        &mut self.extension_fallback
     }
 }
 
