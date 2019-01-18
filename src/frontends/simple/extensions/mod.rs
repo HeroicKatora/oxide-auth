@@ -42,7 +42,7 @@ pub trait AuthorizationExtension: GrantExtension {
     /// encoded form by returning `Ok(extension_data)` while errors can be signaled via `Err(())`.
     /// Extensions can also store their pure existance by initializing the extension struct without
     /// data. Specifically, the data can be used in a corresponding `AccessTokenExtension`.
-    fn extend_code(&self, &AuthorizationRequest) -> ExtensionResult;
+    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult;
 }
 
 /// An extension reacting to an access token request with a provided access token.
@@ -52,7 +52,8 @@ pub trait AccessTokenExtension: GrantExtension {
     /// The semantics are equivalent to that of `CodeExtension` except that any data which was
     /// returned as a response to the authorization code request is provided as an additional
     /// parameter.
-    fn extend_access_token(&self, &AccessTokenRequest, Option<ExtensionData>) -> ExtensionResult;
+    fn extend_access_token(&self, request: &AccessTokenRequest, code_data: Option<ExtensionData>)
+        -> ExtensionResult;
 }
 
 impl<'a, T: AuthorizationExtension + ?Sized> AuthorizationExtension for &'a T {

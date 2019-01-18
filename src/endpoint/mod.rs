@@ -233,6 +233,10 @@ pub trait WebResponse {
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error>;
 }
 
+pub trait Addon {
+
+}
+
 /// Fuses requests and primitives into a coherent system to give a response.
 ///
 /// There are multiple different valid ways to produce responses and react to internal errors for a
@@ -297,6 +301,10 @@ pub trait Endpoint<Request: WebRequest> {
 
     /// Wrap an error in the request/response types.
     fn web_error(&mut self, err: Request::Error) -> Self::Error;
+
+    fn addon(&mut self) -> Option<&mut Addon> {
+        None
+    }
 }
 
 impl<'a> Template<'a> {
@@ -420,6 +428,10 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     fn web_error(&mut self, err: R::Error) -> Self::Error {
         (**self).web_error(err)
     }
+}
+
+impl Addon for () {
+
 }
 
 impl Into<Url> for ErrorRedirect {

@@ -6,25 +6,39 @@ use primitives::registrar::Registrar;
 use super::System;
 
 /// An inner endpoint with simple extensions.
-pub struct Extended<Inner, System> {
+pub struct Extended<Inner, Addon> {
     inner: Inner,
-    system: System,
+    addon: Addon,
 }
 
-impl<Inner> Extended<Inner> {
+impl<Inner, Auth, Acc> Extended<Inner, System<Auth, Acc>> {
+    /// Wrap an endpoint with a standard extension system.
     pub fn new(inner: Inner) -> Self {
         Extended {
             inner,
-            system: System::new(),
+            addon: System::default(),
         }
-    }
-
-    pub fn system_mut(&mut self) -> &mut System {
-        &mut self.system
     }
 }
 
-impl<Request, Inner> Endpoint<Request> for Extended<Inner>
+impl<Inner, A> Extended<Inner, A> {
+    pub fn extend_with(inner: Inner, addon: A) -> Self {
+        Extended {
+            inner,
+            addon,
+        }
+    }
+
+    pub fn addon(&self) -> &A {
+        &self.addon
+    }
+
+    pub fn addon_mut(&mut self) -> &mut A {
+        &mut self.addon
+    }
+}
+
+impl<Request, Inner, Auth, Acc> Endpoint<Request> for Extended<Inner, System<Auth, Acc>>
 where
     Request: WebRequest,
     Inner: Endpoint<Request> 
