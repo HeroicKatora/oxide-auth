@@ -13,6 +13,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 pub use self::extended::Extended;
+pub use self::pkce::Pkce;
 pub use self::system::System;
 use primitives::grant::{Extension as ExtensionData, GrantExtension};
 

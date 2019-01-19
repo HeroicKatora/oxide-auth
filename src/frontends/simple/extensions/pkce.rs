@@ -1,7 +1,7 @@
 use super::{AuthorizationExtension, AuthorizationRequest, AccessTokenExtension, AccessTokenRequest};
 use super::{ExtensionData, ExtensionResult};
 
-use code_grant::extensions::Pkce;
+pub use code_grant::extensions::Pkce;
 
 impl AuthorizationExtension for Pkce {
     fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {

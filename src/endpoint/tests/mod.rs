@@ -218,5 +218,5 @@ mod access_token;
 /// Test the resource flow.
 mod resource;
 
-// /// Test functionality of pkce.
-// mod pkce;
+/// Test functionality of pkce.
+mod pkce;

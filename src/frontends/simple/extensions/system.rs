@@ -33,6 +33,18 @@ impl<Auth, Acc> System<Auth, Acc> {
         }
     }
 
+    /// Collect the addons to form a system.
+    pub fn from<I, K>(authorization_addons: I, access_addons: K) -> Self 
+    where
+        I: IntoIterator<Item=Auth>,
+        K: IntoIterator<Item=Acc>,
+    {
+        System {
+            authorization: authorization_addons.into_iter().collect(),
+            access_token: access_addons.into_iter().collect(),
+        }
+    }
+
     /// Add an authorization extension.
     pub fn authorization(&mut self, extension: Auth) {
         self.authorization.push(extension)

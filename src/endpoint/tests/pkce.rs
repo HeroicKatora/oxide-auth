@@ -1,16 +1,20 @@
-use primitives::authorizer::Storage;
+use std::rc::Rc;
+
+use primitives::authorizer::AuthMap;
 use primitives::issuer::TokenMap;
 use primitives::generator::RandomGenerator;
 use primitives::registrar::{Client, ClientMap};
 
-use code_grant::frontend::{AuthorizationFlow, GrantFlow};
+use endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
+use frontends::simple::extensions::{Extended, Pkce, System};
+use frontends::simple::endpoint::{Generic, Error, Vacant};
 
-use super::{Allow, CraftedRequest, CraftedResponse, TestGenerator, ToSingleValueQuery};
+use super::{Allow, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::defaults::*;
 
 struct PkceSetup {
     registrar: ClientMap,
-    authorizer: Storage<TestGenerator>,
+    authorizer: AuthMap<TestGenerator>,
     issuer: TokenMap<RandomGenerator>,
     auth_token: String,
     verifier: String,
@@ -27,7 +31,7 @@ impl PkceSetup {
         registrar.register_client(client);
 
         let token = "ExampleAuthorizationToken".to_string();
-        let authorizer = Storage::new(TestGenerator(token.clone()));
+        let authorizer = AuthMap::new(TestGenerator(token.clone()));
         let issuer = TokenMap::new(RandomGenerator::new(16));
 
         PkceSetup {
@@ -41,45 +45,62 @@ impl PkceSetup {
         }
     }
 
+    fn allowing_endpoint(&mut self) -> impl Endpoint<CraftedRequest, Error=Error<CraftedRequest>> + '_ {
+        let pkce_extension = Rc::new(Pkce::required());
+        let extensions = System::from(vec![pkce_extension.clone()], vec![pkce_extension]);
+
+        let endpoint = Generic {
+            registrar: &self.registrar,
+            authorizer: &mut self.authorizer,
+            issuer: &mut self.issuer,
+            scopes: Vacant,
+            solicitor: Allow(EXAMPLE_OWNER_ID.to_string()),
+            response: Vacant,
+        };
+        Extended::extend_with(endpoint, extensions)
+    }
+
     fn test_correct_access(&mut self, auth_request: CraftedRequest, access_request: CraftedRequest) {
-        use code_grant::extensions::Pkce;
+        let mut endpoint = self.allowing_endpoint();
 
-        let pkce_extension = Pkce::required();
-
-        match AuthorizationFlow::new(&self.registrar, &mut self.authorizer)
-                .with_extension(&pkce_extension)
-                .handle(auth_request)
-                .complete(Allow(EXAMPLE_OWNER_ID.to_string())) {
-            Ok(ref _response) => (),
-            resp => panic!("Expected non-error reponse, got {:?}", resp),
+        {
+            let mut flow = AuthorizationFlow::prepare(&mut endpoint).unwrap_or_else(
+                |_| panic!("Not violating any requirements on authorization flow."));
+            match flow.execute(auth_request) {
+                Ok(ref _response) => (),
+                resp => panic!("Expected non-error reponse, got {:?}", resp),
+            }
         }
 
-        match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
-                .with_extension(&pkce_extension)
-                .handle(access_request) {
-            Ok(ref _response) => (),
-            resp => panic!("Expected non-error reponse, got {:?}", resp),
+        {
+            let mut flow = AccessTokenFlow::prepare(&mut endpoint).unwrap_or_else(
+                |_| panic!("Not violating any requirements on authorization flow."));
+            match flow.execute(access_request) {
+                Ok(ref _response) => (),
+                resp => panic!("Expected non-error reponse, got {:?}", resp),
+            }
         }
     }
 
     fn test_failed_verification(&mut self, auth_request: CraftedRequest, access_request: CraftedRequest) {
-        use code_grant::extensions::Pkce;
+        let mut endpoint = self.allowing_endpoint();
 
-        let pkce_extension = Pkce::required();
-
-        match AuthorizationFlow::new(&self.registrar, &mut self.authorizer)
-                .with_extension(&pkce_extension)
-                .handle(auth_request)
-                .complete(Allow(EXAMPLE_OWNER_ID.to_string())) {
-            Ok(ref _response) => (),
-            resp => panic!("Expected non-error reponse, got {:?}", resp),
+        {
+            let mut flow = AuthorizationFlow::prepare(&mut endpoint).unwrap_or_else(
+                |_| panic!("Not violating any requirements on authorization flow."));
+            match flow.execute(auth_request) {
+                Ok(ref _response) => (),
+                resp => panic!("Expected non-error reponse, got {:?}", resp),
+            }
         }
 
-        match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
-                .with_extension(&pkce_extension)
-                .handle(access_request) {
-            Ok(CraftedResponse::ClientError(_)) => (),
-            resp => panic!("Expected non-error reponse, got {:?}", resp),
+        {
+            let mut flow = AccessTokenFlow::prepare(&mut endpoint).unwrap_or_else(
+                |_| panic!("Not violating any requirements on authorization flow."));
+            match flow.execute(access_request) {
+                Ok(ref response) if response.status == Status::BadRequest => (),
+                resp => panic!("Expected non-error reponse, got {:?}", resp),
+            }
         }
     }
 }
