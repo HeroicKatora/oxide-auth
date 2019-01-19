@@ -60,6 +60,7 @@ impl PkceSetup {
             solicitor: Allow(EXAMPLE_OWNER_ID.to_string()),
             response: Vacant,
         };
+
         Extended::extend_with(endpoint, extensions)
     }
 
@@ -107,7 +108,8 @@ impl PkceSetup {
             assert!(response.www_authenticate.is_none());
             
             let body = Self::json_response(response.body);
-            assert!(!body.contains_key("error"));
+            // https://tools.ietf.org/html/rfc7636#section-4.6
+            assert_eq!(body.get("error"), Some(&"invalid_request".into()));
         }
     }
 

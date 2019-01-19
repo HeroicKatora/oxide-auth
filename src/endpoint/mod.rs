@@ -46,11 +46,14 @@ pub use primitives::issuer::Issuer;
 pub use primitives::registrar::Registrar;
 pub use primitives::scope::Scope;
 
-use code_grant::authorization::ErrorUrl;
 use code_grant::resource::{Error as ResourceError};
 use code_grant::error::{AuthorizationError, AccessTokenError};
 
 use url::Url;
+
+// Re-export the extension traits under prefixed names.
+pub use code_grant::authorization::Extension as AuthorizationExtension;
+pub use code_grant::accesstoken::Extension as AccessTokenExtension;
 
 pub use primitives::registrar::PreGrant;
 pub use self::authorization::*;
@@ -160,9 +163,6 @@ enum InnerTemplate<'a> {
     Ok,
 }
 
-/// An error occuring during authorization, convertible to the redirect url with which to respond.
-pub struct ErrorRedirect(ErrorUrl);
-
 /// Checks consent with the owner of a resource, identified in a request.
 pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
@@ -233,8 +233,14 @@ pub trait WebResponse {
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error>;
 }
 
-pub trait Addon {
+pub trait Extension {
+    fn authorization(&mut self) -> Option<&mut AuthorizationExtension> {
+        None
+    }
 
+    fn access_token(&mut self) -> Option<&mut AccessTokenExtension> {
+        None
+    }
 }
 
 /// Fuses requests and primitives into a coherent system to give a response.
@@ -302,7 +308,7 @@ pub trait Endpoint<Request: WebRequest> {
     /// Wrap an error in the request/response types.
     fn web_error(&mut self, err: Request::Error) -> Self::Error;
 
-    fn addon(&mut self) -> Option<&mut Addon> {
+    fn extension(&mut self) -> Option<&mut Extension> {
         None
     }
 }
@@ -428,17 +434,13 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     fn web_error(&mut self, err: R::Error) -> Self::Error {
         (**self).web_error(err)
     }
-}
 
-impl Addon for () {
-
-}
-
-impl Into<Url> for ErrorRedirect {
-    fn into(self) -> Url {
-        self.0.into()
+    fn extension(&mut self) -> Option<&mut Extension> {
+        (**self).extension()
     }
 }
+
+impl Extension for () { }
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for &'a mut S {
     fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {

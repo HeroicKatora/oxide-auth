@@ -1,14 +1,17 @@
-use endpoint::{Endpoint, OAuthError, OwnerSolicitor, Scopes, Template, WebRequest};
+use endpoint::{Endpoint, Extension, OAuthError, OwnerSolicitor, Scopes, Template, WebRequest};
 use primitives::authorizer::Authorizer;
 use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
 
-use super::System;
+use super::{
+    AuthorizationExtension as AuthorizationAddon,
+    AccessTokenExtension as AccessTokenAddon,
+    System};
 
 /// An inner endpoint with simple extensions.
-pub struct Extended<Inner, Addon> {
+pub struct Extended<Inner, Extension> {
     inner: Inner,
-    addon: Addon,
+    addons: Extension,
 }
 
 impl<Inner, Auth, Acc> Extended<Inner, System<Auth, Acc>> {
@@ -16,32 +19,34 @@ impl<Inner, Auth, Acc> Extended<Inner, System<Auth, Acc>> {
     pub fn new(inner: Inner) -> Self {
         Extended {
             inner,
-            addon: System::default(),
+            addons: System::default(),
         }
     }
 }
 
-impl<Inner, A> Extended<Inner, A> {
-    pub fn extend_with(inner: Inner, addon: A) -> Self {
+impl<Inner, E> Extended<Inner, E> {
+    pub fn extend_with(inner: Inner, extension: E) -> Self {
         Extended {
             inner,
-            addon,
+            addons: extension,
         }
     }
 
-    pub fn addon(&self) -> &A {
-        &self.addon
+    pub fn extension(&self) -> &E {
+        &self.addons
     }
 
-    pub fn addon_mut(&mut self) -> &mut A {
-        &mut self.addon
+    pub fn extension_mut(&mut self) -> &mut E {
+        &mut self.addons
     }
 }
 
 impl<Request, Inner, Auth, Acc> Endpoint<Request> for Extended<Inner, System<Auth, Acc>>
 where
     Request: WebRequest,
-    Inner: Endpoint<Request> 
+    Inner: Endpoint<Request>,
+    Auth: AuthorizationAddon,
+    Acc: AccessTokenAddon,
 {
     type Error = Inner::Error;
 
@@ -77,5 +82,9 @@ where
 
     fn web_error(&mut self, err: Request::Error) -> Self::Error {
         self.inner.web_error(err)
+    }
+
+    fn extension(&mut self) -> Option<&mut Extension> {
+        Some(&mut self.addons)
     }
 }

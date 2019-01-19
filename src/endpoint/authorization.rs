@@ -260,7 +260,9 @@ impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorizati
     }
 
     fn extension(&mut self) -> &mut Extension {
-        &mut self.extension_fallback
+        self.inner.extension()
+            .and_then(|ext| ext.authorization())
+            .unwrap_or(&mut self.extension_fallback)
     }
 }
 

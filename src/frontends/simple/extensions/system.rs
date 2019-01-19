@@ -7,6 +7,7 @@ use super::{
     ExtensionResult};
 use code_grant::accesstoken::{Extension as AccessTokenExtension, Request};
 use code_grant::authorization::{Extension as AuthorizationExtension, Request as AuthRequest};
+use endpoint::Extension;
 use primitives::grant::Extensions;
 
 /// A simple system providing extensions to authorization and access token requests.
@@ -59,6 +60,20 @@ impl<Auth, Acc> System<Auth, Acc> {
 impl<Auth, Acc> Default for System<Auth, Acc> {
     fn default() -> Self {
         System::new()
+    }
+}
+
+impl<Auth, Acc> Extension for System<Auth, Acc>
+where 
+    Auth: AuthorizationAddon,
+    Acc: AccessTokenAddon,
+{
+    fn authorization(&mut self) -> Option<&mut AuthorizationExtension> {
+        Some(self)
+    }
+
+    fn access_token(&mut self) -> Option<&mut AccessTokenExtension> {
+        Some(self)
     }
 }
 

@@ -144,7 +144,9 @@ impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
     }
 
     fn extension(&mut self) -> &mut Extension {
-        &mut self.extension_fallback
+        self.inner.extension()
+            .and_then(|ext| ext.access_token())
+            .unwrap_or(&mut self.extension_fallback)
     }
 }
 
