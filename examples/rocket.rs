@@ -72,7 +72,7 @@ here</a> to begin the authorization process.
         .to_resource()
         .execute(oauth);
     match protect {
-        Ok(()) => Ok("Hello, world"),
+        Ok(_grant) => Ok("Hello, world"),
         Err(Ok(response)) => {
             let error = Response::build_from(response)
                 .header(ContentType::HTML)

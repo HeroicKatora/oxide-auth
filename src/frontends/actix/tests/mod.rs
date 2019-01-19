@@ -174,7 +174,7 @@ fn future_resource() {
         MapErr::response(response, NoError::into::<OAuthError>)));
 
     let () = match result {
-        Ok(()) => (),
+        Ok(_grant) => (),
         Err(ResourceProtection::Respond(resp)) => panic!("Should not be a response: {:?}", resp.into_inner()),
         Err(ResourceProtection::Error(err)) => panic!("Should not be an oauth error: {:?}", err),
     };

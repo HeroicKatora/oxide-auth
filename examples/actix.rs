@@ -108,7 +108,8 @@ pub fn main() {
                             state.scopes,
                             request,
                             OAuthResponse::default()))
-                    .map(|()| HttpResponse::Ok()
+                    // Any accepted grant is good enough.
+                    .map(|_grant| HttpResponse::Ok()
                         .content_type("text/plain")
                         .body("Hello world!"))
                     .or_else(|result| match result {

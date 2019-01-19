@@ -1,6 +1,7 @@
 //! Provides a configurable actor with the functionality of a code grant frontend.
 use endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow};
 use endpoint::{Endpoint, WebRequest};
+use primitives::grant::Grant;
 
 use super::actix::{Actor, Context, Handler};
 use super::message::{AccessToken, AuthorizationCode, Resource};
@@ -48,7 +49,7 @@ where
     W::Response: Send + Sync + 'static,
     E: Send + Sync + 'static,
 {
-    type Result = Result<(), ResourceProtection<W::Response>>;
+    type Result = Result<Grant, ResourceProtection<W::Response>>;
 
     fn handle(&mut self, msg: Resource<W>, _: &mut Self::Context) -> Self::Result {
         let result = ResourceFlow::prepare(&mut self.0)
@@ -56,7 +57,7 @@ where
             .execute(msg.0);
 
         match result {
-            Ok(()) => Ok(()),
+            Ok(grant) => Ok(grant),
             Err(Ok(response)) => Err(ResourceProtection::Respond(response)),
             Err(Err(error)) => Err(ResourceProtection::Error(error)),
         }

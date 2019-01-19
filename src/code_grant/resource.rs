@@ -4,8 +4,8 @@ use std::fmt;
 use chrono::Utc;
 
 use primitives::issuer::Issuer;
+use primitives::grant::Grant;
 use primitives::scope::Scope;
-
 
 /// Gives additional information about the reason for an access failure.
 ///
@@ -104,7 +104,7 @@ pub trait Endpoint {
 }
 
 /// The result will indicate whether the resource access should be allowed or not.
-pub fn protect(handler: &mut Endpoint, req: &Request) -> Result<()> {
+pub fn protect(handler: &mut Endpoint, req: &Request) -> Result<Grant> {
     let authenticate = Authenticate {
         realm: None,
         scope: handler.scopes().get(0).cloned(),
@@ -162,7 +162,7 @@ pub fn protect(handler: &mut Endpoint, req: &Request) -> Result<()> {
         });
     }
 
-    return Ok(())
+    return Ok(grant)
 }
 
 impl ErrorCode {

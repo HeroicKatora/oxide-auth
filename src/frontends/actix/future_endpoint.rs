@@ -86,7 +86,7 @@ pub fn resource<I, W, C>(
     request: W,
     response: W::Response
 )
-    -> Box<Future<Item=(), Error=ResourceProtection<W::Response>> + 'static>
+    -> Box<Future<Item=Grant, Error=ResourceProtection<W::Response>> + 'static>
 where
     I: Issuer + 'static,
     C: Scopes<W> + 'static,
@@ -563,7 +563,7 @@ where
     C: Scopes<W>,
     W::Error: From<OAuthError>,
 {
-    type Item = ();
+    type Item = Grant;
     type Error = ResourceProtection<W::Response>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -588,7 +588,7 @@ where
 
         // Weed out the terminating results.
         let err = match result {
-            Ok(()) => return Ok(Async::Ready(())),
+            Ok(grant) => return Ok(Async::Ready(grant)),
             Err(err) => err,
         };
 

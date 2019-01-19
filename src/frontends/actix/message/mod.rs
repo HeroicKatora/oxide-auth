@@ -11,6 +11,7 @@ use super::actix::prelude::Message;
 
 use super::ResourceProtection;
 use super::request::{OAuthRequest as ResolvedRequest};
+use primitives::grant::Grant;
 use endpoint::WebRequest;
 
 pub use self::authorizer::{Authorize, Extract};
@@ -138,5 +139,5 @@ impl<W: WebRequest> Message for Resource<W>
 where
     W: Send + Sync + 'static
 {
-    type Result = Result<(), ResourceProtection<W::Response>>;
+    type Result = Result<Grant, ResourceProtection<W::Response>>;
 }

@@ -12,6 +12,11 @@ according migration note.
 This document is independent of the [release notes](Changes.md).
 
 ## v0.4.0-rc.0 [WIP]
+Bearer authorization provided by `code_grant::resource` and
+`endpoint::ResourceFlow` now returns the extracted `Grant` associated with an
+authorized request.  Therefore, additional logic based is safely enabled in the
+successful case.
+
 `code_grant::endpoint` has been moved to a top-level module `endpoint`. This
 should hint to the fact that the code grant authorization will maybe not be the
 only supported method.

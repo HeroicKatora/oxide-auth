@@ -5,6 +5,7 @@ use code_grant::resource::{
     Error as ResourceError,
     Endpoint as ResourceEndpoint,
     Request as ResourceRequest};
+use primitives::grant::Grant;
 
 use super::*;
 
@@ -62,7 +63,7 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     ///
     /// When the issuer returned by the endpoint is suddenly `None` when previously it 
     /// was `Some(_)`.
-    pub fn execute(&mut self, mut request: R) -> Result<(), Result<R::Response, E::Error>> {
+    pub fn execute(&mut self, mut request: R) -> Result<Grant, Result<R::Response, E::Error>> {
         let protected = {
             let wrapped = WrappedRequest::new(&mut request);
 
