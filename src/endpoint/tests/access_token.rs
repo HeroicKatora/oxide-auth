@@ -118,6 +118,48 @@ impl AccessTokenSetup {
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
     }
+
+    fn test_success(&mut self, request: CraftedRequest) {
+        let response = access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer)
+            .execute(request)
+            .expect("Expected non-error reponse");
+        assert_eq!(response.status, Status::Ok);
+    }
+}
+
+#[test]
+fn access_valid_public() {
+    let mut setup = AccessTokenSetup::public_client();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI)]
+            .iter().to_single_value_query()),
+        auth: None,
+    };
+
+    setup.test_success(valid_public);
+}
+
+#[test]
+fn access_valid_private() {
+    let mut setup = AccessTokenSetup::private_client();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI)]
+            .iter().to_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_success(valid_public);
 }
 
 #[test]
