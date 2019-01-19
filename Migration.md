@@ -24,9 +24,12 @@ only supported method.
 The basic `gotham` frontend has been revived [WIP].
 
 Extensions will be implemented in such a way as to be used standalone.
-While the `simple` frontend offers some trait based `System` to make use of
+While the `simple` frontend offers some trait based `AddonList` to make use of
 multiple independent extensions at the same time, this is no longer required
-for other frontends. [WIP]
+for other frontends. The data portion of a `GrantExtension` has been renamed to
+the more unique `Value`, and the `simple` extension module extends on this
+trait to offer `AccessTokenAddon` and `AuthorizationAddon`, simple traits to
+implement only a portion of a fullblown system of extension at a time.
 
 The tests asserting the guaranteed properties on calls to `WebRequest`-methods
 by flow implementations will be written. [WIP]

@@ -7,7 +7,7 @@ use primitives::generator::RandomGenerator;
 use primitives::registrar::{Client, ClientMap};
 
 use endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
-use frontends::simple::extensions::{Extended, Pkce, System};
+use frontends::simple::extensions::{AddonList, Extended, Pkce};
 use frontends::simple::endpoint::{Generic, Error, Vacant};
 
 use super::{Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
@@ -50,7 +50,7 @@ impl PkceSetup {
 
     fn allowing_endpoint(&mut self) -> impl Endpoint<CraftedRequest, Error=Error<CraftedRequest>> + '_ {
         let pkce_extension = Rc::new(Pkce::required());
-        let extensions = System::from(vec![pkce_extension.clone()], vec![pkce_extension]);
+        let extensions = AddonList::from(vec![pkce_extension.clone()], vec![pkce_extension]);
 
         let endpoint = Generic {
             registrar: &self.registrar,

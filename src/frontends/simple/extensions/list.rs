@@ -1,23 +1,18 @@
 use std::borrow::Borrow;
 use std::sync::Arc;
 
-use super::{
-    AuthorizationExtension as AuthorizationAddon,
-    AccessTokenExtension as AccessTokenAddon,
-    ExtensionResult};
+use super::{AuthorizationAddon, AccessTokenAddon, AddonResult};
 use code_grant::accesstoken::{Extension as AccessTokenExtension, Request};
 use code_grant::authorization::{Extension as AuthorizationExtension, Request as AuthRequest};
 use endpoint::Extension;
 use primitives::grant::Extensions;
 
-/// A simple system providing extensions to authorization and access token requests.
-///
-/// This extension system is suitable to group mostly unrelated extensions together.
+/// A simple list of loosly related authorization and access addons.
 ///
 /// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
 /// other types.
 #[derive(Debug)]
-pub struct System<
+pub struct AddonList<
     Authorization=Arc<AuthorizationAddon>,
     AccessToken=Arc<AccessTokenAddon>> 
 {
@@ -25,10 +20,10 @@ pub struct System<
     access_token: Vec<AccessToken>,
 }
 
-impl<Auth, Acc> System<Auth, Acc> {
+impl<Auth, Acc> AddonList<Auth, Acc> {
     /// Create an empty extension system.
     pub fn new() -> Self {
-        System {
+        AddonList {
             authorization: vec![],
             access_token: vec![],
         }
@@ -40,7 +35,7 @@ impl<Auth, Acc> System<Auth, Acc> {
         I: IntoIterator<Item=Auth>,
         K: IntoIterator<Item=Acc>,
     {
-        System {
+        AddonList {
             authorization: authorization_addons.into_iter().collect(),
             access_token: access_addons.into_iter().collect(),
         }
@@ -57,13 +52,13 @@ impl<Auth, Acc> System<Auth, Acc> {
     }
 }
 
-impl<Auth, Acc> Default for System<Auth, Acc> {
+impl<Auth, Acc> Default for AddonList<Auth, Acc> {
     fn default() -> Self {
-        System::new()
+        AddonList::new()
     }
 }
 
-impl<Auth, Acc> Extension for System<Auth, Acc>
+impl<Auth, Acc> Extension for AddonList<Auth, Acc>
 where 
     Auth: AuthorizationAddon,
     Acc: AccessTokenAddon,
@@ -77,7 +72,7 @@ where
     }
 }
 
-impl<Auth, Acc> AccessTokenExtension for System<Auth, Acc>
+impl<Auth, Acc> AccessTokenExtension for AddonList<Auth, Acc>
 where
     Acc: AccessTokenAddon,
 {
@@ -88,12 +83,12 @@ where
             let raw = ext.borrow();
 
             let ext_data = data.remove(&raw);            
-            let result = raw.extend_access_token(request, ext_data);
+            let result = raw.execute(request, ext_data);
 
             match result {
-                ExtensionResult::Ok => (),
-                ExtensionResult::Data(data) => result_data.set(&raw, data),
-                ExtensionResult::Err => return Err(()),
+                AddonResult::Ok => (),
+                AddonResult::Data(data) => result_data.set(&raw, data),
+                AddonResult::Err => return Err(()),
             }
         }
 
@@ -101,7 +96,7 @@ where
     }
 }
 
-impl<Auth, Acc> AuthorizationExtension for System<Auth, Acc>
+impl<Auth, Acc> AuthorizationExtension for AddonList<Auth, Acc>
 where
     Auth: AuthorizationAddon,
 {
@@ -110,12 +105,12 @@ where
 
         for ext in self.authorization.iter() {
             let raw = ext.borrow();
-            let result = raw.extend_code(request);
+            let result = raw.execute(request);
 
             match result {
-                ExtensionResult::Ok => (),
-                ExtensionResult::Data(data) => result_data.set(&raw, data),
-                ExtensionResult::Err => return Err(()),
+                AddonResult::Ok => (),
+                AddonResult::Data(data) => result_data.set(&raw, data),
+                AddonResult::Err => return Err(()),
             }
         }
 

@@ -3,10 +3,7 @@ use primitives::authorizer::Authorizer;
 use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
 
-use super::{
-    AuthorizationExtension as AuthorizationAddon,
-    AccessTokenExtension as AccessTokenAddon,
-    System};
+use super::{AuthorizationAddon, AccessTokenAddon, AddonList};
 
 /// An inner endpoint with simple extensions.
 pub struct Extended<Inner, Extension> {
@@ -14,12 +11,12 @@ pub struct Extended<Inner, Extension> {
     addons: Extension,
 }
 
-impl<Inner, Auth, Acc> Extended<Inner, System<Auth, Acc>> {
+impl<Inner, Auth, Acc> Extended<Inner, AddonList<Auth, Acc>> {
     /// Wrap an endpoint with a standard extension system.
     pub fn new(inner: Inner) -> Self {
         Extended {
             inner,
-            addons: System::default(),
+            addons: AddonList::default(),
         }
     }
 }
@@ -41,7 +38,7 @@ impl<Inner, E> Extended<Inner, E> {
     }
 }
 
-impl<Request, Inner, Auth, Acc> Endpoint<Request> for Extended<Inner, System<Auth, Acc>>
+impl<Request, Inner, Auth, Acc> Endpoint<Request> for Extended<Inner, AddonList<Auth, Acc>>
 where
     Request: WebRequest,
     Inner: Endpoint<Request>,

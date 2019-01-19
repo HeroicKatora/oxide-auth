@@ -1,30 +1,30 @@
-use super::{AuthorizationExtension, AuthorizationRequest, AccessTokenExtension, AccessTokenRequest};
-use super::{ExtensionData, ExtensionResult};
+use super::{AuthorizationAddon, AuthorizationRequest, AccessTokenAddon, AccessTokenRequest};
+use super::{AddonResult, Value};
 
 pub use code_grant::extensions::Pkce;
 
-impl AuthorizationExtension for Pkce {
-    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
+impl AuthorizationAddon for Pkce {
+    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
         let method = request.extension("code_challenge_method");
         let challenge = request.extension("code_challenge");
 
         let encoded = match self.challenge(method, challenge) {
-            Err(()) => return ExtensionResult::Err,
-            Ok(None) => return ExtensionResult::Ok,
+            Err(()) => return AddonResult::Err,
+            Ok(None) => return AddonResult::Ok,
             Ok(Some(encoded)) => encoded,
         };
 
-        ExtensionResult::Data(encoded)
+        AddonResult::Data(encoded)
     }
 }
 
-impl AccessTokenExtension for Pkce {
-    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
+impl AccessTokenAddon for Pkce {
+    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
         let verifier = request.extension("code_verifier");
 
         match self.verify(data, verifier) {
-            Ok(_) => ExtensionResult::Ok,
-            Err(_) => ExtensionResult::Err,
+            Ok(_) => AddonResult::Ok,
+            Err(_) => AddonResult::Err,
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use primitives::grant::{GrantExtension, Extension as ExtensionData};
+use primitives::grant::{GrantExtension, Value};
 
 use base64;
 use ring::digest::{SHA256, digest};
@@ -72,7 +72,7 @@ impl Pkce {
     /// trivial for a third party to impersonate the client in the access token request phase. For
     /// a SHA256 methods the results would not be quite as severe but still bad practice.
     pub fn challenge(&self, method: Option<Cow<str>>, challenge: Option<Cow<str>>)
-        -> Result<Option<ExtensionData>, ()>
+        -> Result<Option<Value>, ()>
     {
         let method = method.unwrap_or(Cow::Borrowed("plain"));
 
@@ -85,7 +85,7 @@ impl Pkce {
         let method = Method::from_parameter(method, challenge)?;
         let method = method.assert_supported_method(self.allow_plain)?;
 
-        Ok(Some(ExtensionData::private(Some(method.encode()))))
+        Ok(Some(Value::private(Some(method.encode()))))
     }
 
     /// Verify against the encoded challenge.
@@ -96,8 +96,7 @@ impl Pkce {
     ///
     /// When a challenge was agreed upon but no verifier is present, this method will return an
     /// error.
-    pub fn verify(&self, method: Option<ExtensionData>, verifier: Option<Cow<str>>)
-        -> Result<(), ()>
+    pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), ()>
     {
         let (method, verifier) = match (method, verifier) {
             (None, _) if self.required => return Err(()),

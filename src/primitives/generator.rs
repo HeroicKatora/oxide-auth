@@ -9,7 +9,7 @@
 //!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
 //!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
 //!     is not currently expressed in the type system or with traits.
-use super::grant::{Extension, Extensions, Grant};
+use super::grant::{Value, Extensions, Grant};
 use super::{Url, Time};
 use super::scope::Scope;
 
@@ -314,7 +314,7 @@ impl SerdeAssertionGrant {
     fn grant(self) -> Grant {
         let mut extensions = Extensions::new();
         for (name, content) in self.public_extensions.into_iter() {
-            extensions.set_raw(name, Extension::public(content))
+            extensions.set_raw(name, Value::public(content))
         }
         Grant {
             owner_id: self.owner_id,

@@ -6,7 +6,7 @@ pub use code_grant::accesstoken::Request as AccessTokenRequest;
 
 mod extended;
 mod pkce;
-mod system;
+mod list;
 
 use std::borrow::{Cow, ToOwned};
 use std::rc::Rc;
@@ -14,25 +14,24 @@ use std::sync::Arc;
 
 pub use self::extended::Extended;
 pub use self::pkce::Pkce;
-pub use self::system::System;
-use primitives::grant::{Extension as ExtensionData, GrantExtension};
+pub use self::list::AddonList;
+use primitives::grant::{GrantExtension, Value};
 
 /// Result of extension processing.
-/// FIXME: think of a better name.
 #[must_use="This type is similar to std::result::Result and should not be ignored."]
-pub enum ExtensionResult {
+pub enum AddonResult {
     /// Allow the request unchanged.
     Ok,
 
     /// Allow the request and attach additional data to the response.
-    Data(ExtensionData),
+    Data(Value),
 
     /// Do not permit the request.
     Err,
 }
 
 /// An extension reacting to an initial authorization code request.
-pub trait AuthorizationExtension: GrantExtension {
+pub trait AuthorizationAddon: GrantExtension {
     /// Provides data for this request or signals faulty data.
     ///
     /// There may be two main types of extensions:
@@ -43,82 +42,80 @@ pub trait AuthorizationExtension: GrantExtension {
     /// encoded form by returning `Ok(extension_data)` while errors can be signaled via `Err(())`.
     /// Extensions can also store their pure existance by initializing the extension struct without
     /// data. Specifically, the data can be used in a corresponding `AccessTokenExtension`.
-    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult;
+    fn execute(&self, request: &AuthorizationRequest) -> AddonResult;
 }
 
 /// An extension reacting to an access token request with a provided access token.
-pub trait AccessTokenExtension: GrantExtension {
+pub trait AccessTokenAddon: GrantExtension {
     /// Process an access token request, utilizing the extensions stored data if any.
     ///
     /// The semantics are equivalent to that of `CodeExtension` except that any data which was
     /// returned as a response to the authorization code request is provided as an additional
     /// parameter.
-    fn extend_access_token(&self, request: &AccessTokenRequest, code_data: Option<ExtensionData>)
-        -> ExtensionResult;
+    fn execute(&self, request: &AccessTokenRequest, code_data: Option<Value>) -> AddonResult;
 }
 
-impl<'a, T: AuthorizationExtension + ?Sized> AuthorizationExtension for &'a T {
-    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
-        (**self).extend_code(request)
+impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for &'a T {
+    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+        (**self).execute(request)
     }
 }
 
-impl<'a, T: AuthorizationExtension + ?Sized> AuthorizationExtension for Cow<'a, T> 
+impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for Cow<'a, T> 
     where T: Clone + ToOwned
 {
-    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
-        self.as_ref().extend_code(request)
+    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+        self.as_ref().execute(request)
     }
 }
 
-impl<T: AuthorizationExtension + ?Sized> AuthorizationExtension for Box<T> {
-    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
-        (**self).extend_code(request)
+impl<T: AuthorizationAddon + ?Sized> AuthorizationAddon for Box<T> {
+    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+        (**self).execute(request)
     }
 }
 
-impl<T: AuthorizationExtension + ?Sized> AuthorizationExtension for Arc<T> {
-    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
-        (**self).extend_code(request)
+impl<T: AuthorizationAddon + ?Sized> AuthorizationAddon for Arc<T> {
+    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+        (**self).execute(request)
     }
 }
 
-impl<T: AuthorizationExtension + ?Sized> AuthorizationExtension for Rc<T> {
-    fn extend_code(&self, request: &AuthorizationRequest) -> ExtensionResult {
-        (**self).extend_code(request)
+impl<T: AuthorizationAddon + ?Sized> AuthorizationAddon for Rc<T> {
+    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+        (**self).execute(request)
     }
 }
 
 
-
-impl<'a, T: AccessTokenExtension + ?Sized> AccessTokenExtension for &'a T {
-    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
-        (**self).extend_access_token(request, data)
+impl<'a, T: AccessTokenAddon + ?Sized> AccessTokenAddon for &'a T {
+    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+        (**self).execute(request, data)
     }
 }
 
-impl<'a, T: AccessTokenExtension + ?Sized> AccessTokenExtension for Cow<'a, T> 
+impl<'a, T: AccessTokenAddon + ?Sized> AccessTokenAddon for Cow<'a, T> 
     where T: Clone + ToOwned
 {
-    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
-        self.as_ref().extend_access_token(request, data)
+    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+        self.as_ref().execute(request, data)
     }
 }
 
-impl<T: AccessTokenExtension + ?Sized> AccessTokenExtension for Box<T> {
-    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
-        (**self).extend_access_token(request, data)
+impl<T: AccessTokenAddon + ?Sized> AccessTokenAddon for Box<T> {
+    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+        (**self).execute(request, data)
     }
 }
 
-impl<T: AccessTokenExtension + ?Sized> AccessTokenExtension for Arc<T> {
-    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
-        (**self).extend_access_token(request, data)
+impl<T: AccessTokenAddon + ?Sized> AccessTokenAddon for Arc<T> {
+    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+        (**self).execute(request, data)
     }
 }
 
-impl<T: AccessTokenExtension + ?Sized> AccessTokenExtension for Rc<T> {
-    fn extend_access_token(&self, request: &AccessTokenRequest, data: Option<ExtensionData>) -> ExtensionResult {
-        (**self).extend_access_token(request, data)
+impl<T: AccessTokenAddon + ?Sized> AccessTokenAddon for Rc<T> {
+    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+        (**self).execute(request, data)
     }
 }
