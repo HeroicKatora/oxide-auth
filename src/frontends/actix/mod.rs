@@ -22,6 +22,7 @@ use self::actix_web::ResponseError;
 
 // pub use self::endpoint::CodeGrantEndpoint;
 pub use endpoint::{PreGrant, OAuthError, OwnerConsent, OwnerSolicitor};
+pub use primitives::grant::Grant;
 pub use self::request::OAuthFuture;
 pub use self::request::OAuthRequest;
 pub use self::request::OAuthResponse;

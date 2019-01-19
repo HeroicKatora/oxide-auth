@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::collections::HashMap;
 
 use primitives::authorizer::AuthMap;
 use primitives::issuer::TokenMap;
@@ -9,8 +10,10 @@ use endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
 use frontends::simple::extensions::{Extended, Pkce, System};
 use frontends::simple::endpoint::{Generic, Error, Vacant};
 
-use super::{Allow, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
+use super::{Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::defaults::*;
+
+use serde_json;
 
 struct PkceSetup {
     registrar: ClientMap,
@@ -66,19 +69,21 @@ impl PkceSetup {
         {
             let mut flow = AuthorizationFlow::prepare(&mut endpoint).unwrap_or_else(
                 |_| panic!("Not violating any requirements on authorization flow."));
-            match flow.execute(auth_request) {
-                Ok(ref _response) => (),
-                resp => panic!("Expected non-error reponse, got {:?}", resp),
-            }
+            let response = flow.execute(auth_request)
+                .expect("Expected no flow execution error");
+            Self::assert_nonerror_redirect(response);
         }
 
         {
             let mut flow = AccessTokenFlow::prepare(&mut endpoint).unwrap_or_else(
                 |_| panic!("Not violating any requirements on authorization flow."));
-            match flow.execute(access_request) {
-                Ok(ref _response) => (),
-                resp => panic!("Expected non-error reponse, got {:?}", resp),
-            }
+            let response = flow.execute(access_request)
+                .expect("Expected no flow execution error");
+            assert_eq!(response.status, Status::Ok, "Expected access token in response");
+            assert!(response.www_authenticate.is_none());
+            
+            let body = Self::json_response(response.body);
+            assert!(!body.contains_key("error"));
         }
     }
 
@@ -88,20 +93,37 @@ impl PkceSetup {
         {
             let mut flow = AuthorizationFlow::prepare(&mut endpoint).unwrap_or_else(
                 |_| panic!("Not violating any requirements on authorization flow."));
-            match flow.execute(auth_request) {
-                Ok(ref _response) => (),
-                resp => panic!("Expected non-error reponse, got {:?}", resp),
-            }
+            let response = flow.execute(auth_request)
+                .expect("Expected no flow execution error");
+            Self::assert_nonerror_redirect(response);
         }
 
         {
             let mut flow = AccessTokenFlow::prepare(&mut endpoint).unwrap_or_else(
                 |_| panic!("Not violating any requirements on authorization flow."));
-            match flow.execute(access_request) {
-                Ok(ref response) if response.status == Status::BadRequest => (),
-                resp => panic!("Expected non-error reponse, got {:?}", resp),
-            }
+            let response = flow.execute(access_request)
+                .expect("Expected no flow execution error");
+            assert_eq!(response.status, Status::BadRequest, "Expected failed request");
+            assert!(response.www_authenticate.is_none());
+            
+            let body = Self::json_response(response.body);
+            assert!(!body.contains_key("error"));
         }
+    }
+
+    fn assert_nonerror_redirect(response: CraftedResponse) {
+        assert_eq!(response.status, Status::Redirect, "Expected redirect to client");
+        assert!(response.location.unwrap().as_str().find("error").is_none());
+    }
+
+    fn json_response(body: Option<Body>) -> HashMap<String, String> {
+        let body = match body {
+            Some(Body::Json(content)) => content,
+            other => panic!("Expected json formated credentials, got {:?}", other),
+        };
+
+        serde_json::from_str(&body)
+            .expect("Body not json encoded")
     }
 }
 
@@ -110,11 +132,12 @@ fn pkce_correct_verifier() {
     let mut setup = PkceSetup::new();
 
     let correct_authorization = CraftedRequest {
-        query: Some(vec![("client_id", EXAMPLE_CLIENT_ID),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI),
-                         ("grant_type", "authorization_code"),
-                         ("code_challenge", &setup.sha256_challenge),
-                         ("code_challenge_method", "S256")]
+        query: Some(vec![
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                ("response_type", "code"),
+                ("code_challenge", &setup.sha256_challenge),
+                ("code_challenge_method", "S256")]
             .iter().to_single_value_query()),
         urlbody: None,
         auth: None,
@@ -122,10 +145,12 @@ fn pkce_correct_verifier() {
 
     let correct_access = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                           ("code", &setup.auth_token),
-                           ("redirect_uri", EXAMPLE_REDIRECT_URI),
-                           ("code_verifier", &setup.verifier)]
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("code", &setup.auth_token),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                ("code_verifier", &setup.verifier)]
             .iter().to_single_value_query()),
         auth: None,
     };
@@ -138,11 +163,12 @@ fn pkce_failed_verifier() {
     let mut setup = PkceSetup::new();
 
     let correct_authorization = CraftedRequest {
-        query: Some(vec![("client_id", EXAMPLE_CLIENT_ID),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI),
-                         ("grant_type", "authorization_code"),
-                         ("code_challenge", &setup.sha256_challenge),
-                         ("code_challenge_method", "S256")]
+        query: Some(vec![
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                ("response_type", "code"),
+                ("code_challenge", &setup.sha256_challenge),
+                ("code_challenge_method", "S256")]
             .iter().to_single_value_query()),
         urlbody: None,
         auth: None,
@@ -150,10 +176,12 @@ fn pkce_failed_verifier() {
 
     let correct_access = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                           ("code", &setup.auth_token),
-                           ("redirect_uri", EXAMPLE_REDIRECT_URI),
-                           ("code_verifier", "Notthecorrectverifier")]
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("code", &setup.auth_token),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                ("code_verifier", "Notthecorrectverifier")]
             .iter().to_single_value_query()),
         auth: None,
     };

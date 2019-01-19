@@ -96,7 +96,7 @@ pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub W);
 /// # extern crate actix_web;
 /// # extern crate futures;
 /// # extern crate oxide_auth;
-/// use oxide_auth::frontends::actix::{OAuth, OAuthError, OAuthResponse, ResourceProtection};
+/// use oxide_auth::frontends::actix::{Grant, OAuth, OAuthError, OAuthResponse, ResourceProtection};
 /// use oxide_auth::frontends::actix::message::Resource;
 /// # use oxide_auth::frontends::actix::request::OAuthRequest;
 /// # use actix::Recipient;
@@ -105,7 +105,7 @@ pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub W);
 /// # fn main() {
 ///
 /// fn handle(request: HttpRequest, recipient: Recipient<Resource>)
-///     -> impl Future<Item=(), Error=ResourceProtection<OAuthResponse>>
+///     -> impl Future<Item=Grant, Error=ResourceProtection<OAuthResponse>>
 /// {
 ///     request.oauth2()
 ///         .map_err(ResourceProtection::Error)
