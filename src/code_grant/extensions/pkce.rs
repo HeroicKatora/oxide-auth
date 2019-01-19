@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use primitives::grant::{GrantExtension, Extension as ExtensionData};
 
-use base64::encode as b64encode;
+use base64;
 use ring::digest::{SHA256, digest};
 use ring::constant_time::verify_slices_are_equal;
 
@@ -122,6 +122,11 @@ impl GrantExtension for Pkce {
     fn identifier(&self) -> &'static str {
         "pkce"
     }
+}
+
+/// Base 64 encoding without padding
+fn b64encode(data: &[u8]) -> String {
+    base64::encode_config(data, base64::URL_SAFE_NO_PAD)
 }
 
 impl Method {
