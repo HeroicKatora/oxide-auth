@@ -2,8 +2,11 @@
 use super::{Url, Time};
 use super::scope::Scope;
 
+use std::borrow::{Cow, ToOwned};
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
+use std::rc::Rc;
+use std::sync::Arc;
 
 /// Provides a name registry for extensions.
 pub trait GrantExtension {
@@ -21,8 +24,8 @@ pub trait GrantExtension {
 ///
 /// Some extensions have semantics where the presence alone is the stored data, so storing data
 /// is optional and storing no data is distinct from not attaching any extension instance at all.
-#[derive(Clone, PartialEq, Eq)]
-pub enum Extension {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Value {
     /// An extension that the token owner is allowed to read and interpret.
     Public(Option<String>),
 
@@ -37,16 +40,16 @@ pub enum Extension {
 ///
 /// This also serves as a clean interface for both frontend and backend to reliably and
 /// conveniently manipulate or query the stored data sets.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Extensions {
-    extensions: HashMap<String, Extension>,
+    extensions: HashMap<String, Value>,
 }
 
 /// Owning copy of a grant.
 ///
 /// This can be stored in a database without worrying about lifetimes or shared across thread
 /// boundaries. A reference to this can be converted to a purely referential `GrantRef`.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Grant {
     /// Identifies the owner of the resource.
     pub owner_id: String,
@@ -68,27 +71,27 @@ pub struct Grant {
     pub extensions: Extensions,
 }
 
-impl Extension {
+impl Value {
     /// Creates an extension whose presence and content can be unveiled by the token holder.
     ///
     /// Anyone in possession of the token corresponding to such a grant is potentially able to read
     /// the content of a public extension.
-    pub fn public(content: Option<String>) -> Extension {
-        Extension::Public(content)
+    pub fn public(content: Option<String>) -> Self {
+        Value::Public(content)
     }
 
     /// Creates an extension with secret content only visible for the server.
     ///
     /// Token issuers should take special care to protect the content and the identifier of such
     /// an extension from being interpreted or correlated by the token holder.
-    pub fn private(content: Option<String>) -> Extension {
-        Extension::Private(content)
+    pub fn private(content: Option<String>) -> Value {
+        Value::Private(content)
     }
 
     /// Ensures that the extension stored was created as public, returns `Err` if it was not.
     pub fn as_public(self) -> Result<Option<String>, ()> {
         match self {
-            Extension::Public(content) => Ok(content),
+            Value::Public(content) => Ok(content),
             _ => Err(())
         }
     }
@@ -96,7 +99,7 @@ impl Extension {
     /// Ensures that the extension stored was created as private, returns `Err` if it was not.
     pub fn as_private(self) -> Result<Option<String>, ()> {
         match self {
-            Extension::Private(content) => Ok(content),
+            Value::Private(content) => Ok(content),
             _ => Err(())
         }
     }
@@ -111,12 +114,12 @@ impl Extensions {
     }
 
     /// Set the stored content for a `GrantExtension` instance.
-    pub fn set(&mut self, extension: &GrantExtension, content: Extension) {
+    pub fn set(&mut self, extension: &GrantExtension, content: Value) {
         self.extensions.insert(extension.identifier().to_string(), content);
     }
 
     /// Set content for an extension without a corresponding instance.
-    pub fn set_raw(&mut self, identifier: String, content: Extension) {
+    pub fn set_raw(&mut self, identifier: String, content: Value) {
         self.extensions.insert(identifier.to_string(), content);
     }
 
@@ -124,7 +127,7 @@ impl Extensions {
     ///
     /// This removes the data from the store to avoid possible mixups and to allow a copyless
     /// retrieval of bigger data strings.
-    pub fn remove(&mut self, extension: &GrantExtension) -> Option<Extension> {
+    pub fn remove(&mut self, extension: &GrantExtension) -> Option<Value> {
         self.extensions.remove(extension.identifier())
     }
 
@@ -140,13 +143,13 @@ impl Extensions {
 }
 
 /// An iterator over the public extensions of a grant.
-pub struct PublicExtensions<'a>(Iter<'a, String, Extension>);
+pub struct PublicExtensions<'a>(Iter<'a, String, Value>);
 
 /// An iterator over the private extensions of a grant.
 ///
 /// Implementations which acquire an instance should take special not to leak any secrets to
 /// clients and third parties.
-pub struct PrivateExtensions<'a>(Iter<'a, String, Extension>);
+pub struct PrivateExtensions<'a>(Iter<'a, String, Value>);
 
 impl<'a> Iterator for PublicExtensions<'a> {
     type Item = (&'a str, Option<&'a str>);
@@ -155,7 +158,7 @@ impl<'a> Iterator for PublicExtensions<'a> {
         loop {
             match self.0.next() {
                 None => return None,
-                Some((key, &Extension::Public(ref content)))
+                Some((key, &Value::Public(ref content)))
                     => return Some((key, content.as_ref().map(|st| st.as_str()))),
                 _ => (),
             }
@@ -170,10 +173,42 @@ impl<'a> Iterator for PrivateExtensions<'a> {
         loop {
             match self.0.next() {
                 None => return None,
-                Some((key, &Extension::Private(ref content)))
+                Some((key, &Value::Private(ref content)))
                     => return Some((key, content.as_ref().map(|st| st.as_str()))),
                 _ => (),
             }
         }
+    }
+}
+
+impl<'a, T: GrantExtension + ?Sized> GrantExtension for &'a T {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
+    }
+}
+
+impl<'a, T: GrantExtension + ?Sized> GrantExtension for Cow<'a, T> 
+    where T: Clone + ToOwned
+{
+    fn identifier(&self) -> &'static str {
+        self.as_ref().identifier()
+    }
+}
+
+impl<T: GrantExtension + ?Sized> GrantExtension for Box<T> {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
+    }
+}
+
+impl<T: GrantExtension + ?Sized> GrantExtension for Arc<T> {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
+    }
+}
+
+impl<T: GrantExtension + ?Sized> GrantExtension for Rc<T> {
+    fn identifier(&self) -> &'static str {
+        (**self).identifier()
     }
 }

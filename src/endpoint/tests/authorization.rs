@@ -1,24 +1,26 @@
-use primitives::authorizer::Storage;
-use primitives::registrar::{Client, ClientMap};
-
-use code_grant::frontend::{AuthorizationFlow, OwnerAuthorizer};
-
 use std::collections::HashMap;
 
-use super::{CraftedRequest, CraftedResponse, TestGenerator, ToSingleValueQuery};
+use primitives::authorizer::AuthMap;
+use primitives::registrar::{Client, ClientMap};
+
+use endpoint::{OwnerSolicitor};
+
+use frontends::simple::endpoint::authorization_flow;
+
+use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::{Allow, Deny};
 use super::defaults::*;
 
 
 struct AuthorizationSetup {
     registrar: ClientMap,
-    authorizer: Storage<TestGenerator>,
+    authorizer: AuthMap<TestGenerator>,
 }
 
 impl AuthorizationSetup {
     fn new() -> AuthorizationSetup {
         let mut registrar = ClientMap::new();
-        let authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+        let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
@@ -31,29 +33,58 @@ impl AuthorizationSetup {
         }
     }
 
-    fn test_silent_error(&mut self, request: CraftedRequest) {
-        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer)
-            .handle(request)
-            .complete(Allow(EXAMPLE_OWNER_ID.to_string())) {
-            Ok(CraftedResponse::Redirect(url))
-                => panic!("Redirection without client id {:?}", url),
-            Ok(resp) => panic!("Response without client id {:?}", resp),
-            Err(_) => (),
-        };
+    fn test_success(&mut self, request: CraftedRequest) {
+        let response = authorization_flow(&mut self.registrar, &mut self.authorizer, &mut Allow(EXAMPLE_OWNER_ID.to_string()))
+            .execute(request)
+            .expect("Should not error");
+        
+        assert_eq!(response.status, Status::Redirect);
+
+        match response.location {
+            Some(ref url) if url.as_str().find("error").is_none() => (),
+            other => panic!("Expected successful redirect: {:?}", other),
+        }
     }
 
-    fn test_error_redirect<P>(&mut self, request: CraftedRequest, pagehandler: P)
-    where P: OwnerAuthorizer<CraftedRequest> {
-        match AuthorizationFlow::new(&mut self.registrar, &mut self.authorizer)
-            .handle(request)
-            .complete(pagehandler) {
-            Ok(CraftedResponse::RedirectFromError(ref url))
-            if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some()
-                => (),
-            resp
-                => panic!("Expected redirect with error set: {:?}", resp),
-        };
+    fn test_silent_error(&mut self, request: CraftedRequest) {
+        match authorization_flow(&mut self.registrar, &mut self.authorizer, &mut Allow(EXAMPLE_OWNER_ID.to_string()))
+            .execute(request)
+        {
+            Ok(ref resp) if resp.location.is_some() => panic!("Redirect without client id {:?}", resp),
+            Ok(resp) => panic!("Response without client id {:?}", resp),
+            Err(_) => (),
+        }
     }
+
+    fn test_error_redirect<P>(&mut self, request: CraftedRequest, mut pagehandler: P)
+        where P: OwnerSolicitor<CraftedRequest> 
+    {
+        let response = authorization_flow(&mut self.registrar, &mut self.authorizer, &mut pagehandler).execute(request);
+
+        let response = match response {
+            Err(resp) => panic!("Expected redirect with error set: {:?}", resp),
+            Ok(resp) => resp,
+        };
+
+        match response.location {
+            Some(ref url) if url.query_pairs().collect::<HashMap<_, _>>().get("error").is_some() => (),
+            other => panic!("Expected location with error set description: {:?}", other),
+        }
+    }
+}
+
+#[test]
+fn auth_success() {
+    let success = CraftedRequest {
+        query: Some(vec![("response_type", "code"),
+                         ("client_id", EXAMPLE_CLIENT_ID),
+                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
+            .iter().to_single_value_query()),
+        urlbody: None,
+        auth: None,
+    };
+
+    AuthorizationSetup::new().test_success(success);
 }
 
 #[test]

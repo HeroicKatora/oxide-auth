@@ -45,7 +45,7 @@ use std::collections::HashSet;
 ///
 /// In particular, the characters '\x22' (`"`) and '\x5c' (`\`)  are not allowed.
 ///
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Scope {
     tokens: HashSet<String>,
 }
@@ -110,8 +110,16 @@ impl fmt::Display for ParseScopeErr {
     }
 }
 
+impl fmt::Debug for Scope {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_tuple("Scope")
+            .field(&self.tokens)
+            .finish()
+    }
+}
+
 impl fmt::Display for Scope {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let output = self.tokens.iter()
             .map(|s| s.as_str())
             .collect::<Vec<&str>>()

@@ -1,4 +1,4 @@
-//! Offers bindings for the code_grant module with gotham servers.
+//! Integration with gotham and its state system.
 //!
 //! ## Hello world
 //!
@@ -21,7 +21,7 @@
 //!      let ohandler = GothamOauthProvider::new(
 //!          ClientMap::new(),
 //!          Storage::new(RandomGenerator::new(16)),
-//!          TokenSigner::new_from_passphrase("foobar", None)
+//!          TokenSigner::ephemeral()
 //!      );
 //!      let (chain, pipelines) = single_pipeline(
 //!          new_pipeline()
@@ -390,12 +390,12 @@ impl Future for GrantRequest {
                     let resolved = ResolvedRequest::with_body(self.request.take().unwrap(), decoded_body);
                     Some(Async::Ready(ReadyGrantRequest(resolved)))
                 })
-                .ok_or_else(|| OAuthError::AccessDenied)
+                .ok_or_else(|| OAuthError::BadRequest)
             },
             Ok(Async::NotReady) => Ok(Async::NotReady),
 
             // Not a valid url encoded body
-            Err(_) => Err(OAuthError::AccessDenied),
+            Err(_) => Err(OAuthError::BadRequest),
         }
     }
 }

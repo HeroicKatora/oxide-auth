@@ -5,83 +5,107 @@
 extern crate rouille;
 extern crate serde_urlencoded;
 
-use code_grant::frontend::{QueryParameter, SingleValueQuery, WebRequest, WebResponse};
+use std::borrow::Cow;
+
+use endpoint::{QueryParameter, WebRequest, WebResponse};
+
+use self::rouille::{Request, Response, ResponseBody};
+use url::Url;
 
 // In the spirit of simplicity, this module does not implement any wrapper structures.  In order to
 // allow efficient and intuitive usage, we simply re-export common structures.
-pub use code_grant::frontend::{AccessFlow, AuthorizationFlow, GrantFlow};
-pub use code_grant::frontend::{OAuthError, OwnerAuthorizer, OwnerAuthorization};
-pub use code_grant::prelude::*;
+pub use frontends::simple::endpoint::{FnSolicitor, Generic as GenericEndpoint, Vacant};
 
-use std::borrow::Cow;
-use std::collections::HashMap;
-
-use self::rouille::{Request, Response};
-use url::Url;
+/// Something went wrong with the rouille http request or response.
+#[derive(Debug)]
+pub enum WebError {
+    /// A parameter was encoded incorrectly.
+    ///
+    /// This may happen for example due to a query parameter that is not valid utf8 when the query
+    /// parameters are necessary for OAuth processing.
+    Encoding,
+}
 
 impl<'a> WebRequest for &'a Request {
-    type Error = OAuthError;
+    type Error = WebError;
     type Response = Response;
 
-    fn query<'s>(&'s mut self) -> Result<QueryParameter<'s>, ()> {
+    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
         let query = self.raw_query_string();
-        let data: HashMap<Cow<'s, str>, Cow<'s, str>>
-            = serde_urlencoded::from_str(query).map_err(|_| ())?;
-        Ok(QueryParameter::SingleValue(
-            SingleValueQuery::CowValue(Cow::Owned(data))))
+        let data = serde_urlencoded::from_str(query)
+            .map_err(|_| WebError::Encoding)?;
+        Ok(Cow::Owned(data))
     }
 
-    fn urlbody(&mut self) -> Result<QueryParameter, ()> {
+    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
         match self.header("Content-Type") {
             None | Some("application/x-www-form-urlencoded") => (),
-            _ => return Err(()),
+            _ => return Err(WebError::Encoding),
         }
 
-        let body = self.data().ok_or(())?;
-        let data: HashMap<String, String> = serde_urlencoded::from_reader(body).map_err(|_| ())?;
-        Ok(QueryParameter::SingleValue(
-            SingleValueQuery::StringValue(Cow::Owned(data))))
+        let body = self.data().ok_or(WebError::Encoding)?;
+        let data = serde_urlencoded::from_reader(body)
+            .map_err(|_| WebError::Encoding)?;
+        Ok(Cow::Owned(data))
     }
 
-    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
         Ok(self.header("Authorization").map(|st| st.into()))
     }
 }
 
 impl WebResponse for Response {
-    type Error = OAuthError;
+    type Error = WebError;
 
-    fn redirect(url: Url) -> Result<Response, OAuthError> {
-        Ok(Response::redirect_302(Cow::Owned(url.to_string())))
+    fn ok(&mut self) -> Result<(), Self::Error> {
+        self.status_code = 200;
+        Ok(())
     }
 
-    fn text(text: &str) -> Result<Response, OAuthError> {
-        Ok(Response::text(text))
+    fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
+        self.status_code = 302;
+        self.headers.retain(|header| !header.0.eq_ignore_ascii_case("Location"));
+        self.headers.push(("Location".into(), url.into_string().into()));
+        Ok(())
     }
 
-    fn json(data: &str) -> Result<Response, OAuthError> {
-        Ok(Response::from_data("application/json", data))
+    fn client_error(&mut self) -> Result<(), Self::Error> {
+        self.status_code = 400;
+        Ok(())
     }
 
-    fn as_client_error(self) -> Result<Self, OAuthError> {
-        Ok(self.with_status_code(400))
+    fn unauthorized(&mut self, kind: &str) -> Result<(), Self::Error> {
+        self.status_code = 401;
+        self.headers.retain(|header| !header.0.eq_ignore_ascii_case("www-authenticate"));
+        self.headers.push(("WWW-Authenticate".into(), kind.to_string().into()));
+        Ok(())
     }
 
-    fn as_unauthorized(self) -> Result<Self, OAuthError> {
-        Ok(self.with_status_code(401))
+    fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
+        self.headers.retain(|header| !header.0.eq_ignore_ascii_case("Content-Type"));
+        self.headers.push(("Content-Type".into(), "text/plain".into()));
+        self.data = ResponseBody::from_string(text);
+        Ok(())
     }
 
-    fn with_authorization(self, kind: &str) -> Result<Self, OAuthError> {
-        Ok(self
-            .with_status_code(401)
-            .with_unique_header("WWW-Authenticate", Cow::Owned(kind.to_string())))
+    fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
+        self.headers.retain(|header| !header.0.eq_ignore_ascii_case("Content-Type"));
+        self.headers.push(("Content-Type".into(), "application/json".into()));
+        self.data = ResponseBody::from_string(data);
+        Ok(())
     }
 }
 
-impl<'a, F> OwnerAuthorizer<&'a Request> for F
-where F: FnOnce(&'a Request, &PreGrant) -> OwnerAuthorization<Response> {
-    fn check_authorization(self, request: &'a Request, pre_grant: &PreGrant)
-    -> OwnerAuthorization<Response> {
-        self(request, pre_grant)
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn multi_query() {
+        let mut request = &Request::fake_http("GET", "/authorize?fine=val&param=a&param=b", vec![], vec![]);
+        let query = WebRequest::query(&mut request).unwrap();
+
+        assert_eq!(Some(Cow::Borrowed("val")), query.unique_value("fine"));
+        assert_eq!(None, query.unique_value("param"));
     }
 }

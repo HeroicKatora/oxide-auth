@@ -1,9 +1,9 @@
-use primitives::authorizer::Storage;
+use primitives::authorizer::AuthMap;
 use primitives::issuer::TokenMap;
 use primitives::grant::{Grant, Extensions};
 use primitives::registrar::{Client, ClientMap};
 
-use code_grant::frontend::GrantFlow;
+use frontends::simple::endpoint::access_token_flow;
 
 use std::collections::HashMap;
 
@@ -11,13 +11,13 @@ use base64;
 use chrono::{Utc, Duration};
 use serde_json;
 
-use super::{CraftedRequest, CraftedResponse, TestGenerator, ToSingleValueQuery};
+use super::{Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery};
 use super::defaults::*;
 
 
 struct AccessTokenSetup {
     registrar: ClientMap,
-    authorizer: Storage<TestGenerator>,
+    authorizer: AuthMap<TestGenerator>,
     issuer: TokenMap<TestGenerator>,
     authtoken: String,
     basic_authorization: String,
@@ -27,7 +27,7 @@ impl AccessTokenSetup {
     fn private_client() -> Self {
         use primitives::authorizer::Authorizer;
         let mut registrar = ClientMap::new();
-        let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
@@ -62,7 +62,7 @@ impl AccessTokenSetup {
     fn public_client() -> Self {
         use primitives::authorizer::Authorizer;
         let mut registrar = ClientMap::new();
-        let mut authorizer = Storage::new(TestGenerator("AuthToken".to_string()));
+        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
         let client = Client::public(EXAMPLE_CLIENT_ID,
@@ -94,27 +94,72 @@ impl AccessTokenSetup {
     }
 
     fn assert_json_error_set(response: &CraftedResponse) {
-        match response {
-            &CraftedResponse::Json(ref json) => {
+        match &response.body {
+            Some(Body::Json(ref json)) => {
                 let content: HashMap<String, String> = serde_json::from_str(json).unwrap();
                 assert!(content.get("error").is_some(), "Error not set in json response");
             },
-            &CraftedResponse::Unauthorized(ref inner) => Self::assert_json_error_set(inner),
-            &CraftedResponse::Authorization(ref inner, _) => Self::assert_json_error_set(inner),
-            &CraftedResponse::ClientError(ref inner) => Self::assert_json_error_set(inner),
-            _ => panic!("Expected json encoded body, got {:?}", response),
+            other => panic!("Expected json encoded body, got {:?}", other),
+        }
+        
+        match response.status {
+            Status::Unauthorized => (),
+            Status::BadRequest => (),
+            _ => panic!("Expected error status, got {:?}", response),
         }
     }
 
     fn test_simple_error(&mut self, request: CraftedRequest) {
-        match GrantFlow::new(&self.registrar, &mut self.authorizer, &mut self.issuer)
-            .handle(request)
+        match access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer)
+            .execute(request)
         {
             Ok(ref response) =>
                 Self::assert_json_error_set(response),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
     }
+
+    fn test_success(&mut self, request: CraftedRequest) {
+        let response = access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer)
+            .execute(request)
+            .expect("Expected non-error reponse");
+        assert_eq!(response.status, Status::Ok);
+    }
+}
+
+#[test]
+fn access_valid_public() {
+    let mut setup = AccessTokenSetup::public_client();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI)]
+            .iter().to_single_value_query()),
+        auth: None,
+    };
+
+    setup.test_success(valid_public);
+}
+
+#[test]
+fn access_valid_private() {
+    let mut setup = AccessTokenSetup::private_client();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI)]
+            .iter().to_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_success(valid_public);
 }
 
 #[test]

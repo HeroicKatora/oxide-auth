@@ -1,43 +1,70 @@
 [package]
 name = "oxide-auth"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
-description = "A OAuth2 server library, for use in combination with iron or other frontends, featuring a set of configurable and pluggable backends."
+description = "A OAuth2 server library, for actix, gotham or other libraries, featuring a set of configurable and pluggable backends."
 readme = "Readme.md"
 
 keywords = ["oauth", "server", "oauth2"]
 categories = ["web-programming::http-server", "authentication"]
 license = "MIT"
 
+autoexamples = false
+
 
 [dependencies]
-base64 = "^0.9"
-chrono = "^0.4"
-futures = { version = "0.1.18", optional = true }
-gotham = { version = "^0.2", optional = true }
-gotham_derive = { version = "^0.2", optional = true }
-hyper = { version = "^0.11", optional = true }
-mime = { version = "^0.3", optional = true }
-iron = { version = "^0.6", optional = true }
-serde = "^1.0"
-serde_derive = "^1.0"
-serde_json = "^1.0"
-serde_urlencoded = { version = "0.5.1", optional = true }
-rand = "^0.4"
-ring = "0.13.0-alpha"
-rouille = { version = "^2.0", optional = true }
+base64 = "0.9"
+chrono = "0.4.2"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+ring = "0.13"
 rmp-serde = "^0.13"
-url = "^1.7"
+url = "1.7"
+
+actix = { version = "0.7.9", optional = true }
+actix-web = { version = "0.7.17", optional = true }
+mime = { version = "0.3.13", optional = true }
+futures = { version = "0.1", optional = true }
+rocket = { version = "0.4.0", optional = true }
+rouille = { version = "3.0", optional = true }
+serde_urlencoded = { version = "0.5.1", optional = true }
 urlencoded = { version = "^0.6", optional = true }
 
+# Gotham, not in used right now
+# gotham = { version = "^0.2", optional = true }
+# gotham_derive = { version = "^0.2", optional = true }
+# hyper = { version = "^0.11", optional = true }
+
 [features]
-default = ["gotham-frontend", "iron-frontend", "rouille-frontend"]
-iron-frontend = ["iron", "urlencoded"]
+default = ["actix-frontend"]
+actix-frontend = ["actix", "actix-web", "futures", "serde_urlencoded"]
 rouille-frontend = ["rouille", "serde_urlencoded"]
-gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures"]
+rocket-frontend = ["rocket", "serde_urlencoded"]
+
+# These frontends are disabled for now:
+# gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures", "serde_urlencoded"]
 
 [dev-dependencies]
-router = "^0.6"
-reqwest = "^0.8"
+reqwest = "^0.9"
+
+[[example]]
+name = "actix"
+required-features = ["actix-frontend"]
+
+[[example]]
+name = "rouille"
+required-features = ["rouille-frontend"]
+
+[[example]]
+name = "rocket"
+required-features = ["rocket-frontend"]
+
+[[example]]
+name = "authorization_gotham"
+required-features = ["gotham-frontend"]
+
+[package.metadata.docs.rs]
+features = ["actix-frontend", "rocket-frontend", "rouille-frontend"]

@@ -5,6 +5,17 @@
 //! implementation to implementation. Composability and usability are the main concerns for
 //! frontends, full feature support is a secondary concern.
 //!
+//! Usage
+//! -----
+//!
+//! First you need to enable the correct feature flag. Note that for the convenience of viewing
+//! this documentation, the version on `docs.rs` has all features enabled. The following frontends
+//! require the following features:
+//!
+//! * `simple`: None, this can also be a basis for other implementations
+//! * `actix`: `actix-frontend`
+//! * `rouille`: `rouille-frontend`
+//!
 //! Guide
 //! ------
 //!
@@ -15,17 +26,19 @@
 //! Lets step through those implementations one by one.  As an example request type, let's pretend
 //! that the web interface consists of the following types:
 //!
-//! ```rust
-//! use std::collections::HashMap;
+//! ```
+//! use oxide_auth::frontends::dev::*;
+//!
 //! struct ExampleRequest {
 //!     /// The query part of the retrieved uri, conveniently pre-parsed.
-//!     query: Option<HashMap<String, String>>,
+//!     query: NormalizedParameter,
 //!
 //!     /// The value of the authorization header if any was wet.
 //!     authorization_header: Option<String>,
 //!
-//!     /// The body of the request, only if its content type was `application/x-form-urlencoded`
-//!     urlbody: Option<HashMap<String, String>>,
+//!     /// A correctly interpreted version of the body of the request, only if its content type
+//!     /// `application/x-form-urlencoded`
+//!     urlbody: Option<NormalizedParameter>,
 //! }
 //!
 //! struct ExampleResponse {
@@ -44,20 +57,23 @@
 //!     /// The body sent
 //!     body: Option<String>,
 //! }
+//! # fn main() { }
 //! ```
 //! This is obviously incredibly simplified but will showcase the most valuable features of this
 //! library. Let's implement the required traits:
-//! ```rust
+//!
+//! ```
 //! # use std::collections::HashMap;
+//! use oxide_auth::frontends::dev::*;
 //! # struct ExampleRequest {
 //! #    /// The query part of the retrieved uri, conveniently pre-parsed.
-//! #    query: HashMap<String, String>,
+//! #    query: NormalizedParameter,
 //! #
 //! #    /// The value of the authorization header if any was wet.
 //! #    authorization_header: Option<String>,
 //! #
 //! #    /// The body of the request, only if its content type was `application/x-form-urlencoded`
-//! #    urlbody: Option<HashMap<String, String>>,
+//! #    urlbody: Option<NormalizedParameter>,
 //! # }
 //! #
 //! # struct ExampleResponse {
@@ -77,7 +93,6 @@
 //! #    body: Option<String>,
 //! # }
 //! # extern crate oxide_auth;
-//! use oxide_auth::frontends::dev::*;
 //! impl WebRequest for ExampleRequest {
 //!     // Declare the corresponding response type.
 //!     type Response = ExampleResponse;
@@ -85,112 +100,96 @@
 //!     // Our internal frontends error type is `OAuthError`
 //!     type Error = OAuthError;
 //!
-//!     fn query(&mut self) -> Result<QueryParameter, ()> {
-//!         // Our query only has a single value for each key
-//!         Ok(QueryParameter::SingleValue(
-//!             // The values and keys are present as strings
-//!             SingleValueQuery::StringValue(
-//!                 // We can borrow our internal structures. Without copy! Yay!
-//!                 Cow::Borrowed(&self.query))))
+//!     fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, OAuthError> {
+//!         Ok(Cow::Borrowed(&self.query))
 //!     }
 //!
-//!     fn urlbody(&mut self) -> Result<QueryParameter, ()> {
-//!         // Similar to above, constructing a zero-copy encapsulation of our data
-//!         self.urlbody.as_ref().map(|body|
-//!             QueryParameter::SingleValue(
-//!                 SingleValueQuery::StringValue(
-//!                     Cow::Borrowed(body))))
-//!             // None signals that the body was not url encoded, this is an error
-//!             .ok_or(())
-//!
+//!     fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, OAuthError> {
+//!         self.urlbody.as_ref()
+//!             .map(|body| Cow::Borrowed(body as &QueryParameter))
+//!             .ok_or(OAuthError::PrimitiveError)
 //!     }
 //!
-//!     fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
+//!     fn authheader(&mut self) -> Result<Option<Cow<str>>, OAuthError> {
 //!         // Borrow the data if it exists, else we had no header. No error cases.
 //!         Ok(self.authorization_header.as_ref().map(|string| string.as_str().into()))
 //!     }
 //! }
 //!
 //! impl WebResponse for ExampleResponse {
-//!     // Redeclare our error type, those two must be the same.
+//!     // Redeclare our error type as in the request, those two must be the same.
 //!     type Error = OAuthError;
 //!
-//!     fn redirect(url: Url) -> Result<Self, Self::Error> {
-//!         Ok(ExampleResponse {
-//!             // Redirect
-//!             status: 302,
-//!             location: Some(url.as_str().to_string()),
-//!             // This has no other headers or content
-//!             content_type: None,
-//!             www_authenticate: None,
-//!             body: None,
-//!         })
+//!     fn ok(&mut self) -> Result<(), OAuthError> {
+//!         self.status = 200;
+//!         self.www_authenticate = None;
+//!         self.location = None;
+//!         Ok(())
 //!     }
 //!
-//!     fn text(text: &str) -> Result<Self, Self::Error> {
-//!         Ok(ExampleResponse {
-//!             // Ok
-//!             status: 200,
-//!             content_type: Some("text/plain".to_string()),
-//!             body: Some(text.to_string()),
-//!
-//!             location: None,
-//!             www_authenticate: None,
-//!         })
+//!     fn redirect(&mut self, target: Url) -> Result<(), OAuthError> {
+//!         self.status = 302;
+//!         self.www_authenticate = None;
+//!         self.location = Some(target.into_string());
+//!         Ok(())
 //!     }
-//!     // Json repsonse data, with media type `aplication/json`.
-//!     fn json(data: &str) -> Result<Self, Self::Error>{
-//!         Ok(ExampleResponse {
-//!             // Ok
-//!             status: 200,
-//!             content_type: Some("aplication/json".to_string()),
-//!             body: Some(data.to_string()),
 //!
-//!             location: None,
-//!             www_authenticate: None,
-//!         })
-//!     }
-//!     // Set the response status to 400
-//!     fn as_client_error(mut self) -> Result<Self, Self::Error> {
+//!     fn client_error(&mut self) -> Result<(), OAuthError> {
 //!         self.status = 400;
-//!         Ok(self)
+//!         self.www_authenticate = None;
+//!         self.location = None;
+//!         Ok(())
 //!     }
-//!     // Set the response status to 401
-//!     fn as_unauthorized(mut self) -> Result<Self, Self::Error> {
+//!
+//!     fn unauthorized(&mut self, www_authenticate: &str) -> Result<(), OAuthError> {
 //!         self.status = 401;
-//!         Ok(self)
+//!         self.www_authenticate = Some(www_authenticate.to_string());
+//!         self.location = None;
+//!         Ok(())
 //!     }
-//!     // Add an `WWW-Authenticate` header
-//!     fn with_authorization(mut self, kind: &str) -> Result<Self, Self::Error> {
-//!         self.status = 401;
-//!         self.www_authenticate = Some(kind.to_string());
-//!         Ok(self)
+//!
+//!     fn body_text(&mut self, text: &str) -> Result<(), OAuthError> {
+//!         self.body = Some(text.to_string());
+//!         self.content_type = Some("text/plain".to_string());
+//!         Ok(())
+//!     }
+//!
+//!     fn body_json(&mut self, json: &str) -> Result<(), OAuthError> {
+//!         self.body = Some(json.to_string());
+//!         self.content_type = Some("application/json".to_string());
+//!         Ok(())
 //!     }
 //! }
+//!
 //! # fn main() {}
 //! ```
 //!
-//! And we're done, the library is fully useable. In fact, the implementation for `rouille` is
-//! almost the same as what we just did. All that is missing is your web servers main loop to drive
-//! the thing and a look into the `code_grant::frontend::{AuthorizationFlow, GrantFlow, AccessFlow}`
-//! which will explain the usage of the above traits in the context of the Authorization Code Grant.
+//! And we're done, the library is fully useable. In fact, the implementation for `simple` is
+//! almost the same as what we just did with some minor extras. All that is missing is your web
+//! servers main loop to drive the thing and a look into the
+//! [`code_grant::endpoint::{AuthorizationFlow, GrantFlow, AccessFlow}`] which will explain the usage
+//! of the above traits in the context of the Authorization Code Grant.
 //!
 //! Of course, this style might not the intended way for some server libraries. In this case, you
-//! may want to provide additional wrappers.
+//! may want to provide additional wrappers. The `actix` frontend adds utilities for abstracting
+//! futures and actor messaging, for example.
+//!
+//! [`code_grant::endpoint::{AuthorizationFlow, GrantFlow, AccessFlow}`]: ../code_grant/endpoint/index.html
 //!
 
-/// Integration with gotham and its state system.
-#[cfg(feature = "gotham-frontend")]
-pub mod gotham;
-#[cfg(feature = "iron-frontend")]
-pub mod iron;
+pub mod simple;
+
+#[cfg(feature = "actix-frontend")]
+pub mod actix;
 #[cfg(feature = "rouille-frontend")]
 pub mod rouille;
+#[cfg(feature = "rocket-frontend")]
+pub mod rocket;
 
 /// Includes useful for writing frontends.
 pub mod dev {
     pub use std::borrow::Cow;
     pub use url::Url;
-    pub use code_grant::frontend::{MultiValueQuery, QueryParameter, SingleValueQuery};
-    pub use code_grant::frontend::{OAuthError,  WebRequest, WebResponse};
+    pub use endpoint::{Endpoint, WebRequest, WebResponse};
+    pub use endpoint::{OAuthError, OwnerSolicitor, NormalizedParameter, QueryParameter};
 }

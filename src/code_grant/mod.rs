@@ -1,30 +1,24 @@
-//! Adds frontend and backend for the authorization code flow.
+//! Available backend algorithms.
 //!
-//! The backend is largely independent of the communication protocol used and will require the
-//! necessary interfaces via traits. This makes it possible to swap out data structures used for
-//! most basic operations such as validating clients, issuing bearer tokens, asserting the validity
-//! of requests while also performing request parsing and validation in a separate step.
-//!
-//! In large, the frontend module is responsible for defining a clear interface usable by different
-//! transport providers, http server libraries as well as potentially others, and the format of the
-//! used transport (based on HTTP because of the strong coupling in the rfc) while the backend is
-//! concerned with the logic of handling such requests.
-//!
-//! Consequently, the return types of the backend are not HTTP responses but rather contain the
-//! necessary information to form such responses. The frontend will then convert these actions
-//! to specific responses, while encouraging implementations not to leak internal logging
-//! information to outside parties through utilization of the implemented traits.
+//! The backend codifies the requirements from the rfc into types and functions as safely as
+//! possible. It is, in contrast to the frontend, not concrete in the required type but rather
+//! uses a trait based internal reqpresentation.
+//! The result of the backend are abstract results, actions which should be executed or relayed
+//! by the frontend using its available types. Abstract in this sense means that the reponses
+//! from the backend are not generic on an input type.
+//! Another consideration is the possiblilty of reusing some components with other oauth schemes.
+//! In this way, the backend is used to group necessary types and as an interface to implementors,
+//! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer, registrars).
 
-pub mod backend;
-pub mod error;
-pub mod frontend;
+/// Provides the handling for Access Token Requests
+pub mod accesstoken;
+
+/// Provides the handling for Authorization Code Requests
+pub mod authorization;
+
+/// Provides the handling for Resource Requests
+pub mod resource;
+
 pub mod extensions;
 
-#[cfg(test)]
-mod tests;
-
-/// Commonly used items, for clobber imports.
-pub mod prelude {
-    pub use primitives::prelude::*;
-    pub use super::backend::{CodeRef, IssuerRef, GuardRef};
-}
+pub mod error;

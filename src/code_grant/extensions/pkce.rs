@@ -1,10 +1,8 @@
 use std::borrow::Cow;
 
-use super::{AccessTokenExtension, CodeExtension};
-use code_grant::backend::{AccessTokenRequest, CodeRequest};
-use primitives::grant::{Extension, GrantExtension};
+use primitives::grant::{GrantExtension, Value};
 
-use base64::encode as b64encode;
+use base64;
 use ring::digest::{SHA256, digest};
 use ring::constant_time::verify_slices_are_equal;
 
@@ -62,18 +60,20 @@ impl Pkce {
     pub fn allow_plain(&mut self) {
         self.allow_plain = true;
     }
-}
 
-impl GrantExtension for Pkce {
-    fn identifier(&self) -> &'static str {
-        "pkce"
-    }
-}
-
-impl CodeExtension for Pkce {
-    fn extend_code(&self, request: &CodeRequest) -> Result<Option<Extension>, ()> {
-        let challenge = request.extension("code_challenge");
-        let method = request.extension("code_challenge_method");
+    /// Create the encoded method for proposed method and challenge.
+    ///
+    /// The method defaults to `plain` when none is given, effectively offering increased
+    /// compatibility but less security. Support for `plain` is optional and needs to be enabled
+    /// explicitely through `Pkce::allow_plain`. This extension may also require clients to use it,
+    /// in which case giving no challenge also leads to an error.
+    ///
+    /// The resulting string MUST NOT be publicly available to the client. Otherwise, it would be
+    /// trivial for a third party to impersonate the client in the access token request phase. For
+    /// a SHA256 methods the results would not be quite as severe but still bad practice.
+    pub fn challenge(&self, method: Option<Cow<str>>, challenge: Option<Cow<str>>)
+        -> Result<Option<Value>, ()>
+    {
         let method = method.unwrap_or(Cow::Borrowed("plain"));
 
         let challenge = match challenge {
@@ -85,25 +85,47 @@ impl CodeExtension for Pkce {
         let method = Method::from_parameter(method, challenge)?;
         let method = method.assert_supported_method(self.allow_plain)?;
 
-        Ok(Some(Extension::private(Some(method.encode()))))
+        Ok(Some(Value::private(Some(method.encode()))))
+    }
+
+    /// Verify against the encoded challenge.
+    ///
+    /// When the challenge is required, ensure again that a challenge was made and a corresponding
+    /// method data is present as an extension. This is not strictly necessary since clients should
+    /// not be able to delete private extension data but this check does not cost a lot.
+    ///
+    /// When a challenge was agreed upon but no verifier is present, this method will return an
+    /// error.
+    pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), ()>
+    {
+        let (method, verifier) = match (method, verifier) {
+            (None, _) if self.required => return Err(()),
+            (None, _) => return Ok(()),
+            // An internal saved method but no verifier
+            (Some(_), None) => return Err(()),
+            (Some(method), Some(verifier)) => (method, verifier),
+        };
+
+        let method = match method.as_private() {
+            Ok(Some(method)) => method,
+            _ => return Err(()),
+        };
+
+        let method = Method::from_encoded(Cow::Owned(method))?;
+
+        method.verify(&verifier)
     }
 }
 
-impl AccessTokenExtension for Pkce {
-    fn extend_access_token(&self, request: &AccessTokenRequest, code_extension: Option<Extension>)
-        -> Result<Option<Extension>, ()> {
-        let encoded = match code_extension {
-            None => return Ok(None),
-            Some(encoded) => encoded,
-        };
-
-        let verifier = request.extension("code_verifier").ok_or(())?;
-
-        let private_encoded = encoded.as_private()?.ok_or(())?;
-        let method = Method::from_encoded(private_encoded)?;
-
-        method.verify(&verifier).map(|_| None)
+impl GrantExtension for Pkce {
+    fn identifier(&self) -> &'static str {
+        "pkce"
     }
+}
+
+/// Base 64 encoding without padding
+fn b64encode(data: &[u8]) -> String {
+    base64::encode_config(data, base64::URL_SAFE_NO_PAD)
 }
 
 impl Method {
@@ -130,7 +152,9 @@ impl Method {
         }
     }
 
-    fn from_encoded(mut encoded: String) -> Result<Method, ()> {
+    fn from_encoded(encoded: Cow<str>) -> Result<Method, ()> {
+        // TODO: avoid allocation in case of borrow and invalid.
+        let mut encoded = encoded.into_owned();
         match encoded.pop() {
             None => Err(()),
             Some('p') => Ok(Method::Plain(encoded)),

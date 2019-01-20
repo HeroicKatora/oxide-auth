@@ -6,9 +6,10 @@
 //! side request, it will then check the given parameters to determine the authorization of such
 //! clients.
 use std::collections::HashMap;
+use std::sync::{MutexGuard, RwLockWriteGuard};
 
 use super::grant::Grant;
-use super::generator::TokenGenerator;
+use super::generator::TagGrant;
 
 /// Authorizers create and manage authorization codes.
 ///
@@ -20,7 +21,7 @@ pub trait Authorizer {
     /// Retrieve the parameters associated with a token, invalidating the code in the process. In
     /// particular, a code should not be usable twice (there is no stateless implementation of an
     /// authorizer for this reason).
-    fn extract(&mut self, &str) -> Option<Grant>;
+    fn extract(&mut self, token: &str) -> Result<Option<Grant>, ()>;
 }
 
 /// An in-memory hash map.
@@ -28,28 +29,79 @@ pub trait Authorizer {
 /// This authorizer saves a mapping of generated strings to their associated grants. The generator
 /// is itself trait based and can be chosen during construction. It is assumed to not be possible
 /// for two different grants to generate the same token in the issuer.
-pub struct Storage<I: TokenGenerator> {
-    issuer: I,
+pub struct AuthMap<I: TagGrant=Box<TagGrant + Send + Sync + 'static>> {
+    tagger: I,
+    usage: u64,
     tokens: HashMap<String, Grant>
 }
 
 
-impl<I: TokenGenerator> Storage<I> {
+impl<I: TagGrant> AuthMap<I> {
     /// Create a hash map authorizer with the given issuer as a backend.
-    pub fn new(issuer: I) -> Storage<I> {
-        Storage {issuer: issuer, tokens: HashMap::new()}
+    pub fn new(tagger: I) -> Self {
+        AuthMap {
+            tagger,
+            usage: 0,
+            tokens: HashMap::new(),
+        }
     }
 }
 
-impl<I: TokenGenerator> Authorizer for Storage<I> {
+impl<'a, A: Authorizer + ?Sized> Authorizer for &'a mut A {
     fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
-        let token = self.issuer.generate(&grant)?;
+        (**self).authorize(grant)
+    }
+
+    fn extract(&mut self, code: &str) -> Result<Option<Grant>, ()> {
+        (**self).extract(code)
+    }
+}
+
+impl<A: Authorizer + ?Sized> Authorizer for Box<A> {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        (**self).authorize(grant)
+    }
+
+    fn extract(&mut self, code: &str) -> Result<Option<Grant>, ()> {
+        (**self).extract(code)
+    }
+}
+
+impl<'a, A: Authorizer + ?Sized> Authorizer for MutexGuard<'a, A> {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        (**self).authorize(grant)
+    }
+
+    fn extract(&mut self, code: &str) -> Result<Option<Grant>, ()> {
+        (**self).extract(code)
+    }
+}
+
+impl<'a, A: Authorizer + ?Sized> Authorizer for RwLockWriteGuard<'a, A> {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        (**self).authorize(grant)
+    }
+
+    fn extract(&mut self, code: &str) -> Result<Option<Grant>, ()> {
+        (**self).extract(code)
+    }
+}
+
+impl<I: TagGrant> Authorizer for AuthMap<I> {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        // The (usage, grant) tuple needs to be unique. Since this wraps after 2^64 operations, we
+        // expect the validity time of the grant to have changed by then. This works when you don't
+        // set your system time forward/backward ~20billion seconds, assuming ~10^9 operations per
+        // second.
+        let next_usage = self.usage.wrapping_add(1);
+        let token = self.tagger.tag(next_usage - 1, &grant)?;
         self.tokens.insert(token.clone(), grant);
+        self.usage = next_usage;
         Ok(token)
     }
 
-    fn extract<'a>(&mut self, grant: &'a str) -> Option<Grant> {
-        self.tokens.remove(grant)
+    fn extract<'a>(&mut self, grant: &'a str) -> Result<Option<Grant>, ()> {
+        Ok(self.tokens.remove(grant))
     }
 }
 
@@ -59,6 +111,7 @@ pub mod tests {
     use super::*;
     use chrono::Utc;
     use primitives::grant::Extensions;
+    use primitives::generator::{Assertion, RandomGenerator};
 
     /// Tests some invariants that should be upheld by all authorizers.
     ///
@@ -76,29 +129,52 @@ pub mod tests {
         let token = authorizer.authorize(grant.clone())
             .expect("Authorization should not fail here");
         let recovered_grant = authorizer.extract(&token)
+            .expect("Primitive failed extracting grant")
             .expect("Could not extract grant for valid token");
 
         if grant != recovered_grant {
             panic!("Grant was not stored correctly");
         }
 
-        if authorizer.extract(&token).is_some() {
+        if authorizer.extract(&token).unwrap().is_some() {
             panic!("Token must only be usable once");
         }
+
+        // Authorize the same token again.
+        let token_again = authorizer.authorize(grant.clone())
+            .expect("Authorization should not fail here");
+        // We don't produce the same token twice.
+        assert_ne!(token, token_again);
     }
 
     #[test]
-    fn test_storage() {
-        use primitives::generator::{Assertion, RandomGenerator};
+    fn random_test_suite() {
+        let mut storage = AuthMap::new(RandomGenerator::new(16));
+        simple_test_suite(&mut storage);
+    }
+
+    #[test]
+    fn signing_test_suite() {
         use ring::hmac::SigningKey;
         use ring::digest::SHA256;
 
-        let mut storage = Storage::new(RandomGenerator::new(16));
-        simple_test_suite(&mut storage);
-
         let assertion_token_instance = Assertion::new(
             SigningKey::new(&SHA256, b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s="));
-        let mut storage = Storage::new(assertion_token_instance.tag("authorizer"));
+        let mut storage = AuthMap::new(assertion_token_instance);
+        simple_test_suite(&mut storage);
+    }
+
+    #[test]
+    #[should_panic]
+    fn bad_generator() {
+        struct BadGenerator;
+        impl TagGrant for BadGenerator {
+            fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+                Ok("YOLO.HowBadCanItBeToRepeatTokens?".into())
+            }
+        }
+
+        let mut storage = AuthMap::new(BadGenerator);
         simple_test_suite(&mut storage);
     }
 }

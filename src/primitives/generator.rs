@@ -9,26 +9,39 @@
 //!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
 //!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
 //!     is not currently expressed in the type system or with traits.
-use super::grant::{Extension, Extensions, Grant};
+use super::grant::{Value, Extensions, Grant};
 use super::{Url, Time};
 use super::scope::Scope;
 
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Arc;
 
 use base64::{encode, decode};
-use rand::{thread_rng, Rng};
-use ring;
+use ring::digest::SHA256;
+use ring::rand::{SystemRandom, SecureRandom};
+use ring::hmac::SigningKey;
 use rmp_serde;
 
 /// Generic token for a specific grant.
 ///
 /// The interface may be reused for authentication codes, bearer tokens and refresh tokens.
-pub trait TokenGenerator {
-    /// For example sign a grant or generate a random token.
-    ///
-    /// The exact guarantees and uses depend on the specific implementation. Implementation which
-    /// do not support some grant may return an error instead.
-    fn generate(&self, &Grant) -> Result<String, ()>;
+///
+/// ## Requirements on implementations
+///
+/// When queried without repetition (users will change the `usage` counter each time), this
+/// method MUST be indistinguishable from a random function. This should be the crypgraphic
+/// requirements for signature schemes without requiring the verification property (the
+/// function need no be deterministic). This enables two popular choices: actual signature
+/// schemes and (pseudo-)random generators that ignore all input.
+///
+/// The requirement is derived from the fact that one should not be able to derive the tag for
+/// another token from ones own. Since there may be multiple tokens for a grant, the `usage`
+/// counter makes it possible for `Authorizer` and `Issuer` implementations to differentiate
+/// between these.
+pub trait TagGrant {
+    /// For example sign the input parameters or generate a random token.
+    fn tag(&mut self, usage: u64, grant: &Grant) -> Result<String, ()>;
 }
 
 /// Generates tokens from random bytes.
@@ -36,20 +49,24 @@ pub trait TokenGenerator {
 /// Each byte is chosen randomly from the basic `rand::thread_rng`. This generator will always
 /// succeed.
 pub struct RandomGenerator {
+    random: SystemRandom,
     len: usize
 }
 
 impl RandomGenerator {
     /// Generates tokens with a specific byte length.
     pub fn new(length: usize) -> RandomGenerator {
-        RandomGenerator {len: length}
+        RandomGenerator {
+            random: SystemRandom::new(),
+            len: length
+        }
     }
-}
 
-impl TokenGenerator for RandomGenerator {
-    fn generate(&self, _grant: &Grant) -> Result<String, ()> {
-        let result = thread_rng().gen_iter::<u8>().take(self.len).collect::<Vec<u8>>();
-        Ok(encode(&result))
+    fn generate(&self) -> String {
+        let mut result = vec![0; self.len];
+        self.random.fill(result.as_mut_slice())
+            .expect("Failed to generate random token");
+        encode(&result)
     }
 }
 
@@ -63,7 +80,7 @@ impl TokenGenerator for RandomGenerator {
 /// signing the same grant for different uses, i.e. separating authorization from bearer grants and
 /// refresh tokens.
 pub struct Assertion {
-    secret: ring::hmac::SigningKey,
+    secret: SigningKey,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -98,9 +115,19 @@ struct AssertGrant(Vec<u8>, Vec<u8>);
 pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
 impl Assertion {
-    /// Construct an Assertion generator from a secret, private signing key.
-    pub fn new(key: ring::hmac::SigningKey) -> Assertion {
-        Assertion { secret: key}
+    /// Construct an assertion from one of the possible secrets.
+    ///
+    /// Conversion is done via the `Into` trait so that new secrets can be added in a backwards
+    /// compatible way while outdated secrets can be removed with as few breakage as possible. This
+    /// will hopefully allow us to partially transition to an upgraded version of `ring` at some
+    /// point in the nearer future.
+    pub fn new<S: Into<Self>>(secret: S) -> Self {
+        secret.into()
+    }
+
+    /// Construct an assertion instance whose tokens are only valid for the program execution.
+    pub fn ephermal() -> Assertion {
+        SigningKey::generate(&SHA256, &mut SystemRandom::new()).unwrap().into()
     }
 
     /// Get a reference to generator for the given tag.
@@ -112,24 +139,48 @@ impl Assertion {
         let decoded = decode(token).map_err(|_| ())?;
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
         ring::hmac::verify_with_own_key(&self.secret, &assertion.0, &assertion.1).map_err(|_| ())?;
-        let (serde_grant, tag): (SerdeAssertionGrant, String)
+        let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String)
             = rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
         Ok((serde_grant.grant(), tag))
     }
 
-    fn generate_tagged(&self, grant: &Grant, tag: &str) -> Result<String, ()> {
+    fn signature(&self, data: &[u8]) -> ring::hmac::Signature {
+        ring::hmac::sign(&self.secret, data)
+    }
+
+    fn counted_signature(&self, counter: u64, grant: &Grant) 
+        -> Result<String, ()>
+    {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
-        let tosign = rmp_serde::to_vec(&(serde_grant, tag)).unwrap();
-        let signature = ring::hmac::sign(&self.secret, &tosign);
+        let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
+        let signature = self.signature(&tosign);
+        Ok(base64::encode(&signature))
+    }
+
+    fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
+        let serde_grant = SerdeAssertionGrant::try_from(grant)?;
+        let tosign = rmp_serde::to_vec(&(counter, serde_grant, tag)).unwrap();
+        let signature = self.signature(&tosign);
         Ok(encode(&rmp_serde::to_vec(&AssertGrant(tosign, signature.as_ref().to_vec())).unwrap()))
     }
 }
 
 impl<'a> TaggedAssertion<'a> {
+    /// Sign the grant for this usage.
+    ///
+    /// This commits to a token that can be used–according to the usage tag–while the endpoint can
+    /// trust in it belonging to the encoded grant. `counter` must be unique for each call to this
+    /// function, similar to an IV to prevent accidentally producing the same token for the same
+    /// grant (which may have multiple tokens). Note that the `tag` will be recovered and checked
+    /// while the IV will not.
+    pub fn sign(&self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.0.generate_tagged(counter, grant, self.1)
+    }
+
     /// Inverse operation of generate, retrieve the underlying token.
     ///
     /// Result in an Err if either the signature is invalid or if the tag does not match the
-    /// expected tag given to this assertion.
+    /// expected usage tag given to this assertion.
     pub fn extract<'b>(&self, token: &'b str) -> Result<Grant, ()> {
         self.0.extract(token).and_then(|(token, tag)| {
             if tag == self.1 {
@@ -141,11 +192,76 @@ impl<'a> TaggedAssertion<'a> {
     }
 }
 
-impl<'a> TokenGenerator for TaggedAssertion<'a> {
-    fn generate(&self, grant: &Grant) -> Result<String, ()> {
-        self.0.generate_tagged(grant, self.1)
+impl From<SigningKey> for Assertion {
+    /// Convert to an `Assertion` from a secret signing key.
+    fn from(secret: SigningKey) -> Self {
+        Assertion {
+            secret,
+        }
     }
 }
+
+impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for Box<T> {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        (&mut **self).tag(counter, grant)
+    }
+}
+
+impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for &'a mut T {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        (&mut **self).tag(counter, grant)
+    }
+}
+
+impl TagGrant for RandomGenerator {
+    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+        Ok(self.generate())
+    }
+}
+
+impl<'a> TagGrant for &'a RandomGenerator {
+    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+        Ok(self.generate())
+    }
+}
+
+impl TagGrant for Rc<RandomGenerator> {
+    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+        Ok(self.generate())
+    }
+}
+
+impl TagGrant for Arc<RandomGenerator> {
+    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+        Ok(self.generate())
+    }
+}
+
+
+impl TagGrant for Assertion {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.counted_signature(counter, grant)
+    }
+}
+
+impl<'a> TagGrant for &'a Assertion {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.counted_signature(counter, grant)
+    }
+}
+
+impl TagGrant for Rc<Assertion> {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.counted_signature(counter, grant)
+    }
+}
+
+impl TagGrant for Arc<Assertion> {
+    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.counted_signature(counter, grant)
+    }
+}
+
 
 mod scope_serde {
     use primitives::scope::Scope;
@@ -218,7 +334,7 @@ impl SerdeAssertionGrant {
     fn grant(self) -> Grant {
         let mut extensions = Extensions::new();
         for (name, content) in self.public_extensions.into_iter() {
-            extensions.set_raw(name, Extension::public(content))
+            extensions.set_raw(name, Value::public(content))
         }
         Grant {
             owner_id: self.owner_id,
@@ -228,5 +344,21 @@ impl SerdeAssertionGrant {
             until: self.until,
             extensions: extensions,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ring::digest::SHA256;
+    use ring::hmac::SigningKey;
+
+    #[test]
+    #[allow(dead_code, unused)]
+    fn assert_send_sync_static() {
+        fn uses<T: Send + Sync + 'static>(arg: T) { }
+        let _ = uses(RandomGenerator::new(16));
+        let fake_key = SigningKey::new(&SHA256, &[0u8; 16]);
+        let _ = uses(Assertion::new(fake_key));
     }
 }
