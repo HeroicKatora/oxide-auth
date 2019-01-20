@@ -18,8 +18,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use base64::{encode, decode};
+use ring::digest::SHA256;
 use ring::rand::{SystemRandom, SecureRandom};
-use ring;
+use ring::hmac::SigningKey;
 use rmp_serde;
 
 /// Generic token for a specific grant.
@@ -79,7 +80,7 @@ impl RandomGenerator {
 /// signing the same grant for different uses, i.e. separating authorization from bearer grants and
 /// refresh tokens.
 pub struct Assertion {
-    secret: ring::hmac::SigningKey,
+    secret: SigningKey,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -114,9 +115,19 @@ struct AssertGrant(Vec<u8>, Vec<u8>);
 pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
 impl Assertion {
-    /// Construct an Assertion generator from a secret, private signing key.
-    pub fn new(key: ring::hmac::SigningKey) -> Assertion {
-        Assertion { secret: key }
+    /// Construct an assertion from one of the possible secrets.
+    ///
+    /// Conversion is done via the `Into` trait so that new secrets can be added in a backwards
+    /// compatible way while outdated secrets can be removed with as few breakage as possible. This
+    /// will hopefully allow us to partially transition to an upgraded version of `ring` at some
+    /// point in the nearer future.
+    pub fn new<S: Into<Self>>(secret: S) -> Self {
+        secret.into()
+    }
+
+    /// Construct an assertion instance whose tokens are only valid for the program execution.
+    pub fn ephermal() -> Assertion {
+        SigningKey::generate(&SHA256, &mut SystemRandom::new()).unwrap().into()
     }
 
     /// Get a reference to generator for the given tag.
@@ -178,6 +189,15 @@ impl<'a> TaggedAssertion<'a> {
                 Err(())
             }
         })
+    }
+}
+
+impl From<SigningKey> for Assertion {
+    /// Convert to an `Assertion` from a secret signing key.
+    fn from(secret: SigningKey) -> Self {
+        Assertion {
+            secret,
+        }
     }
 }
 

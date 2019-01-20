@@ -11,10 +11,6 @@ use super::Time;
 use super::grant::Grant;
 use super::generator::{TagGrant, Assertion};
 
-use ring::digest::SHA256;
-use ring::hmac::SigningKey;
-use ring::rand::SystemRandom;
-
 /// Issuers create bearer tokens.
 ///
 /// It's the issuers decision whether a refresh token is offered or not. In any case, it is also
@@ -117,9 +113,9 @@ impl TokenSigner {
     ///
     /// Security notice: Never use a password alone to construct the signing key. Instead, generate
     /// a new key using a utility such as `openssl rand` that you then store away securely.
-    pub fn new(key: SigningKey) -> TokenSigner {
+    pub fn new<S: Into<Assertion>>(secret: S) -> TokenSigner {
         TokenSigner { 
-            signer: Assertion::new(key),
+            signer: secret.into(),
             counter: ATOMIC_USIZE_INIT,
         }
     }
@@ -140,7 +136,7 @@ impl TokenSigner {
     ///     .unwrap());
     /// ```
     pub fn ephemeral() -> TokenSigner {
-        TokenSigner::new(SigningKey::generate(&SHA256, &mut SystemRandom::new()).unwrap())
+        TokenSigner::new(Assertion::ephermal())
     }
 
     /// Get the next counter value.
