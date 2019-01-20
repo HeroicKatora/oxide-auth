@@ -3,7 +3,7 @@ information with an issue. For guides on larger migrations you may also request
 more detailed information.
 
 This migration notice denotes work-in-progress (WIP) or planned changes (NEXT)
-before major releases on git version and will be merged into a single log when
+before major releases on git version and will be updated into a single log when
 a major release or breaking minor release (before 1.0) is made. Both are
 intended to provide advance notice of expected interface changes and may be
 shifted back in work log arbitrarily. In that case, they will be moved to the
@@ -11,7 +11,13 @@ according migration note.
 
 This document is independent of the [release notes](Changes.md).
 
-## v0.4.0-rc.0 [WIP]
+## v0.4.0
+
+Below is a reverse chronological list of recommended migration notes. These
+have been collected while improving incrementally in preview versions. Read
+this list either by searching for required functionality from the top or
+tracing the outdated types from the bottom.
+
 Bearer authorization provided by `code_grant::resource` and
 `endpoint::ResourceFlow` now returns the extracted `Grant` associated with an
 authorized request.  Therefore, additional logic based is safely enabled in the
@@ -63,7 +69,11 @@ Generally rebuilt `generator::TagGrant`–previously `generator::TokenGenerator`
   that did not matter :) The new `counter` that has to be kept by such
   authorizers/issuers makes this interaction secure even for repeating grants.
 
-## v0.4.0-preview.1
+---------
+
+**v0.4.0-preview.1**
+
+---------
 
 A HUGE refactor of the backend part of the library. For the `actix` part, see the
 relevant section.
@@ -222,7 +232,7 @@ pairs. Note that for example the following is incorrect:
 //! serde_urlencoded::from_str::<HashMap<String, String>>(query)?.normalize();
 ```
 
-Instead, collect all pairs and collect them:
+Instead, deserialize to `NormalizedParameter`
 
 ```
 serde_urlencoded::from_str::<Vec<(String, String)>>(query)?.into_iter().collect();
@@ -289,7 +299,11 @@ currently make use of them. Sorry.
 Error variant namings and usages have been clarified. Specifically, such names
 should now correspond more closely to HTTP status codes where applicable.
 
-## v0.4.0-preview0
+----
+
+** v0.4.0-preview0 **
+
+----
 
 Actix is the only fully supported framework for the moment as development begins
 on trying to support `async` based frameworks. This release is highly

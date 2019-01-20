@@ -1,44 +1,73 @@
-# v0.4.0-preview.1
+# v0.4.0
 
 Ergonomics & Feature rewrite
 
-Replaces the frontend mechanism with a trait based system:
- - Better configurability of underlying primitives
- - Trait introduces central, dedicated error handling
- - Expands the possible types for request and response representation
-
-These interfaces were improved:
- - Names follow existing conventions more closely, such as http status codes
- - Competing usages of 'authorization' has been replaced
- - All requests, functions and flows are now named by their result:
-       AuthorizationFlow, AccessTokenFlow, ResourceFlow
- - Actix frontend now supports basic async operations
- - Ransformation wrappers for requests, e.g. MapErr to change error type
- - Error types now have a stricter usage explanation
-
-Breaking changes:
- - Everywhere. Read the migration notes for some help (or open an issue).
- - Sorry. This was necessary to support an asynchronous server library.
-
-Fixed the following bugs:
- - Errors in primitives leading to improper responses
- - Misusage of error types within the library
-
-# v0.4.0-preview.0
-
-Ergonomics & Feature release
-
 Introduces the following features:
- - A frontend for `actix`!
+ - A frontend for `actix`! Comes with basic 'async' computations.
+ - A frontend for `rocket`!
  - Additional traits allow using the backend without having to directly rely
    on primitives.  This is expected to provide enable additional choices for
    frontends in the future.
 
+Breaking changes:
+ - Everywhere. Read the migration notes for some help (or open an issue).
+   A list containing hopefully most of the renamings done is found below.
+ - Sorry. This was necessary for basic support of asynchronous server libraries.
+   `v0.5.0` will contain even more as `async` becomes a primary feature in Rust.
+   These will focus on the `code_grant` and backend parts, so that frontends
+   (including `endpoint::Endpoint`) will–hopefully–be largely unaffected.
+
+
+Replaces the frontend mechanism with a trait based system:
+ - Better configurability of underlying primitives
+ - Trait `Endpoint` introduces central, dedicated error handling
+ - Expands the possible types for request and response representation
+
 These interfaces were improved:
+ - Names follow existing conventions more closely, such as http status codes
+ - Competing usages of 'extension' has been split into 'Extension' and 'Addon'
+ - Competing usages of 'authorization' has been replaced;
+   All requests, functions and flows are now named by their result:
+       AuthorizationFlow, AccessTokenFlow, ResourceFlow
+ - The ResourceFlow now returns the grant that was authorized on success
+ - Transformation wrappers for requests, e.g. MapErr to change error type
+ - Error types now have a stricter usage explanation
+ - Endpoints instantiating responses based on requirements of this library can
+   customize the error descriptions and other user-facing output.
  - The documentation now clearly mentions the biggest use cases in the top-level
-   documentation.  Documentation now refers to actix as a focus instead or iron.
+   documentation.  Documentation now refers to actix as a focus instead of iron.
  - Reduced compilation dependencies for some combination of features.
- - Additional examples in the documentation
+ - Additional examples in the documentation, examples now named after the 
+   frontend they use and generally run a bit smoother.
+ - A 'NormalizedParameter' type supporting 'serde' ensures that key-value-pairs 
+   passed via query and body have at most one mapping per key.
+ - The internal password hashing function `Pbkdf2` has been made public
+
+Fixed the following bugs:
+ - Errors in primitives leading to improper responses
+ - Misusage of error types within the library
+ - Prevent misusage of TokenGenerator (now `TagGrant`) in standard issuers
+ - PKCE is now compliant to the base64 encoding laid out in RFC7636
+ - Issues with valid authorization requests being rejected
+
+Renamings (`old` -> `new`):
+ - `code_grant::frontend` -> `endpoint`
+ - `code_grant::frontend::{MultiValueQuery, SingleValueQuery}` -> `_`
+   Note: removed in favour of `endpoint::{NormalizedParameter, QueryParameter}`
+ - `code_grant::frontend::OwnerAuthorizer` -> `endpoint::OwnerSolicitor`
+ - `code_grant::frontend::PendingAuthorization` -> `_`
+   Note: no longer exists and is handled through `Endpoint` trait
+ - `code_grant::backend::*` -> largely reworked, but logically `code_grant::*`
+ - `code_grant::extensions::<trait>` -> `frontends::simple::extensions::*`
+   Note: endpoint extensions are grouped in trait `endpoint::Extension`
+ - `primitives::authorizer::Storage` -> `primitives::authorizer::AuthMap`
+ - `primitives::grant::Extension` -> `primitives::grant::Value`
+
+Thanks and More:
+  For all of you that stick with me during the long period of seeming
+  inactivity, this has been an exciting year. I've grown a lot in Rust and as a
+  developer. The first versions were coined by a bit of naivity on my part and
+  this one hopefully feels more mature and idiomatic.
 
 # v0.3.1 (2018-Mar-30)
 

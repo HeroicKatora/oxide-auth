@@ -258,7 +258,10 @@ impl cmp::PartialOrd<Self> for PreGrant {
     }
 }
 
-/// Determines how passphrases are stored and checked. Most likely you want to use Argon2
+/// Determines how passphrases are stored and checked. 
+///
+/// The provided library implementation is based on `Pbkdf2`. Other users may prefer to write their
+/// own adaption with `Argon2`. If you do so, you could send a pull request my way.
 pub trait PasswordPolicy: Send + Sync {
     /// Transform the passphrase so it can be stored in the confidential client.
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8>;
@@ -267,7 +270,12 @@ pub trait PasswordPolicy: Send + Sync {
     fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified>;
 }
 
-struct Pbkdf2 {
+/// Store passwords using `Pbkdf2` to derive the stored value.
+///
+/// Each instantiation generates a 16 byte random salt and prepends this additionally with the
+/// username. This combined string is then used as the salt using the passphrase as the secret to
+/// derive the output. The iteration count defaults to `65536` but can be customized.
+pub struct Pbkdf2 {
     /// A prebuilt random, or constructing one as needed.
     random: Option<SystemRandom>,
     iterations: u32,
@@ -301,10 +309,18 @@ impl fmt::Debug for Pbkdf2 {
 }
 
 impl Pbkdf2 {
+    /// Set the iteration count to `(1 << strength)`.
+    ///
+    /// This function will panic when the `strength` is larger or equal to `32`.
+    pub fn set_relative_strength(&mut self, strength: u8) {
+        assert!(strength < 64, "Strength value out of range (0-31): {}", strength);
+        self.iterations = 1u32 << strength as u32;
+    }
+
     fn static_default() -> &'static Self {
         &Pbkdf2 {
             random: None,
-            iterations: 100_000,
+            iterations: (1 << 16),
         }
     }
 
