@@ -3,6 +3,7 @@ extern crate rouille;
 extern crate oxide_auth;
 extern crate url;
 
+#[path = "support/rouille.rs"]
 mod support;
 
 use std::sync::Mutex;
@@ -95,7 +96,7 @@ here</a> to begin the authorization process.
     );
     // Start a dummy client instance which simply relays the token/response
     let client = thread::spawn(||
-        Server::new(("localhost", 8021), support::rouille::dummy_client)
+        Server::new(("localhost", 8021), support::dummy_client)
             .expect("Failed to start client")
             .run()
     );

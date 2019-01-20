@@ -4,17 +4,22 @@ extern crate serde_urlencoded;
 extern crate serde;
 extern crate serde_json;
 
+#[path = "generic.rs"]
+mod generic;
+
+pub use self::generic::*;
+
 use self::reqwest::header;
-use rocket::{Request, Response, Rocket, State};
+use rocket::{Request, Rocket, State};
 use rocket::fairing::{Fairing, Info, Kind};
-use rocket::http::{ContentType, Status};
+use rocket::http::{Status};
 use rocket::response::Redirect;
 use rocket::response::content::Html;
 use rocket::response::status::Custom;
-use rocket::request::{self, FromRequest, Outcome};
+use rocket::request::{self, FromRequest};
 
 use std::collections::HashMap;
-use std::io::{Cursor, Read};
+use std::io::{Read};
 use std::sync::{Mutex, MutexGuard};
 
 pub struct ClientFairing;

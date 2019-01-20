@@ -3,6 +3,11 @@ extern crate actix_web;
 extern crate serde;
 extern crate serde_json;
 
+#[path="generic.rs"]
+mod generic;
+
+pub use self::generic::*;
+
 use self::reqwest::header;
 use self::actix_web::*;
 use self::actix_web::App;
@@ -103,7 +108,6 @@ fn get_with_token(request: &HttpRequest<State>) -> HttpResponse {
     let mut protected_page = String::new();
     page_response.read_to_string(&mut protected_page).unwrap();
 
-    let token = token.replace(",", ",</br>");
     let display_page = format!(
         "<html><style>
             aside{{overflow: auto; word-break: keep-all; white-space: nowrap}}

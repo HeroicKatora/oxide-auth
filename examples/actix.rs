@@ -4,6 +4,7 @@ extern crate futures;
 extern crate oxide_auth;
 extern crate url;
 
+#[path = "support/actix.rs"]
 mod support;
 
 use std::thread;
@@ -126,7 +127,7 @@ pub fn main() {
         .expect("Failed to bind to socket")
         .start();
 
-    server::new(support::actix::dummy_client)
+    server::new(support::dummy_client)
         .bind("localhost:8021")
         .expect("Failed to start dummy client")
         .start();

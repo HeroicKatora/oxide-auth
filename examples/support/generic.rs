@@ -1,20 +1,14 @@
 //! Helper methods for several examples.
 //!
-//! These include a client instance for several implemented frontends. These are not part of the
-//! main example code as this library focusses purely on the server side.
+//! The support files for each frontend include a client instance for several implemented
+//! frontends. These are not part of the main example code as this library focusses purely on the
+//! server side. This module contains code that can be shared between the different frontends.
+//! Since we want to be able to run the the actix example while compiling with rocket features but
+//! rocket includes macros in its crate root, the module include order is a bit strange.
 //!
 //! On supported systems (which have the `x-www-browser` command), there is a utility to open
 //! a page in the browser.
 #![allow(unused)]
-
-#[cfg(feature = "iron-frontend")]
-pub mod iron;
-#[cfg(feature = "rouille-frontend")]
-pub mod rouille;
-#[cfg(feature = "actix-frontend")]
-pub mod actix;
-#[cfg(feature = "rocket-frontend")]
-pub mod rocket;
 
 use oxide_auth::endpoint::PreGrant;
 

@@ -4,6 +4,7 @@ extern crate oxide_auth;
 #[macro_use]
 extern crate rocket;
 
+#[path = "support/rocket.rs"]
 mod support;
 
 use std::io;
@@ -93,7 +94,7 @@ fn main() {
             protected_resource
         ])
         // We only attach the test client here because there can only be one rocket.
-        .attach(support::rocket::ClientFairing)
+        .attach(support::ClientFairing)
         .manage(MyState::preconfigured())
         .launch();
 }

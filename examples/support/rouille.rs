@@ -4,6 +4,10 @@ extern crate serde_urlencoded;
 extern crate serde;
 extern crate serde_json;
 
+mod generic;
+
+pub use self::generic::*;
+
 use self::reqwest::header;
 use self::rouille::{Request, Response};
 
