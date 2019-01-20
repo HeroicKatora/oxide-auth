@@ -5,7 +5,7 @@ determine_new_version() {
 
 check_notexists_version() {
 	# Does the api information start with: '{"errors":'
-	[[ $(wget "https://crates.io/api/v1/crates/image/$new_version" -qO -) == "{\"errors\":"* ]]
+	[[ $(wget -U "Release-Script (for oxide-auth) (author:HeroicKatora)" "https://crates.io/api/v1/crates/oxide-auth/$new_version" -qO -) == "{\"errors\":"* ]]
 }
 
 count_wip_marker() {
@@ -59,7 +59,7 @@ else
 	{ echo "Checking contributors needs GNU parallel, please make sure manually." 1>&2; }
 fi
 
-check_notexists_version || { echo "Version $version appears already published"; exit 1; }
+check_notexists_version || { echo "Version $new_version appears already published"; exit 1; }
 
 # Check there are no more [WIP] markers in Migrate and Readme
 count_wip_marker || { echo "Fail: Work in progress in documentation"; exit 1; }
