@@ -233,11 +233,20 @@ pub trait WebResponse {
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error>;
 }
 
+/// Intermediate trait to flow specific extensions.
+///
+/// The existence of this 1) promotes writing of extensions so that they can be reused independent
+/// of endpoint and request types; 2) makes it possible to provide some of these in this library.
+///
+/// Note that all methods will by default return `None` so that adding to other flows is possible
+/// without affecting existing implementations.
 pub trait Extension {
+    /// The handler for authorization code extensions.
     fn authorization(&mut self) -> Option<&mut AuthorizationExtension> {
         None
     }
 
+    /// The handler for access token extensions.
     fn access_token(&mut self) -> Option<&mut AccessTokenExtension> {
         None
     }
@@ -308,6 +317,9 @@ pub trait Endpoint<Request: WebRequest> {
     /// Wrap an error in the request/response types.
     fn web_error(&mut self, err: Request::Error) -> Self::Error;
 
+    /// Get the central extension instance this endpoint.
+    ///
+    /// Returning `None` is the default implementation and acts as simply providing any extensions.
     fn extension(&mut self) -> Option<&mut Extension> {
         None
     }

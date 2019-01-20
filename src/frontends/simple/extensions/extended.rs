@@ -3,15 +3,19 @@ use primitives::authorizer::Authorizer;
 use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
 
-use super::{AuthorizationAddon, AccessTokenAddon, AddonList};
+use super::AddonList;
 
 /// An inner endpoint with simple extensions.
+///
+/// If the inner endpoint had any extension, it will simply never be provided to any flow and
+/// overwritten. Therefore, this is mainly useful for other endpoints that did not implement
+/// extensions by themselves such as `frontends::simple::endpoint::Generic`.
 pub struct Extended<Inner, Extension> {
     inner: Inner,
     addons: Extension,
 }
 
-impl<Inner, Auth, Acc> Extended<Inner, AddonList<Auth, Acc>> {
+impl<Inner> Extended<Inner, AddonList> {
     /// Wrap an endpoint with a standard extension system.
     pub fn new(inner: Inner) -> Self {
         Extended {
@@ -22,6 +26,7 @@ impl<Inner, Auth, Acc> Extended<Inner, AddonList<Auth, Acc>> {
 }
 
 impl<Inner, E> Extended<Inner, E> {
+    /// Wrap an inner endpoint with a preconstructed extension instance.
     pub fn extend_with(inner: Inner, extension: E) -> Self {
         Extended {
             inner,
@@ -29,21 +34,22 @@ impl<Inner, E> Extended<Inner, E> {
         }
     }
 
+    /// A reference to the extension.
     pub fn extension(&self) -> &E {
         &self.addons
     }
 
+    /// A mutable reference to the extension.
     pub fn extension_mut(&mut self) -> &mut E {
         &mut self.addons
     }
 }
 
-impl<Request, Inner, Auth, Acc> Endpoint<Request> for Extended<Inner, AddonList<Auth, Acc>>
+impl<Request, Inner, Ext> Endpoint<Request> for Extended<Inner, Ext>
 where
     Request: WebRequest,
     Inner: Endpoint<Request>,
-    Auth: AuthorizationAddon,
-    Acc: AccessTokenAddon,
+    Ext: Extension,
 {
     type Error = Inner::Error;
 

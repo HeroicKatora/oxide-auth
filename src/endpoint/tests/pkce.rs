@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::collections::HashMap;
 
 use primitives::authorizer::AuthMap;
@@ -49,8 +48,10 @@ impl PkceSetup {
     }
 
     fn allowing_endpoint(&mut self) -> impl Endpoint<CraftedRequest, Error=Error<CraftedRequest>> + '_ {
-        let pkce_extension = Rc::new(Pkce::required());
-        let extensions = AddonList::from(vec![pkce_extension.clone()], vec![pkce_extension]);
+        let pkce_extension = Pkce::required();
+
+        let mut extensions = AddonList::new();
+        extensions.push_code(pkce_extension);
 
         let endpoint = Generic {
             registrar: &self.registrar,

@@ -1,26 +1,22 @@
-use std::borrow::Borrow;
+use std::fmt;
 use std::sync::Arc;
 
 use super::{AuthorizationAddon, AccessTokenAddon, AddonResult};
 use code_grant::accesstoken::{Extension as AccessTokenExtension, Request};
 use code_grant::authorization::{Extension as AuthorizationExtension, Request as AuthRequest};
 use endpoint::Extension;
-use primitives::grant::Extensions;
+use primitives::grant::{Extensions, GrantExtension};
 
 /// A simple list of loosly related authorization and access addons.
 ///
 /// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
 /// other types.
-#[derive(Debug)]
-pub struct AddonList<
-    Authorization=Arc<AuthorizationAddon>,
-    AccessToken=Arc<AccessTokenAddon>> 
-{
-    authorization: Vec<Authorization>,
-    access_token: Vec<AccessToken>,
+pub struct AddonList {
+    authorization: Vec<Arc<AuthorizationAddon + Send + Sync + 'static>>,
+    access_token: Vec<Arc<AccessTokenAddon + Send + Sync + 'static>>,
 }
 
-impl<Auth, Acc> AddonList<Auth, Acc> {
+impl AddonList {
     /// Create an empty extension system.
     pub fn new() -> Self {
         AddonList {
@@ -29,40 +25,39 @@ impl<Auth, Acc> AddonList<Auth, Acc> {
         }
     }
 
-    /// Collect the addons to form a system.
-    pub fn from<I, K>(authorization_addons: I, access_addons: K) -> Self 
-    where
-        I: IntoIterator<Item=Auth>,
-        K: IntoIterator<Item=Acc>,
+    /// Add an addon that only applies to authorization.
+    pub fn push_authorization<A>(&mut self, addon: A) 
+        where A: AuthorizationAddon + Send + Sync + 'static 
     {
-        AddonList {
-            authorization: authorization_addons.into_iter().collect(),
-            access_token: access_addons.into_iter().collect(),
-        }
+        self.authorization.push(Arc::new(addon))
     }
 
-    /// Add an authorization extension.
-    pub fn authorization(&mut self, extension: Auth) {
-        self.authorization.push(extension)
+    /// Add an addon that only applies to access_token.
+    pub fn push_access_token<A>(&mut self, addon: A)
+        where A: AccessTokenAddon + Send + Sync + 'static 
+    {
+        self.access_token.push(Arc::new(addon))
     }
 
-    /// Add an access token extension.
-    pub fn access_token(&mut self, extension: Acc) {
-        self.access_token.push(extension)
+    /// Add an addon that applies to the whole code grant flow.
+    ///
+    /// The addon gets added both the authorization and access token addons.
+    pub fn push_code<A>(&mut self, addon: A)
+        where A: AuthorizationAddon + AccessTokenAddon + Send + Sync + 'static
+    {
+        let arc = Arc::new(addon);
+        self.authorization.push(arc.clone());
+        self.access_token.push(arc)
     }
 }
 
-impl<Auth, Acc> Default for AddonList<Auth, Acc> {
+impl Default for AddonList {
     fn default() -> Self {
         AddonList::new()
     }
 }
 
-impl<Auth, Acc> Extension for AddonList<Auth, Acc>
-where 
-    Auth: AuthorizationAddon,
-    Acc: AccessTokenAddon,
-{
+impl Extension for AddonList {
     fn authorization(&mut self) -> Option<&mut AuthorizationExtension> {
         Some(self)
     }
@@ -72,22 +67,17 @@ where
     }
 }
 
-impl<Auth, Acc> AccessTokenExtension for AddonList<Auth, Acc>
-where
-    Acc: AccessTokenAddon,
-{
+impl AccessTokenExtension for AddonList {
     fn extend(&mut self, request: &Request, mut data: Extensions) -> std::result::Result<Extensions, ()> {
         let mut result_data = Extensions::new();
 
         for ext in self.access_token.iter() {
-            let raw = ext.borrow();
-
-            let ext_data = data.remove(&raw);            
-            let result = raw.execute(request, ext_data);
+            let ext_data = data.remove(ext);
+            let result = ext.execute(request, ext_data);
 
             match result {
                 AddonResult::Ok => (),
-                AddonResult::Data(data) => result_data.set(&raw, data),
+                AddonResult::Data(data) => result_data.set(ext, data),
                 AddonResult::Err => return Err(()),
             }
         }
@@ -96,24 +86,40 @@ where
     }
 }
 
-impl<Auth, Acc> AuthorizationExtension for AddonList<Auth, Acc>
-where
-    Auth: AuthorizationAddon,
-{
+impl AuthorizationExtension for AddonList {
     fn extend(&mut self, request: &AuthRequest) -> Result<Extensions, ()> {
         let mut result_data = Extensions::new();
 
         for ext in self.authorization.iter() {
-            let raw = ext.borrow();
-            let result = raw.execute(request);
+            let result = ext.execute(request);
 
             match result {
                 AddonResult::Ok => (),
-                AddonResult::Data(data) => result_data.set(&raw, data),
+                AddonResult::Data(data) => result_data.set(ext, data),
                 AddonResult::Err => return Err(()),
             }
         }
 
         Ok(result_data)
+    }
+}
+
+impl fmt::Debug for AddonList {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use std::slice::Iter;
+        struct ExtIter<'a, T: GrantExtension>(Iter<'a, T>);
+
+        impl<'a, T: GrantExtension> fmt::Debug for ExtIter<'a, T> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.debug_list()
+                    .entries(self.0.clone().map(|t| t.identifier()))
+                    .finish()
+            }
+        }
+
+        f.debug_struct("AddonList")
+            .field("authorization", &ExtIter(self.authorization.iter()))
+            .field("access_token", &ExtIter(self.access_token.iter()))
+            .finish()
     }
 }
