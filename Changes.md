@@ -1,17 +1,18 @@
-# v0.4.0
+# v0.4.0 (2019-Jan-20)
 
 Ergonomics & Feature rewrite
 
 Introduces the following features:
  - A frontend for `actix`! Comes with basic 'async' computations.
- - A frontend for `rocket`!
+ - A frontend for `rocket`! Idiomatic integration will be evaluated.
  - Additional traits allow using the backend without having to directly rely
    on primitives.  This is expected to provide enable additional choices for
    frontends in the future.
 
 Breaking changes:
- - Everywhere. Read the migration notes for some help (or open an issue).
-   A list containing hopefully most of the renamings done is found below.
+ - Too many to list. Read the migration notes for some help (or open an issue).
+   A list containing most of the renamings done is found below. The rest of the
+   change notes should give some overview on the extent of this rework.
  - Sorry. This was necessary for basic support of asynchronous server libraries.
    `v0.5.0` will contain even more as `async` becomes a primary feature in Rust.
    These will focus on the `code_grant` and backend parts, so that frontends
