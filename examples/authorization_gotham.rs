@@ -61,7 +61,7 @@ mod main {
             // Stores clients in a simple in-memory hash map.
             clients,
             // Authorization tokens are 16 byte random keys to a memory hash map.
-            Storage::new(RandomGenerator::new(16)),
+            AuthMap::new(RandomGenerator::new(16)),
             // Bearer tokens are signed (but not encrypted) using a passphrase.
             TokenSigner::ephemeral(),
         );

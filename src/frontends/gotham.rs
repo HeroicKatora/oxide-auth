@@ -390,12 +390,12 @@ impl Future for GrantRequest {
                     let resolved = ResolvedRequest::with_body(self.request.take().unwrap(), decoded_body);
                     Some(Async::Ready(ReadyGrantRequest(resolved)))
                 })
-                .ok_or_else(|| OAuthError::InvalidRequest)
+                .ok_or_else(|| OAuthError::BadRequest)
             },
             Ok(Async::NotReady) => Ok(Async::NotReady),
 
             // Not a valid url encoded body
-            Err(_) => Err(OAuthError::InvalidRequest),
+            Err(_) => Err(OAuthError::BadRequest),
         }
     }
 }

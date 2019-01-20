@@ -70,13 +70,6 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
-// These are top level because gotham derive expects them to be.
-#[cfg(feature = "gotham-frontend")]
-extern crate gotham;
-#[cfg(feature = "gotham-frontend")]
-#[macro_use]
-extern crate gotham_derive;
-
 pub mod code_grant;
 pub mod endpoint;
 pub mod frontends;

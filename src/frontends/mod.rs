@@ -181,10 +181,6 @@ pub mod simple;
 
 #[cfg(feature = "actix-frontend")]
 pub mod actix;
-// #[cfg(feature = "gotham-frontend")]
-// pub mod gotham;
-// #[cfg(feature = "iron-frontend")]
-// pub mod iron;
 #[cfg(feature = "rouille-frontend")]
 pub mod rouille;
 #[cfg(feature = "rocket-frontend")]
