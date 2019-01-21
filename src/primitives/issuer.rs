@@ -80,13 +80,37 @@ impl<G: TagGrant> TokenMap<G> {
     pub fn valid_for_default(&mut self) {
         self.duration = None;
     }
+
+    /// Unconditionally delete grant associated with the token.
+    ///
+    /// This is the main advantage over signing tokens. By keeping internal state of allowed
+    /// grants, the resource owner or other instances can revoke a token before it expires
+    /// naturally. There is no differentiation between access and refresh tokens since these should
+    /// have a marginal probability of colliding.
+    pub fn revoke(&mut self, token: &str) {
+        self.access.remove(token);
+        self.refresh.remove(token);
+    }
+
+    /// Directly associate token with grant.
+    ///
+    /// No checks on the validity of the grant are performed but the expiration time of the grant
+    /// is modified (if a `duration` was previously set).
+    pub fn import_grant(&mut self, token: String, mut grant: Grant) {
+        self.set_duration(&mut grant);
+        self.access.insert(token, grant);
+    }
+
+    fn set_duration(&self, grant: &mut Grant) {
+        if let Some(duration) = &self.duration {
+            grant.until = Utc::now() + *duration;
+        }
+    }
 }
 
 impl<G: TagGrant> Issuer for TokenMap<G> {
     fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
-        if let Some(duration) = &self.duration {
-            grant.until = Utc::now() + *duration;
-        }
+        self.set_duration(&mut grant);
         // The (usage, grant) tuple needs to be unique. Since this wraps after 2^63 operations, we
         // expect the validity time of the grant to have changed by then. This works when you don't
         // set your system time forward/backward ~10billion seconds, assuming ~10^9 operations per
@@ -283,8 +307,8 @@ pub mod tests {
     /// Tests the simplest invariants that should be upheld by all authorizers.
     ///
     /// This create a token, without any extensions, an lets the issuer generate a issued token.
-    /// The uri is `https://example.com` and the token lasts for an hour. Generation of a valid
-    /// refresh token is not tested against.
+    /// The uri is `https://example.com` and the token lasts for an hour except if overwritten.
+    /// Generation of a valid refresh token is not tested against.
     ///
     /// Custom implementations may want to import and use this in their own tests.
     pub fn simple_test_suite(issuer: &mut Issuer) {
