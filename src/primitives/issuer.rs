@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::sync::{MutexGuard, RwLockWriteGuard};
 use std::sync::atomic::{ATOMIC_USIZE_INIT, AtomicUsize, Ordering};
 
+use chrono::{Duration, Utc};
+
 use super::Time;
 use super::grant::Grant;
 use super::generator::{TagGrant, Assertion};
@@ -50,6 +52,7 @@ pub struct IssuedToken {
 /// be possible (or at least very unlikely during their overlapping lifetime) for two different
 /// grants to generate the same token in the grant tagger.
 pub struct TokenMap<G: TagGrant=Box<TagGrant + Send + Sync + 'static>> {
+    duration: Option<Duration>,
     generator: G,
     usage: u64,
     access: HashMap<String, Grant>,
@@ -60,16 +63,30 @@ impl<G: TagGrant> TokenMap<G> {
     /// Construct a `TokenMap` from the given generator.
     pub fn new(generator: G) -> Self {
         Self {
+            duration: None,
             generator,
             usage: 0,
             access: HashMap::new(),
             refresh: HashMap::new(),
         }
     }
+
+    /// Set the validity of all issued grants to the specified duration.
+    pub fn valid_for(&mut self, duration: Duration) {
+        self.duration = Some(duration);
+    }
+
+    /// All grants are valid for their default duration.
+    pub fn valid_for_default(&mut self) {
+        self.duration = None;
+    }
 }
 
 impl<G: TagGrant> Issuer for TokenMap<G> {
-    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+    fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
+        if let Some(duration) = &self.duration {
+            grant.until = Utc::now() + *duration;
+        }
         // The (usage, grant) tuple needs to be unique. Since this wraps after 2^63 operations, we
         // expect the validity time of the grant to have changed by then. This works when you don't
         // set your system time forward/backward ~10billion seconds, assuming ~10^9 operations per
@@ -103,6 +120,7 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
 /// Although this token instance allows preservation of memory it also implies that tokens, once
 /// issued, are impossible to revoke.
 pub struct TokenSigner {
+    duration: Option<Duration>,
     signer: Assertion,
     // FIXME: make this an AtomicU64 once stable.
     counter: AtomicUsize,
@@ -115,6 +133,7 @@ impl TokenSigner {
     /// a new key using a utility such as `openssl rand` that you then store away securely.
     pub fn new<S: Into<Assertion>>(secret: S) -> TokenSigner {
         TokenSigner { 
+            duration: None,
             signer: secret.into(),
             counter: ATOMIC_USIZE_INIT,
         }
@@ -137,6 +156,16 @@ impl TokenSigner {
     /// ```
     pub fn ephemeral() -> TokenSigner {
         TokenSigner::new(Assertion::ephermal())
+    }
+
+    /// Set the validity of all issued grants to the specified duration.
+    pub fn valid_for(&mut self, duration: Duration) {
+        self.duration = Some(duration);
+    }
+
+    /// All grants are valid for their default duration.
+    pub fn valid_for_default(&mut self) {
+        self.duration = None;
     }
 
     /// Get the next counter value.
@@ -219,7 +248,10 @@ impl Issuer for TokenSigner {
 }
 
 impl<'a> Issuer for &'a TokenSigner {
-    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+    fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
+        if let Some(duration) = &self.duration {
+            grant.until = Utc::now() + *duration;
+        }
         let first_ctr = self.next_counter() as u64;
         let second_ctr = self.next_counter() as u64;
         let token = self.signer.tag("token").sign(first_ctr, &grant)?;
