@@ -48,7 +48,7 @@ permitted by [IETF Trust License 4–Section 3.c.i][IETF4].
 
 [actix]: https://crates.io/crates/actix-web
 [example folder]: examples/
-[interactive example]: examples/authorization_actix.rs
+[interactive example]: examples/actix.rs
 [CHANGES]: Changes.md
 [MIGRATION]: Migration.md
 [CONTRIBUTING]: docs/CONTRIBUTING.md

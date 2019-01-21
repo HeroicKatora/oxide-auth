@@ -56,7 +56,7 @@
 //! [`code_grant::endpoint`]: code_grant/endpoint/index.html
 //! [`frontends`]: frontends/index.html
 //! [`primitives`]: primitives/index.html
-//! [actix example]: examples/authorization_code.rs
+//! [actix example]: examples/actix.rs
 //!
 #![warn(missing_docs)]
 
