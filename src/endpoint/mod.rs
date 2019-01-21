@@ -452,6 +452,46 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     }
 }
 
+impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
+    type Error = E::Error;
+
+    fn registrar(&self) -> Option<&Registrar> {
+        (**self).registrar()
+    }
+    
+    fn authorizer_mut(&mut self) -> Option<&mut Authorizer> {
+        (**self).authorizer_mut()
+    }
+
+    fn issuer_mut(&mut self) -> Option<&mut Issuer> {
+        (**self).issuer_mut()
+    }
+
+    fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<R>> {
+        (**self).owner_solicitor()
+    }
+
+    fn scopes(&mut self) -> Option<&mut Scopes<R>> {
+        (**self).scopes()
+    }
+
+    fn response(&mut self, request: &mut R, kind: Template) -> Result<R::Response, Self::Error> {
+        (**self).response(request, kind)
+    }
+
+    fn error(&mut self, err: OAuthError) -> Self::Error {
+        (**self).error(err)
+    }
+
+    fn web_error(&mut self, err: R::Error) -> Self::Error {
+        (**self).web_error(err)
+    }
+
+    fn extension(&mut self) -> Option<&mut Extension> {
+        (**self).extension()
+    }
+}
+
 impl Extension for () { }
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for &'a mut S {
