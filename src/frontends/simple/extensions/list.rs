@@ -107,7 +107,7 @@ impl AuthorizationExtension for AddonList {
 impl fmt::Debug for AddonList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use std::slice::Iter;
-        struct ExtIter<'a, T: GrantExtension>(Iter<'a, T>);
+        struct ExtIter<'a, T: GrantExtension + 'a>(Iter<'a, T>);
 
         impl<'a, T: GrantExtension> fmt::Debug for ExtIter<'a, T> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
