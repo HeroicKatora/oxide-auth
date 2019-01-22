@@ -1,3 +1,17 @@
+# v0.4.1 (2019-Jan-22)
+
+Feature release
+
+Introduces the following features:
+ - Reimplemented frontend for `iron`! Now with 100% more compatible code!
+ - Modification functions for `TokenMap` for integration with external issuers.
+ - Allow setting the duration of tokens on issuers.
+
+Fixed the following bugs:
+ - Fixed a missing trait bound for some older compilers (1.31)
+   While those have no guarantee of support, at least one version seem reasonable
+ - Links to the `acitx` example in documentation
+
 # v0.4.0 (2019-Jan-20)
 
 Ergonomics & Feature rewrite
