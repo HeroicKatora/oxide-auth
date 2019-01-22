@@ -1,4 +1,7 @@
-# v0.4.1 (2019-Jan-22)
+Versions follow SemVer, of course. Major milestone versions are named in
+alphabetic order and will be accompanied by notes in <./Migration.md>.
+
+# v0.4.1 (2019-Jan-22) – Diamond
 
 Feature release
 
@@ -102,7 +105,7 @@ These interfaces were improved:
  - The dependencies for `iron` were update to reflect the latest (and possibly
    last) released version of the framework.
 
-# v0.3 (2018-Feb-23)
+# v0.3 (2018-Feb-23) – Cobalt
 
 Ergonomics & Feature release
 
@@ -126,7 +129,7 @@ These interfaces were improved:
    code.
 
 
-# v0.2
+# v0.2 – Basalt
 
 Feature & Bugfix release
 

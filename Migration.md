@@ -11,7 +11,7 @@ according migration note.
 
 This document is independent of the [release notes](Changes.md).
 
-## v0.4.0
+## v0.4.0 – Diamond
 
 Below is a reverse chronological list of recommended migration notes. These
 have been collected while improving incrementally in preview versions. Read
