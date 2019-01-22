@@ -69,7 +69,10 @@ fn endpoint(state: Arc<State>, req: &mut Request) -> IronResult<Response> {
 
     let mut token = String::new();
     token_response.read_to_string(&mut token).unwrap();
-    let token_map: HashMap<String, String> = serde_json::from_str(&token).unwrap();
+    let token_map: HashMap<String, String> = match serde_json::from_str(&token) {
+        Ok(response) => response,
+        Err(err) => return Ok(Response::with((Status::BadRequest, format!("Could not parse token response {:?}", err)))),
+    };
 
     if token_map.get("error").is_some() {
         return Ok(Response::with((Status::BadRequest, token)));
@@ -89,12 +92,12 @@ fn endpoint(state: Arc<State>, req: &mut Request) -> IronResult<Response> {
     let mut set_token = state.token.write().unwrap();
     *set_token = Some(token.to_string());
 
-    let mut response = Response::with(Status::Ok);
+    let mut response = Response::with(Status::Found);
     response.headers.set(headers::Location("/".into()));
     Ok(response)
 }
 
-fn view(state: Arc<State>, req: &mut Request) -> IronResult<Response> {
+fn view(state: Arc<State>, _: &mut Request) -> IronResult<Response> {
     let token = state.token.read().unwrap();
     let token = match *token {
         None => return Ok(Response::with((Status::Ok, "No token granted yet"))),
@@ -119,8 +122,6 @@ fn view(state: Arc<State>, req: &mut Request) -> IronResult<Response> {
     let mut protected_page = String::new();
     page_response.read_to_string(&mut protected_page).unwrap();
 
-    let token = serde_json::to_string_pretty(&token_map).unwrap();
-    let token = token.replace(",", ",</br>");
     let display_page = format!(
         "<html><style>
             aside{{overflow: auto; word-break: keep-all; white-space: nowrap}}
@@ -132,7 +133,7 @@ fn view(state: Arc<State>, req: &mut Request) -> IronResult<Response> {
         <a href=\"http://localhost:8020/\">http://localhost:8020/</a>.
         Its contents are:
         <article>{}</article>
-        </main></html>", token, protected_page);
+        </main></html>", token_map, protected_page);
 
     Ok(Response::with((
         Status::Ok,
