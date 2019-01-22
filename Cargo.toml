@@ -28,8 +28,10 @@ actix = { version = "0.7.9", optional = true }
 actix-web = { version = "0.7.17", optional = true }
 mime = { version = "0.3.13", optional = true }
 futures = { version = "0.1", optional = true }
+iron = { version = "0.6", optional = true }
 rocket = { version = "0.4.0", optional = true }
 rouille = { version = "3.0", optional = true }
+# router = { version = "0.6", optional = true }
 serde_urlencoded = { version = "0.5.1", optional = true }
 urlencoded = { version = "^0.6", optional = true }
 
@@ -41,6 +43,7 @@ urlencoded = { version = "^0.6", optional = true }
 [features]
 default = ["actix-frontend"]
 actix-frontend = ["actix", "actix-web", "futures", "serde_urlencoded"]
+iron-frontend = ["iron", "serde_urlencoded"]
 rouille-frontend = ["rouille", "serde_urlencoded"]
 rocket-frontend = ["rocket", "serde_urlencoded"]
 
@@ -62,9 +65,13 @@ required-features = ["rouille-frontend"]
 name = "rocket"
 required-features = ["rocket-frontend"]
 
+# [[example]]
+# name = "authorization_gotham"
+# required-features = ["gotham-frontend"]
+
 [[example]]
-name = "authorization_gotham"
-required-features = ["gotham-frontend"]
+name = "iron"
+required-features = ["iron-frontend"]
 
 [package.metadata.docs.rs]
 features = ["actix-frontend", "rocket-frontend", "rouille-frontend"]

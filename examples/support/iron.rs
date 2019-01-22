@@ -3,6 +3,11 @@ extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
 
+#[path = "./generic.rs"]
+mod generic;
+
+pub use self::generic::*;
+
 use std::collections::HashMap;
 use std::io::Read;
 use self::iron::prelude::*;
