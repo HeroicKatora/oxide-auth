@@ -74,4 +74,4 @@ name = "iron"
 required-features = ["iron-frontend"]
 
 [package.metadata.docs.rs]
-features = ["actix-frontend", "rocket-frontend", "rouille-frontend"]
+features = ["actix-frontend", "iron-frontend", "rocket-frontend", "rouille-frontend"]
