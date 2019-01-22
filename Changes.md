@@ -1,5 +1,6 @@
 Versions follow SemVer, of course. Major milestone versions are named in
-alphabetic order and will be accompanied by notes in <./Migration.md>.
+alphabetic order and will be accompanied by notes in [the migration
+notes](Migration.md)
 
 # v0.4.1 (2019-Jan-22) – Diamond
 
