@@ -11,6 +11,23 @@ according migration note.
 
 This document is independent of the [release notes](Changes.md).
 
+## v0.4.1
+
+The iron frontend has been reworked greatly. It no longer wraps endpoint
+related types into custom structs. Users who previously used these features and
+want to transition quickly may replace `IronGranter` with the `Generic` struct
+and the its flow creation methods with methods of that struct of with functions
+found in `frontends::simple::endpoint::*`. A more complete transition for
+larger code bases would be implementing `endpoint::Endpoint` yourself. 
+
+Note that `MethodAuthorizer` got replaced by `frontends::simple::FnSolicitor`
+and the `IronAuthorizer` has been fully removed. `SimpleAuthorization` was
+superseeded by `endpoint::OwnerAuthorization`.
+
+Support for a Bearer token authorizing Middleware implementation has not yet
+been implemented. Also, see the notes on `QueryParamter` and module reordering
+below in the general migration notes for `v0.4.0`.
+
 ## v0.4.0 – Diamond
 
 Below is a reverse chronological list of recommended migration notes. These
