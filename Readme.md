@@ -30,7 +30,7 @@ These server libraries are integrated:
 |-|-|-|
 | `actix` | `actix-frontend`, default | Includes integration into messages |
 | `rocket` | `rocket-frontend`, nightly | - |
-| `rouille` | `rouille-frontned` | - |
+| `rouille` | `rouille-frontend` | - |
 | `iron` | `iron-frontend` | - |
 
 Additional
