@@ -125,7 +125,7 @@ here</a> to begin the authorization process.
             solicitor: Vacant,
             // Scope configured later.
             scopes: Vacant,
-            // `rocket::Response` is `Default`, so we don't need more configuration.
+            // `iron::Response` is not `Default`, so we choose a constructor.
             response: Response::new,
         }
     }
@@ -139,7 +139,7 @@ fn consent_form(_: &mut &mut Request, grant: &PreGrant) -> OwnerConsent<Response
 }
 
 fn consent_decision(request: &mut &mut Request, _: &PreGrant) -> OwnerConsent<Response> {
-    // Consider authentiating the better
+    // Authenticate the request better in a real app!
     let allowed = request.url.as_ref()
         .query_pairs()
         .any(|(key, _)| key == "allow");

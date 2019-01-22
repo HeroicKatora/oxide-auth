@@ -21,6 +21,18 @@ authorization token. A client is also activated which can be used to access the
 resource. The example assumes the user to be the validated resource owner, who
 can deny or allow the request by the client.
 
+Frontends
+---------
+
+These server libraries are integrated:
+
+| Name | Feature | Notes |
+|-|-|-|
+| `actix` | `actix-frontend`, default | Includes integration into messages |
+| `rocket` | `rocket-frontend`, nightly | - |
+| `rouille` | `rouille-frontned` | - |
+| `iron` | `iron-frontend` | - |
+
 Additional
 ----------
 [![Crates.io Status](https://img.shields.io/crates/v/oxide-auth.svg)](https://crates.io/crates/oxide-auth)
