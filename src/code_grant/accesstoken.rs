@@ -1,3 +1,4 @@
+//! Provides the handling for Access Token Requests
 use std::borrow::Cow;
 use std::collections::HashMap;
 

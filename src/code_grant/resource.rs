@@ -1,3 +1,4 @@
+//! Provides the handling for Resource Requests.
 use std::borrow::Cow;
 use std::fmt;
 

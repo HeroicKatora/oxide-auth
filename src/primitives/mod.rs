@@ -1,8 +1,36 @@
 //! A collection of primites useful for more than one authorization method.
 //!
-//! There only is, as you might have noticed, only the code grant method. But abstracting away the
-//! underlying primitives provides an incentive to –e.g.– provide a database based implementation
-//! independently of a particular web server library (*wink*).
+//! A primitive is the smallest independent unit of policy used in OAuth related endpoints. For
+//! example, an `authorizer` generates and verifies Authorization Codes.  There only is, as you
+//! might have noticed, only the OAuth2 code grant method. But abstracting away the underlying
+//! primitives makes it possible to provide –e.g.– a independent database based implementation.
+//!
+//! These should be used to build or instantiate an `Endpoint`, for example [`Generic`] or your
+//! own.
+//!
+//! ```
+//! # extern crate oxide_auth;
+//! # use oxide_auth::frontends::simple::endpoint::Vacant;
+//! use oxide_auth::frontends::simple::endpoint::Generic;
+//! use oxide_auth::primitives::{
+//!     authorizer::AuthMap,
+//!     generator::RandomGenerator,
+//!     issuer::TokenMap,
+//!     registrar::ClientMap,
+//! };
+//!
+//! Generic {
+//!     authorizer: AuthMap::new(RandomGenerator::new(16)),
+//!     registrar: ClientMap::new(),
+//!     issuer: TokenMap::new(RandomGenerator::new(16)),
+//!     // ...
+//! #   scopes: Vacant,
+//! #   solicitor: Vacant,
+//! #   response: Vacant,
+//! };
+//! ```
+//!
+//! [`Generic`]: ../frontends/simple/endpoint/struct.Generic.html
 
 use chrono::DateTime;
 use chrono::Utc;

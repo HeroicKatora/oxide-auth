@@ -1,4 +1,4 @@
-//! Authorizers are need to swap code grants for bearer tokens.
+//! Authorizers are need to exchange code grants for bearer tokens.
 //!
 //! The role of an authorizer is the ensure the consistency and security of request in which a
 //! client is willing to trade a code grant for a bearer token. As such, it will first issue grants
@@ -37,7 +37,12 @@ pub struct AuthMap<I: TagGrant=Box<TagGrant + Send + Sync + 'static>> {
 
 
 impl<I: TagGrant> AuthMap<I> {
-    /// Create a hash map authorizer with the given issuer as a backend.
+    /// Create an authorizer generating tokens with the `tagger`.
+    ///
+    /// The token map is initially empty and is filled by methods provided in its [`Authorizer`]
+    /// implementation.
+    ///
+    /// [`Authorizer`]: ./trait.Authorizer.html
     pub fn new(tagger: I) -> Self {
         AuthMap {
             tagger,

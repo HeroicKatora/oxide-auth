@@ -1,3 +1,4 @@
+//! Provides the handling for Authorization Code Requests
 use std::borrow::Cow;
 use std::result::Result as StdResult;
 

@@ -1,8 +1,12 @@
-//! Helper for ad-hoc authorization endpoints needs.
+//! An ad-hoc endpoint.
 //!
-//! Implements a simple struct with public members `Generic` that provides a common basis with an
-//! `Endpoint` implementation. Tries to implement the least amount of policies and logic while
-//! providing the biggest possible customizability (in that order).
+//! Provides a simple struct with public members – [`Generic`] – that implements the central
+//! [`Endpoint`] trait implementation. Tries to implement the least amount of policies and logic
+//! while providing the biggest possible customizability (priority in this order).
+//!
+//! [`Generic`]: ./struct.Generic.html
+//! [`Endpoint`]: ../../endpoint/trait.Endpoint.html
+
 use primitives::authorizer::Authorizer;
 use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
@@ -28,33 +32,85 @@ pub enum Error<W: WebRequest> {
     OAuth(OAuthError),
 }
 
-/// A rather basic `Endpoint` implementation.
+/// A rather basic [`Endpoint`] implementation.
 ///
-/// Substitue all parts that are not provided with the marker struct `Vacant`. This will at least
+/// Substitue all parts that are not provided with the marker struct [`Vacant`]. This will at least
 /// ensure that no security properties are violated. Some flows may be unavailable when some
-/// primitives are missing. See `AccessTokenFlow`, `AuthorizationFlow`, `ResourceFlow` in
-/// `code_grant::endpoint` for more details.
+/// primitives are missing. See [`AuthorizationFlow`], [`AccessTokenFlow`], [`ResourceFlow`] for
+/// more details.
 ///
 /// Included types are assumed to be implemented independently, with no major connections. All
-/// attributes are public, so there is no inner invariant. The maintained invariants are already
-/// statically encoded in the type coices.
+/// attributes are public, so there is no inner invariant.
+///
+/// ## Usage
+///
+/// You should prefer this implementation when there are special requirements for your [`Endpoint`]
+/// implementation, or it is created ad-hoc. It also does some static type checking on dedicated
+/// methods to ensure that the creation of specific flows succeeds. You should prefer
+/// `to_authorization`, `to_access_token`, and `to_resource` over the erroring preparation methods
+/// in [`AuthorizationFlow`], [`AccessTokenFlow`], and [`ResourceFlow`] respectively.
+///
+/// This should not be used when you special interacting primitives are used, that originate from
+/// outside this library. For example if you intend for your [`Scopes`] to be dynamically generated
+/// from a list of registered clients, its likely cleaner to provide your own [`Endpoint`]
+/// implementation instead.
+///
+/// ## Example 
+///
+/// Here is an example where a `Generic` is used to set up an endpoint that is filled with the
+/// minimal members to be useable for an [`AccessTokenFlow`].
+///
+/// ```
+/// # extern crate oxide_auth;
+/// # use oxide_auth::frontends::simple::endpoint::Vacant;
+/// # use oxide_auth::frontends::simple::endpoint::Generic;
+/// use oxide_auth::endpoint::{AccessTokenFlow, Endpoint, WebRequest};
+/// use oxide_auth::primitives::{
+///     authorizer::AuthMap,
+///     generator::RandomGenerator,
+///     issuer::TokenMap,
+///     registrar::ClientMap,
+/// };
+///
+/// fn access_token_endpoint<R: WebRequest>() -> AccessTokenFlow<impl Endpoint<R>, R> 
+///     where R::Response: Default,
+/// {
+///     let endpoint = Generic {
+///         authorizer: AuthMap::new(RandomGenerator::new(16)),
+///         registrar: ClientMap::new(),
+///         issuer: TokenMap::new(RandomGenerator::new(16)),
+///         scopes: Vacant,
+///         solicitor: Vacant,
+///         response: Vacant,
+///     };
+///     endpoint.to_access_token()
+/// }
+/// # fn main() { }
+/// ```
+///
+/// [`Endpoint`]: ../../../endpoint/trait.Endpoint.html
+/// [`Vacant`]: struct.Vacant.html
+/// [`AuthorizationFlow`]: ../../../endpoint/struct.AuthorizationFlow.html
+/// [`AccessTokenFlow`]: ../../../endpoint/struct.AccessTokenFlow.html
+/// [`ResourceFlow`]: ../../../endpoint/struct.ResourceFlow.html
+/// [`ResourceFlow`]: ../../../endpoint/trait.Scopes.html
 pub struct Generic<R, A, I, S=Vacant, C=Vacant, L=Vacant> {
-    /// The registrar implementation of `Vacant`.
+    /// The registrar implementation, or `Vacant` if it is not necesary.
     pub registrar: R,
 
-    /// The authorizer implementation of `Vacant`.
+    /// The authorizer implementation, or `Vacant` if it is not necesary.
     pub authorizer: A,
 
-    /// The issuer implementation of `Vacant`.
+    /// The issuer implementation, or `Vacant` if it is not necesary.
     pub issuer: I,
 
-    /// A solicitor implementation fit for the request types or `Vacant`.
+    /// A solicitor implementation fit for the request types, or `Vacant` if it is not necesary.
     pub solicitor: S,
     
-    /// Determine scopes for the request types or `Vacant`.
+    /// Determine scopes for the request types, or `Vacant` if this does not protect resources.
     pub scopes: C,
 
-    /// Creates responses, may be vacant for `Default::default`.
+    /// Creates responses, or `Vacant` if `Default::default` is applicable.
     pub response: L,
 }
 
@@ -96,8 +152,8 @@ pub struct FnSolicitor<F>(pub F);
 
 /// Use a predetermined grant and owner as solicitor.
 ///
-/// Convenience wrapper when the owner and her/his consented to grant can be identified without
-/// further inspecting the request inserted into the flow. This may be the case for `WebRequest`
+/// Convenience wrapper when the owner and her/his consent to a grant can be identified without
+/// further inspecting the request executing the flow. This may be the case for `WebRequest`
 /// implementations extracted from an original http request. This solicitor is obviously mostly
 /// useful for one-shot endpoints.
 pub struct ApprovedGrant {

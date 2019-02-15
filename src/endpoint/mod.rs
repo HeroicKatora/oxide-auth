@@ -18,8 +18,7 @@
 //!
 //! This requires custom, related implementations of [`WebRequest`] and [`WebResponse`].
 //! _WARNING_: Custom endpoints MUST ensure a secure communication layer with confidential clients.
-//! This means using TLS for communication over http (although there are currently discussions to
-//! consider communication to `localhost` as always occuring in a secure context).
+//! This means using TLS for communication over https.
 //!
 //! After receiving an authorization grant, access token or access request, initiate the respective
 //! flow by collecting the [`Authorizer`], [`Issuer`], and [`Registrar`] instances. For example:
@@ -83,12 +82,16 @@ pub enum OwnerConsent<Response: WebResponse> {
 /// access token to the third party client. When an error is present (see several methods) it is
 /// mostly possible to customize it. This hook provides advanced endpoints with the opportunity to
 /// set additional parameters and informational messages before they are encoded.
+///
+/// See the provided methods for more information and examples.
 #[derive(Debug)]
 pub struct Template<'a> {
     inner: InnerTemplate<'a>,
 }
 
 /// The general manner of the response.
+///
+/// These are parallels for HTTP status codes of the same name.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ResponseStatus {
     /// The response is issued because the requesting party was not authorized.
@@ -164,6 +167,10 @@ enum InnerTemplate<'a> {
 }
 
 /// Checks consent with the owner of a resource, identified in a request.
+///
+/// See [`frontends::simple`] for an implementation that permits arbitrary functions.
+///
+/// [`frontends::simple`]: ../frontends/simple/endpoint/struct.FnSolicitor.html
 pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
@@ -171,6 +178,39 @@ pub trait OwnerSolicitor<Request: WebRequest> {
 }
 
 /// Determine the scopes applying to a request of a resource.
+///
+/// It is possible to use a slice of [`Scope`]s as an implementation of this trait. You can inspect
+/// the request that was used to access the resource for which the scopes are to be determined but
+/// should generally avoid doing so. Sometimes the scope depends on external parameters and this is
+/// unavoidable, e.g. if the scope is created dynamically from the path of the resource.
+///
+/// ## Example
+///
+/// Here's a possible new implementation that allows you to update your scope list at runtime:
+///
+/// ```
+/// # use oxide_auth::endpoint::Scopes;
+/// # use oxide_auth::endpoint::WebRequest;
+/// use oxide_auth::primitives::scope::Scope;
+/// use std::sync::{Arc, RwLock};
+///
+/// struct MyScopes {
+///     update: RwLock<Arc<[Scope]>>,
+///     current: Arc<[Scope]>,
+/// };
+///
+/// impl<R: WebRequest> Scopes<R> for MyScopes {
+///     fn scopes(&mut self, _: &mut R) -> &[Scope] {
+///         let update = self.update.read().unwrap();
+///         if !Arc::ptr_eq(&update, &self.current) {
+///             self.current = update.clone();
+///         }
+///         &self.current
+///     }
+/// }
+/// ```
+///
+/// [`Scope`]: ../primitives/scope/struct.Scope.html
 pub trait Scopes<Request: WebRequest> {
     /// A list of alternative scopes.
     ///
