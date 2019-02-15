@@ -2,6 +2,13 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.4.2 (2019-Feb-15)
+
+Documentation release
+
+Improved the documentation on many high-level modules to clarify their usage
+and target audience.
+
 # v0.4.1 (2019-Jan-22) – Diamond
 
 Feature release

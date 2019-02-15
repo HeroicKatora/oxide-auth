@@ -66,7 +66,7 @@
 //! [`frontends`]: frontends/index.html
 //! [`frontends::simple`]: frontends/simple/index.html
 //! [`primitives`]: primitives/index.html
-//! [actix example]: examples/actix.rs
+//! [actix example]: https://github.com/HeroicKatora/oxide-auth/blob/master/examples/actix.rs
 //!
 #![warn(missing_docs)]
 
