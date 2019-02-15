@@ -2,7 +2,7 @@
 name: Feature request
 about: Suggest an idea for this project
 title: ''
-labels: ''
+labels: feature
 assignees: ''
 
 ---
@@ -25,4 +25,4 @@ Add any other context or screenshots about the feature request here.
 
 ## Tracking pull request
 
- - [ ] A pull request (does not yet exist/exists at <&#8230;>)
+ - [ ] A pull request (does not yet exist/exists at #&#8230;)

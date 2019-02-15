@@ -19,4 +19,4 @@ A potential use case, similar improvements, ideas that depend on this, or leave 
 
 # Tracking pull request
 
- - [ ] A pull request (does not yet exist/exists at <&#8230;>)
+ - [ ] A pull request (does not yet exist/exists at #&#8230;)

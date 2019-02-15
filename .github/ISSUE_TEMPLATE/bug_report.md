@@ -2,7 +2,7 @@
 name: Bug report
 about: Create a report to help us improve
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
@@ -34,4 +34,4 @@ Common sense dictates, &#8230;
 Tracking pull request
 --------
 
- - [ ] A pull request (does not yet exist/exists at <&#8230;>)
+ - [ ] A pull request (does not yet exist/exists at #&#8230;)
