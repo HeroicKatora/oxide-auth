@@ -183,11 +183,20 @@ impl TokenSigner {
     }
 
     /// Set the validity of all issued grants to the specified duration.
+    ///
+    /// This only affects tokens issued after this call. The default duration is 1 (ONE) hour for
+    /// tokens issued for the authorization code grant method. For many users this may seem to
+    /// short but should be secure-by-default. You may want to increase the duration, or instead
+    /// use long lived refresh token instead (although you currently need to handle refresh tokens
+    /// yourself, coming soonish).
     pub fn valid_for(&mut self, duration: Duration) {
         self.duration = Some(duration);
     }
 
-    /// All grants are valid for their default duration.
+    /// Set all grants to be valid for their default duration.
+    ///
+    /// This only affects tokens issued after this call. The default duration is 1 (ONE) hour for
+    /// tokens issued for the authorization code grant method.
     pub fn valid_for_default(&mut self) {
         self.duration = None;
     }
