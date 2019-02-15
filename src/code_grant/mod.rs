@@ -28,11 +28,8 @@
 //! [`Endpoint`]: ../endpoint/trait.Endpoint.html
 
 pub mod accesstoken;
-
 pub mod authorization;
-
-pub mod resource;
-
-pub mod extensions;
-
 pub mod error;
+pub mod extensions;
+pub mod refresh;
+pub mod resource;
