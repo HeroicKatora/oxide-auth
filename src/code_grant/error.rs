@@ -134,7 +134,11 @@ impl AccessTokenErrorType {
 
 /// Represents parameters of an error in an [Issuing Error Response][Issuing Error].
 ///
+/// This is used for both access token requests, and [token refresh requests] as they use the same
+/// internal error representations in the RFC as well.
+///
 /// [Issuing Error]: https://tools.ietf.org/html/rfc6749#section-5.2
+/// [token refresh requests]: https://tools.ietf.org/html/rfc6749#section-7
 #[derive(Clone, Debug)]
 pub struct AccessTokenError {
     error: AccessTokenErrorType,
