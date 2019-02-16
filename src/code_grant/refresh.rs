@@ -1,5 +1,6 @@
 //! Retrieve a refreshed access token.
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
 
@@ -191,5 +192,43 @@ impl Error {
                 error: AccessTokenError::new(AccessTokenErrorType::InvalidClient),
             },
             authtype.to_string())
+    }
+
+    /// Get a handle to the description the client will receive.
+    ///
+    /// Some types of this error don't return any description which is represented by a `None`
+    /// result.
+    pub fn description(&mut self) -> Option<&mut AccessTokenError> {
+        match self {
+            Error::Invalid(description) => Some(description.description()),
+            Error::Unauthorized(description, _) => Some(description.description()),
+            Error::Primitive => None,
+        }
+    }
+}
+
+impl ErrorDescription {
+    /// Get a handle to the description the client will receive.
+    pub fn description(&mut self) -> &mut AccessTokenError {
+        &mut self.error
+    }
+}
+
+impl BearerToken {
+    /// Convert the token into a json string, viable for being sent over a network with
+    /// `application/json` encoding.
+    pub fn to_json(self) -> String {
+        let remaining = self.0.until.signed_duration_since(Utc::now());
+        let mut kvmap: HashMap<_, _> = vec![
+            ("access_token", self.0.token),
+            ("token_type", "bearer".to_string()),
+            ("expires_in", remaining.num_seconds().to_string()),
+            ("scope", self.1)].into_iter().collect();
+
+        if let Some(refresh) = self.0.refresh {
+            kvmap.insert("refresh_token", refresh);
+        }
+
+        serde_json::to_string(&kvmap).unwrap()
     }
 }
