@@ -25,6 +25,20 @@ has been replaced by `ephemeral`.
 The crate has been split into a core (`oxide-auth`) and several sub-crates for
 each frontend version
 
+The refresh token in `IssuedToken` is now optional. A new attribute for the
+token type of the access token has been added, its enum type has a `Default`
+implementation that generates the `Bearer` corresponding variant.
+
+The `Issuer::refresh` method no longer has a default implementation. To
+replicate the old behaviour, its body should simply consist of `Err(())`.
+
+## v0.4.5
+
+An empty `refresh` token in the `IssuedToken` will no longer inidicate support
+for refreshing to the client. Furthermore, refresh tokens need to be
+explicitely enabled for `TokenSigner` as there is no good way to revoke them
+and are mostly intended for usage in custom signers.
+
 ## v0.4.1
 
 The iron frontend has been reworked greatly. It no longer wraps endpoint
