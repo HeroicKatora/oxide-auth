@@ -23,6 +23,11 @@ pub trait Issuer {
     /// Create a token authorizing the request parameters
     fn issue(&mut self, Grant) -> Result<IssuedToken, ()>;
 
+    /// Refresh a token.
+    fn refresh(&mut self, Grant) -> Result<RefreshedToken, ()> {
+        Err(())
+    }
+
     /// Get the values corresponding to a bearer token
     fn recover_token<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
 
@@ -38,6 +43,23 @@ pub struct IssuedToken {
 
     /// The refresh token
     pub refresh: String,
+
+    /// Expiration timestamp (Utc).
+    ///
+    /// Technically, a time to live is expected in the response but this will be transformed later.
+    /// In a direct backend access situation, this enables high precision timestamps.
+    pub until: Time,
+}
+
+#[derive(Clone, Debug)]
+pub struct RefreshedToken {
+    /// The bearer token.
+    pub token: String,
+
+    /// The new refresh token.
+    ///
+    /// If this is set, the old refresh token has been invalidated.
+    pub refresh: Option<String>,
 
     /// Expiration timestamp (Utc).
     ///

@@ -62,6 +62,14 @@ pub struct AuthorizationError {
 }
 
 impl AuthorizationError {
+    pub(crate) fn new(error: AuthorizationErrorType) -> Self {
+        AuthorizationError {
+            error,
+            description: None,
+            uri: None,
+        }
+    }
+
     pub(crate) fn set_type(&mut self, new_type: AuthorizationErrorType) {
         self.error = new_type;
     }
@@ -147,6 +155,14 @@ pub struct AccessTokenError {
 }
 
 impl AccessTokenError {
+    pub(crate) fn new(error: AccessTokenErrorType) -> Self {
+        AccessTokenError {
+            error,
+            description: None,
+            uri: None,
+        }
+    }
+
     pub(crate) fn set_type(&mut self, new_type: AccessTokenErrorType) {
         self.error = new_type;
     }
