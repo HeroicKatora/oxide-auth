@@ -31,6 +31,7 @@
 mod authorization;
 mod accesstoken;
 mod error;
+mod refresh;
 mod resource;
 mod query;
 
