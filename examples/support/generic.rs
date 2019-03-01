@@ -19,8 +19,15 @@ pub fn open_in_browser() {
     use std::process::Command;
 
     let target_addres = "http://localhost:8020/";
+
+    // As suggested by <https://stackoverflow.com/questions/3739327/launching-a-website-via-windows-commandline>
     let open_with = if cfg!(target_os = "linux") {
-        Ok("x-www-browser")
+        // `xdg-open` chosen over `x-www-browser` due to problems with the latter (#25)
+        Ok("xdg-open")
+    } else if cfg!(target_os = "windows") {
+        Ok("explorer")
+    } else if cfg!(target_os = "macos") {
+        Ok("open")
     } else {
         Err(Error::new(ErrorKind::Other, "Open not supported"))
     };
