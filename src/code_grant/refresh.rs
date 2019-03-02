@@ -212,6 +212,10 @@ impl ErrorDescription {
     pub fn description(&mut self) -> &mut AccessTokenError {
         &mut self.error
     }
+
+    pub fn to_json(&self) -> String {
+        unimplemented!()
+    }
 }
 
 impl BearerToken {
