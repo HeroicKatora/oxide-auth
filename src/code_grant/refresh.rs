@@ -129,7 +129,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
     }
 
     match request.grant_type() {
-        Some(ref cow) if cow == "authorization_code" => (),
+        Some(ref cow) if cow == "refresh_token" => (),
         None => return Err(Error::invalid(AccessTokenErrorType::InvalidRequest)),
         Some(_) => return Err(Error::invalid(AccessTokenErrorType::UnsupportedGrantType)),
     };
