@@ -213,8 +213,14 @@ impl ErrorDescription {
         &mut self.error
     }
 
-    pub fn to_json(&self) -> String {
-        unimplemented!()
+    /// Convert the error into a json string.
+    ///
+    /// The string may be the content of an `application/json` body for example.
+    pub fn to_json(self) -> String {
+        let asmap = self.error.into_iter()
+            .map(|(k, v)| (k.to_string(), v.into_owned()))
+            .collect::<HashMap<String, String>>();
+        serde_json::to_string(&asmap).unwrap()
     }
 }
 
