@@ -12,7 +12,7 @@ use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
-use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
+use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow, RefreshFlow};
 use endpoint::{Endpoint, OAuthError, PreGrant, Template, Scopes};
 use endpoint::{OwnerConsent, OwnerSolicitor};
 use endpoint::WebRequest;
@@ -235,6 +235,7 @@ pub trait ResponseCreator<W: WebRequest> {
 
 type Authorization<'a, W> = Generic<&'a (dyn Registrar + 'a), &'a mut(dyn Authorizer + 'a), Vacant, &'a mut(dyn OwnerSolicitor<W> + 'a), Vacant, Vacant>;
 type AccessToken<'a> = Generic<&'a (dyn Registrar + 'a), &'a mut(dyn Authorizer + 'a), &'a mut(dyn Issuer + 'a), Vacant, Vacant, Vacant>;
+type Refresh<'a> = Generic<&'a (dyn Registrar + 'a), Vacant, &'a mut(dyn Issuer + 'a), Vacant, Vacant, Vacant>;
 type Resource<'a> = Generic<Vacant, Vacant, &'a mut (dyn Issuer + 'a), Vacant, &'a [Scope], Vacant>;
 
 /// Create an ad-hoc authorization flow.
@@ -309,6 +310,24 @@ pub fn resource_flow<'a, W>(issuer: &'a mut dyn Issuer, scopes: &'a [Scope])
         issuer,
         solicitor: Vacant,
         scopes,
+        response: Vacant,
+    });
+
+    match flow {
+        Err(_) => unreachable!(),
+        Ok(flow) => flow,
+    }
+}
+
+pub fn refresh_flow<'a, W>(registrar: &'a dyn Registrar, issuer: &'a mut dyn Issuer)
+    -> RefreshFlow<Refresh<'a>, W> where W: WebRequest, W::Response: Default
+{
+    let flow = RefreshFlow::prepare(Generic {
+        registrar,
+        authorizer: Vacant,
+        issuer,
+        solicitor: Vacant,
+        scopes: Vacant,
         response: Vacant,
     });
 
