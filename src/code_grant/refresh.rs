@@ -48,6 +48,7 @@ pub trait Endpoint {
 pub struct BearerToken(RefreshedToken, String);
 
 /// Defines actions for the response to an access token request.
+#[derive(Debug)]
 pub enum Error {
     /// The token did not represent a valid token.
     Invalid(ErrorDescription),
@@ -66,6 +67,7 @@ pub enum Error {
 ///
 /// Enables addtional json functionality to generate a properly formatted response in the user of
 /// this module.
+#[derive(Debug)]
 pub struct ErrorDescription {
     error: AccessTokenError,
 }
@@ -87,21 +89,17 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
     // validated that the authorization authenticates a client? But we must inspect the token to
     // know if there is a client to validate.
     let authorization = request.authorization();
+
+    // REQUIRED, so not having it makes it an invalid request.
     let token = request.refresh_token();
+    let token = token.ok_or(Error::invalid(AccessTokenErrorType::InvalidRequest))?;
 
     // MUST validate the refresh token.
-    let grant = token.map(|token| {
-        handler
-            .issuer()
-            .recover_refresh(&token)
-            // Primitive error is ok, that's like internal server error.
-            .map_err(|()| Error::Primitive)
-    });
-
-    let grant = match grant {
-        Some(grant) => grant?,
-        None => None,
-    };
+    let grant = handler
+        .issuer()
+        .recover_refresh(&token)
+        // Primitive error is ok, that's like internal server error.
+        .map_err(|()| Error::Primitive)?;
 
     let grant_client = grant.as_ref().map(|grant| grant.client_id.clone());
 
@@ -173,7 +171,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
 
     let token = handler
         .issuer()
-        .refresh(grant)
+        .refresh(&token, grant)
         .map_err(|()| Error::Primitive)?;
 
     Ok(BearerToken { 0: token, 1: str_scope })

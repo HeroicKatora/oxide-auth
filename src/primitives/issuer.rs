@@ -4,7 +4,7 @@
 //! renewed. There exist two fundamental implementation as well, one utilizing in memory hash maps
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
-use std::sync::{MutexGuard, RwLockWriteGuard};
+use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{Duration, Utc};
@@ -21,10 +21,10 @@ use super::generator::{TagGrant, Assertion};
 /// they do not intend to offer a statefull refresh api).
 pub trait Issuer {
     /// Create a token authorizing the request parameters
-    fn issue(&mut self, Grant) -> Result<IssuedToken, ()>;
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()>;
 
     /// Refresh a token.
-    fn refresh(&mut self, Grant) -> Result<RefreshedToken, ()> {
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
         Err(())
     }
 
@@ -77,8 +77,19 @@ pub struct TokenMap<G: TagGrant=Box<dyn TagGrant + Send + Sync + 'static>> {
     duration: Option<Duration>,
     generator: G,
     usage: u64,
-    access: HashMap<String, Grant>,
-    refresh: HashMap<String, Grant>,
+    access: HashMap<Arc<str>, Arc<Token>>,
+    refresh: HashMap<Arc<str>, Arc<Token>>,
+}
+
+struct Token {
+    /// Back link to the access token.
+    access: Arc<str>,
+
+    /// Link to a refresh token for this grant, if it exists.
+    refresh: Option<Arc<str>>,
+
+    /// The grant that was originally granted.
+    grant: Grant,
 }
 
 impl<G: TagGrant> TokenMap<G> {
@@ -120,12 +131,32 @@ impl<G: TagGrant> TokenMap<G> {
     /// is modified (if a `duration` was previously set).
     pub fn import_grant(&mut self, token: String, mut grant: Grant) {
         self.set_duration(&mut grant);
-        self.access.insert(token, grant);
+        let key: Arc<str> = Arc::from(token);
+        let token = Token::from_access(key.clone(), grant);
+        self.access.insert(key, Arc::new(token));
     }
 
     fn set_duration(&self, grant: &mut Grant) {
         if let Some(duration) = &self.duration {
             grant.until = Utc::now() + *duration;
+        }
+    }
+}
+
+impl Token {
+    fn from_access(access: Arc<str>, grant: Grant) -> Self {
+        Token {
+            access,
+            refresh: None,
+            grant,
+        }
+    }
+
+    fn from_refresh(access: Arc<str>, refresh: Arc<str>, grant: Grant) -> Self {
+        Token {
+            access,
+            refresh: Some(refresh),
+            grant,
         }
     }
 }
@@ -139,25 +170,73 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         // second.
         let next_usage = self.usage.wrapping_add(2);
 
-        let (token, refresh) = {
-            let token = self.generator.tag(next_usage - 2, &grant)?;
-            let refresh = self.generator.tag(next_usage - 1, &grant)?;
-            (token, refresh)
+        let (access, refresh) = {
+            let access = self.generator.tag(self.usage, &grant)?;
+            let refresh = self.generator.tag(self.usage.wrapping_add(1), &grant)?;
+            (access, refresh)
         };
 
-        let until = grant.until;
-        self.access.insert(token.clone(), grant.clone());
-        self.refresh.insert(refresh.clone(), grant);
+        let until = grant.until.clone();
+        let access_key: Arc<str> = Arc::from(access.clone());
+        let refresh_key: Arc<str> = Arc::from(refresh.clone());
+        let token = Token::from_refresh(access_key.clone(), refresh_key.clone(), grant);
+        let token = Arc::new(token);
+
+        self.access.insert(access_key, token.clone());
+        self.refresh.insert(refresh_key, token);
         self.usage = next_usage;
-        Ok(IssuedToken { token, refresh, until })
+        Ok(IssuedToken {
+            token: access,
+            refresh,
+            until,
+        })
+    }
+
+    fn refresh(&mut self, refresh: &str, mut grant: Grant) -> Result<RefreshedToken, ()> {
+        // Remove the old token.
+        let (refresh_key, mut token) = self.refresh.remove_entry(refresh)
+            // Should only be called on valid refresh tokens.
+            .ok_or(())?
+            .clone();
+
+        assert!(Arc::ptr_eq(token.refresh.as_ref().unwrap(), &refresh_key));
+        self.set_duration(&mut grant);
+        let until = grant.until.clone();
+
+        let next_usage = self.usage.wrapping_add(1);
+        let new_access = self.generator.tag(self.usage, &grant)?;
+        let new_key: Arc<str> = Arc::from(new_access.clone());
+
+        if let Some(atoken) = self.access.remove(&token.access) {
+            assert!(Arc::ptr_eq(&token, &atoken));
+        }
+
+        {
+            // Should now be the only `Arc` pointing to this.
+            let mut_token = Arc::get_mut(&mut token).unwrap_or_else(
+                || unreachable!("Grant data was only shared with access and refresh"));
+            // Remove the old access token, insert the new.
+            mut_token.access = new_key.clone();
+            mut_token.grant = grant;
+        }
+
+        self.access.insert(new_key, token.clone());
+        self.refresh.insert(refresh_key, token);
+
+        self.usage = next_usage;
+        Ok(RefreshedToken {
+            token: new_access,
+            refresh: None,
+            until,
+        })
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.access.get(token).cloned())
+        Ok(self.access.get(token).map(|token| token.grant.clone()))
     }
 
     fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.refresh.get(token).cloned())
+        Ok(self.refresh.get(token).map(|token| token.grant.clone()))
     }
 }
 
@@ -237,6 +316,10 @@ impl<'s, I: Issuer + ?Sized> Issuer for &'s mut I {
         (**self).issue(grant)
     }
 
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        (**self).refresh(token, grant)
+    }
+
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (**self).recover_token(token)
     }
@@ -249,6 +332,10 @@ impl<'s, I: Issuer + ?Sized> Issuer for &'s mut I {
 impl<I: Issuer + ?Sized> Issuer for Box<I> {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (**self).issue(grant)
+    }
+
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        (**self).refresh(token, grant)
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
@@ -265,6 +352,10 @@ impl<'s, I: Issuer + ?Sized> Issuer for MutexGuard<'s, I> {
         (**self).issue(grant)
     }
 
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        (**self).refresh(token, grant)
+    }
+
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (**self).recover_token(token)
     }
@@ -277,6 +368,10 @@ impl<'s, I: Issuer + ?Sized> Issuer for MutexGuard<'s, I> {
 impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (**self).issue(grant)
+    }
+
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        (**self).refresh(token, grant)
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
