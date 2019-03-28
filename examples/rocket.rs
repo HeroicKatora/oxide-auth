@@ -57,6 +57,17 @@ fn token<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
 
+#[post("/refresh", data="<body>")]
+fn refresh<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
+    -> Result<Response<'r>, OAuthFailure>
+{
+    oauth.add_body(body);
+    state.endpoint()
+        .to_refresh()
+        .execute(oauth)
+        .map_err(|err| err.pack::<OAuthFailure>())
+}
+
 #[get("/")]
 fn protected_resource<'r>(oauth: OAuthRequest<'r>, state: State<MyState>)
     -> impl Responder<'r>
@@ -91,7 +102,8 @@ fn main() {
             authorize,
             authorize_consent,
             token,
-            protected_resource
+            protected_resource,
+            refresh,
         ])
         // We only attach the test client here because there can only be one rocket.
         .attach(support::ClientFairing)

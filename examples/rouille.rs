@@ -9,7 +9,7 @@ mod support;
 use std::sync::Mutex;
 use std::thread;
 
-use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, ResourceFlow};
+use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, RefreshFlow, ResourceFlow};
 use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint};
 use oxide_auth::primitives::prelude::*;
 use rouille::{Request, Response, ResponseBody, Server};
@@ -81,6 +81,13 @@ here</a> to begin the authorization process.
             (POST) ["/token"] => {
                 let mut locked = endpoint.lock().unwrap();
                 AccessTokenFlow::prepare(&mut *locked)
+                    .expect("Can not fail")
+                    .execute(request)
+                    .unwrap_or_else(|_| Response::empty_400())
+            },
+            (POST) ["/refresh"] => {
+                let mut locked = endpoint.lock().unwrap();
+                RefreshFlow::prepare(&mut *locked)
                     .expect("Can not fail")
                     .execute(request)
                     .unwrap_or_else(|_| Response::empty_400())

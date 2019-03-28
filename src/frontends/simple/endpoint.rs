@@ -362,7 +362,7 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
         }
     }
 
-    /// Create an authorizer flow.
+    /// Create an authorization flow.
     ///
     /// Opposed to `AuthorizationFlow::prepare` this statically ensures that the construction
     /// succeeds.
@@ -395,10 +395,25 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
         }
     }
 
+    /// Create a token refresh flow.
+    ///
+    /// Opposed to `RefreshFlow::prepare` this statically ensures that the construction succeeds.
+    pub fn to_refresh<W: WebRequest>(self) -> RefreshFlow<Self, W>
+    where
+        Self: Endpoint<W>,
+        R: Registrar,
+        I: Issuer,
+    {
+        match RefreshFlow::prepare(self) {
+            Ok(flow) => flow,
+            Err(_) => unreachable!(),
+        }
+    }
+
+
     /// Create a resource access flow.
     ///
-    /// Opposed to `ResourceFlow::prepare` this statically ensures that the construction
-    /// succeeds.
+    /// Opposed to `ResourceFlow::prepare` this statically ensures that the construction succeeds.
     pub fn to_resource<W: WebRequest>(self) -> ResourceFlow<Self, W>
     where
         Self: Endpoint<W>,
