@@ -6,7 +6,7 @@ use primitives::issuer::{Issuer, IssuedToken};
 use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::scope::Scope;
 use primitives::grant::Grant;
-use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
+use endpoint::{AccessTokenFlow, AuthorizationFlow, RefreshFlow, ResourceFlow};
 use endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest, WebResponse};
 use frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
 
@@ -102,6 +102,32 @@ where
     })
 }
 
+/// Run an refresh token request asynchonously using actor primitives.
+///
+/// Due to limitiations with the underlying primitives not yet being fully written with async in
+/// mind, there are no extensions and no custom `Endpoint` representations.
+pub fn refresh<R, I, W>(
+    registrar: Addr<AsActor<R>>,
+    issuer: Addr<AsActor<I>>,
+    request: W,
+    response: W::Response
+)
+    -> Box<dyn Future<Item=W::Response, Error=W::Error> + 'static>
+where
+    R: Registrar + 'static,
+    I: Issuer + 'static,
+    W: WebRequest + 'static,
+    W::Error: From<OAuthError>,
+    W::Response: 'static,
+{
+    Box::new(RefreshFuture {
+        registrar: RegistrarProxy::new(registrar),
+        issuer: IssuerProxy::new(issuer),
+        request,
+        response: Some(response),
+    })
+}
+
 /// A wrapper around a result allowing more specific interpretation.
 ///
 /// Simplifies trait semantics while also providing additional documentation on the semantics of
@@ -185,6 +211,14 @@ struct ResourceFuture<W, C> where W: WebRequest {
     issuer: IssuerProxy,
     request: W,
     scopes: C,
+    response: Option<W::Response>,
+}
+
+struct RefreshFuture<W> where W: WebRequest {
+    registrar: RegistrarProxy,
+    issuer: IssuerProxy,
+    request: W,
+    // Is an option because we may need to take it out.
     response: Option<W::Response>,
 }
 
@@ -615,6 +649,58 @@ where
             return Err(ResourceProtection::Error(OAuthError::PrimitiveError.into()));
         }
 
+        self.issuer.rearm();
+        Ok(Async::NotReady)
+    }
+}
+
+impl<W: WebRequest> Future for RefreshFuture<W>
+where
+    W::Error: From<OAuthError>
+{
+    type Item = W::Response;
+    type Error = W::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let response_mut = &mut self.response;
+        let result = {
+            let endpoint = Generic {
+                registrar: &self.registrar,
+                authorizer: Vacant,
+                issuer: &mut self.issuer,
+                solicitor: Vacant,
+                scopes: Vacant,
+                response: || { response_mut.take().unwrap() },
+            };
+
+            let mut flow = match RefreshFlow::prepare(endpoint) {
+                Ok(flow) => flow,
+                Err(_) => unreachable!("Preconditions always fulfilled"),
+            };
+
+            flow.execute(&mut self.request)
+        };
+
+        // Weed out the terminating results.
+        let oerr = match result {
+            Ok(response) => return Ok(Async::Ready(response)),
+            Err(SimpleError::Web(err)) => return Err(err),
+            Err(SimpleError::OAuth(oauth)) => oauth,
+        };
+
+        // Could it have been the registrar or authorizer that failed?
+        match oerr {
+            OAuthError::PrimitiveError => (),
+            other => return Err(other.into()),
+        }
+
+        // Are we getting this primitive error due to a pending reply?
+        if !self.registrar.is_waiting() && !self.issuer.is_waiting() {
+            // No, this was fatal
+            return Err(OAuthError::PrimitiveError.into());
+        }
+
+        self.registrar.rearm();
         self.issuer.rearm();
         Ok(Async::NotReady)
     }

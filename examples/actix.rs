@@ -14,7 +14,7 @@ use actix_web::{server, App, HttpRequest, HttpResponse};
 use futures::{Future, future};
 
 use oxide_auth::frontends::actix::{AsActor, OAuth, OAuthFailure, OAuthResponse, OwnerConsent, PreGrant, ResourceProtection};
-use oxide_auth::frontends::actix::{authorization, access_token, resource};
+use oxide_auth::frontends::actix::{authorization, access_token, refresh, resource};
 use oxide_auth::frontends::simple::endpoint::FnSolicitor;
 use oxide_auth::primitives::prelude::*;
 
