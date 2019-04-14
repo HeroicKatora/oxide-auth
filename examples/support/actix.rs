@@ -8,27 +8,32 @@ mod generic;
 
 pub use self::generic::*;
 
-use self::reqwest::header;
+use self::reqwest::{header, Response};
 use self::actix_web::*;
 use self::actix_web::App;
 
+use std::fmt;
 use std::collections::HashMap;
 use std::io::Read;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct State {
-    token: RwLock<Option<String>>,
-    token_map: RwLock<Option<String>>,
+    token: Option<String>,
+    refresh: Option<String>,
+    until: Option<String>,
 }
 
-pub fn dummy_client() -> App<State> {
-    App::with_state(State::default())
-        .handler("/endpoint", endpoint_impl)
-        .handler("/", get_with_token)
+type AppState = Arc<RwLock<State>>;
+
+pub fn dummy_client() -> App<AppState> {
+    App::with_state(AppState::default())
+        .route("/endpoint", http::Method::GET, |req| endpoint_impl(&req))
+        .route("/refresh", http::Method::POST, |req| refresh(&req))
+        .route("/", http::Method::GET, |req| get_with_token(&req))
 }
 
-fn endpoint_impl(request: &HttpRequest<State>) -> HttpResponse {
+fn endpoint_impl(request: &HttpRequest<AppState>) -> HttpResponse {
     if let Some(cause) = request.query().get("error") {
         return HttpResponse::BadRequest()
             .body(format!("Error during owner authorization: {:?}", cause))
@@ -50,48 +55,95 @@ fn endpoint_impl(request: &HttpRequest<State>) -> HttpResponse {
     let access_token_request = client
         .post("http://localhost:8020/token")
         .form(&params).build().unwrap();
-    let mut token_response = match client.execute(access_token_request) {
+
+    let token_response = match client.execute(access_token_request) {
         Ok(response) => response,
         Err(_) => return HttpResponse::BadRequest()
             .body("Could not fetch bearer token"),
     };
-    let mut token = String::new();
-    token_response.read_to_string(&mut token).unwrap();
-    let token_map: HashMap<String, String> = match serde_json::from_str(&token) {
-        Ok(token_map) => token_map,
-        Err(err) => return HttpResponse::BadRequest()
-            .body(format!("Error unwrapping json response, got {:?} instead", err)),
+
+    let token_map = match parse_response(token_response) {
+        Ok(map) => map,
+        Err(err) => return err,
     };
 
     if token_map.get("error").is_some() || !token_map.get("access_token").is_some() {
         return HttpResponse::BadRequest()
-            .body(token);
+            .body(format!("Response contains neither error nor access token: {:?}", token_map));
     }
 
     let token = token_map.get("access_token").unwrap();
-    let token_map = serde_json::to_string_pretty(&token_map).unwrap();
-    let token_map = token_map.replace(",", ",</br>");
 
-    let mut set_map = request.state().token_map.write().unwrap();
-    *set_map = Some(token_map);
-
-    let mut set_token = request.state().token.write().unwrap();
-    *set_token = Some(token.to_string());
+    let mut set_map = request.state().write().unwrap();
+    set_map.token = Some(token.to_string());
+    set_map.refresh = token_map
+        .get("refresh_token")
+        .cloned();
+    set_map.until = token_map
+        .get("expires_in")
+        .cloned();
 
     HttpResponse::Found()
         .header("Location", "/")
         .finish()
 }
 
-fn get_with_token(request: &HttpRequest<State>) -> HttpResponse {
-    let token = request.state().token.read().unwrap();
-    let token = match *token {
+fn refresh(request: &HttpRequest<AppState>) -> HttpResponse {
+    let refresh = match request.state().read().unwrap().refresh.clone() {
+        Some(refresh) => refresh,
+        None => return HttpResponse::BadRequest()
+            .body("No refresh token was issued"),
+    };
+
+    let client = reqwest::Client::new();
+    let mut params = HashMap::new();
+    params.insert("grant_type", "refresh_token");
+    params.insert("client_id", "LocalClient");
+    params.insert("refresh_token", &refresh);
+    let access_token_request = client
+        .post("http://localhost:8020/refresh")
+        .form(&params).build().unwrap();
+
+    let token_response = match client.execute(access_token_request) {
+        Ok(response) => response,
+        Err(_) => return HttpResponse::BadRequest()
+            .body("Could not refresh bearer token"),
+    };
+
+    let token_map = match parse_response(token_response) {
+        Ok(map) => map,
+        Err(err) => return err,
+    };
+
+    if token_map.get("error").is_some() || !token_map.get("access_token").is_some() {
+        return HttpResponse::BadRequest()
+            .body(format!("Response contains neither error nor access token: {:?}", token_map));
+    }
+
+    let token = token_map.get("access_token").unwrap();
+
+    let mut set_map = request.state().write().unwrap();
+    set_map.token = Some(token.to_string());
+    set_map.refresh = token_map
+        .get("refresh_token")
+        .cloned()
+        .or(set_map.refresh.take());
+    set_map.until = token_map
+        .get("expires_in")
+        .cloned();
+
+    HttpResponse::Found()
+        .header("Location", "/")
+        .finish()
+}
+
+fn get_with_token(request: &HttpRequest<AppState>) -> HttpResponse {
+    let state = request.state().read().unwrap();
+
+    let token = match state.token {
         None => return HttpResponse::Ok().body("No token yet"),
         Some(ref token) => token,
     };
-
-    let token_map = request.state().token_map.read().unwrap();
-    let token_map = token_map.as_ref().unwrap();
 
     let client = reqwest::Client::new();
     // Request the page with the oauth token
@@ -119,9 +171,29 @@ fn get_with_token(request: &HttpRequest<State>) -> HttpResponse {
         <a href=\"http://localhost:8020/\">http://localhost:8020/</a>.
         Its contents are:
         <article>{}</article>
-        </main></html>", token_map, protected_page);
+        <form action=\"refresh\" method=\"post\"><button>Refresh token</button></form>
+        </main></html>", state, protected_page);
 
     HttpResponse::Ok()
         .content_type("text/html")
         .body(display_page)
+}
+
+fn parse_response(mut response: Response) -> Result<HashMap<String, String>, HttpResponse> {
+    let mut token = String::new();
+    response.read_to_string(&mut token).unwrap();
+    serde_json::from_str(&token).map_err(|err| {
+        HttpResponse::BadRequest()
+            .body(format!("Error unwrapping json response, got {:?} instead", err))
+    })
+}
+
+impl fmt::Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("Token {<br>")?;
+        write!(f, "&nbsp;token: {:?},<br>", self.token)?;
+        write!(f, "&nbsp;refresh: {:?},<br>", self.refresh)?;
+        write!(f, "&nbsp;expires_in: {:?},<br>", self.until)?;
+        f.write_str("}")
+    }
 }

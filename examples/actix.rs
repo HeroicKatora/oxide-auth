@@ -11,6 +11,7 @@ use std::thread;
 
 use actix::{Actor, Addr};
 use actix_web::{server, App, HttpRequest, HttpResponse};
+use actix_web::middleware::Logger;
 use futures::{Future, future};
 
 use oxide_auth::frontends::actix::{AsActor, OAuth, OAuthFailure, OAuthResponse, OwnerConsent, PreGrant, ResourceProtection};
@@ -61,6 +62,7 @@ pub fn main() {
     // Create the main server instance
     server::new(
         move || App::with_state(state.clone())
+            .middleware(Logger::default())
             .resource("/authorize", |r| {
                 r.get().a(|req: &HttpRequest<State>| {
                     let state = req.state().clone();
@@ -94,6 +96,17 @@ pub fn main() {
                     .and_then(|request| access_token(
                             state.registrar,
                             state.authorizer,
+                            state.issuer,
+                            request,
+                            OAuthResponse::default()))
+                    .map(OAuthResponse::unwrap)
+                    .map_err(OAuthFailure::from)
+            }))
+            .resource("/refresh", |r| r.post().a(|req: &HttpRequest<State>| {
+                let state = req.state().clone();
+                req.oauth2()
+                    .and_then(|request| refresh(
+                            state.registrar,
                             state.issuer,
                             request,
                             OAuthResponse::default()))
