@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 
 use primitives::authorizer::Authorizer;
-use primitives::issuer::{Issuer, IssuedToken};
+use primitives::issuer::{Issuer, IssuedToken, RefreshedToken};
 use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::scope::Scope;
 use primitives::grant::Grant;
@@ -185,6 +185,7 @@ struct AuthorizerProxy {
 
 struct IssuerProxy {
     issue: Buffer<m::Issue>,
+    refresh: Buffer<m::Refresh>,
     recover_token: RefCell<Buffer<m::RecoverToken>>,
     recover_refresh: RefCell<Buffer<m::RecoverRefresh>>,
 }
@@ -390,6 +391,7 @@ impl IssuerProxy {
     {
         IssuerProxy {
             issue: Buffer::new(issuer.clone().recipient()),
+            refresh: Buffer::new(issuer.clone().recipient()),
             recover_token: RefCell::new(Buffer::new(issuer.clone().recipient())),
             recover_refresh: RefCell::new(Buffer::new(issuer.recipient())),
         }
@@ -397,6 +399,7 @@ impl IssuerProxy {
 
     pub fn is_waiting(&self) -> bool {
         self.issue.is_waiting()
+        || self.refresh.is_waiting()
         || self.recover_token.borrow().is_waiting()
         || self.recover_refresh.borrow().is_waiting()
     }
@@ -404,13 +407,15 @@ impl IssuerProxy {
     #[allow(dead_code)]
     pub fn error(&self) -> Option<MailboxError> {
         let ierr = self.issue.error();
+        let ferr = self.refresh.error();
         let terr = self.recover_token.borrow().error();
         let rerr = self.recover_refresh.borrow().error();
-        ierr.or(terr).or(rerr)
+        ierr.or(ferr).or(terr).or(rerr)
     }
     
     pub fn rearm(&mut self) {
         self.issue.rearm();
+        self.refresh.rearm();
         self.recover_token.borrow_mut().rearm();
         self.recover_refresh.borrow_mut().rearm();
     }
@@ -427,6 +432,24 @@ impl Issuer for IssuerProxy {
         }
 
         match self.issue.poll() {
+            Ok(Async::NotReady) => Err(()),
+            Ok(Async::Ready(Ok(token))) => Ok(token),
+            Ok(Async::Ready(Err(()))) => Err(()),
+            Err(()) => Err(()),
+        }
+    }
+
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        if self.refresh.unsent() {
+            let refresh = m::Refresh {
+                token: token.to_string(),
+                grant,
+            };
+
+            self.refresh.send(refresh);
+        }
+
+        match self.refresh.poll() {
             Ok(Async::NotReady) => Err(()),
             Ok(Async::Ready(Ok(token))) => Ok(token),
             Ok(Async::Ready(Err(()))) => Err(()),
@@ -689,7 +712,7 @@ where
         };
 
         // Could it have been the registrar or authorizer that failed?
-        match oerr {
+        match dbg!(oerr) {
             OAuthError::PrimitiveError => (),
             other => return Err(other.into()),
         }
@@ -697,7 +720,7 @@ where
         // Are we getting this primitive error due to a pending reply?
         if !self.registrar.is_waiting() && !self.issuer.is_waiting() {
             // No, this was fatal
-            return Err(OAuthError::PrimitiveError.into());
+            return Err(dbg!(OAuthError::PrimitiveError).into());
         }
 
         self.registrar.rearm();

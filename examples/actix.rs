@@ -30,7 +30,7 @@ here</a> to begin the authorization process.
 struct State {
     registrar: Addr<AsActor<ClientMap>>,
     authorizer: Addr<AsActor<AuthMap<RandomGenerator>>>,
-    issuer: Addr<AsActor<TokenSigner>>,
+    issuer: Addr<AsActor<TokenMap<RandomGenerator>>>,
     scopes: &'static [Scope],
 }
 
@@ -46,7 +46,7 @@ pub fn main() {
     clients.register_client(client);
 
     let authorizer = AuthMap::new(RandomGenerator::new(16));
-    let issuer = TokenSigner::ephemeral();
+    let issuer = TokenMap::new(RandomGenerator::new(16));
 
     let scopes = vec!["default".parse().unwrap()].into_boxed_slice();
     // Emulate static initialization for complex type
