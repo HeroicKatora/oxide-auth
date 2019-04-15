@@ -28,12 +28,12 @@ type AppState = Arc<RwLock<State>>;
 
 pub fn dummy_client() -> App<AppState> {
     App::with_state(AppState::default())
-        .route("/endpoint", http::Method::GET, |req| endpoint_impl(&req))
-        .route("/refresh", http::Method::POST, |req| refresh(&req))
-        .route("/", http::Method::GET, |req| get_with_token(&req))
+        .route("/endpoint", http::Method::GET, endpoint_impl)
+        .route("/refresh", http::Method::POST, refresh)
+        .route("/", http::Method::GET, get_with_token)
 }
 
-fn endpoint_impl(request: &HttpRequest<AppState>) -> HttpResponse {
+fn endpoint_impl(request: HttpRequest<AppState>) -> HttpResponse {
     if let Some(cause) = request.query().get("error") {
         return HttpResponse::BadRequest()
             .body(format!("Error during owner authorization: {:?}", cause))
@@ -88,7 +88,7 @@ fn endpoint_impl(request: &HttpRequest<AppState>) -> HttpResponse {
         .finish()
 }
 
-fn refresh(request: &HttpRequest<AppState>) -> HttpResponse {
+fn refresh(request: HttpRequest<AppState>) -> HttpResponse {
     let refresh = match request.state().read().unwrap().refresh.clone() {
         Some(refresh) => refresh,
         None => return HttpResponse::BadRequest()
@@ -137,7 +137,7 @@ fn refresh(request: &HttpRequest<AppState>) -> HttpResponse {
         .finish()
 }
 
-fn get_with_token(request: &HttpRequest<AppState>) -> HttpResponse {
+fn get_with_token(request: HttpRequest<AppState>) -> HttpResponse {
     let state = request.state().read().unwrap();
 
     let token = match state.token {
