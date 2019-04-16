@@ -161,6 +161,46 @@ impl Token {
     }
 }
 
+impl IssuedToken {
+    /// Construct a token that can not be refreshed.
+    ///
+    /// Use this constructor for custom issuers that can not revoke their tokens. Since refresh
+    /// tokens are both long-lived and more powerful than their access token counterparts, it is
+    /// more dangerous to have an unrevokable refresh token. This is currently semantically
+    /// equivalent to an empty refresh token but may change in a future iteration of the interface.
+    /// While the member attributes may change, this method will not change as quickly and thus
+    /// offers some additional compatibility.
+    ///
+    /// ```
+    /// # use oxide_auth::primitives::grant::Grant;
+    /// use oxide_auth::primitives::issuer::{Issuer, IssuedToken};
+    ///
+    /// struct MyIssuer;
+    ///
+    /// impl Issuer for MyIssuer {
+    ///     fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
+    ///         let access = self.access_token(&grant);
+    ///         Ok(IssuedToken::without_refresh(token, grant.until))
+    ///     }
+    ///     // …
+    /// # fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
+    /// # fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
+    /// }
+    /// ```
+    pub fn without_refresh(token: String, until: Time) -> Self {
+        IssuedToken {
+            token,
+            refresh: "".into(),
+            until,
+        }
+    }
+
+    /// Determine if the access token can be refreshed.
+    pub fn refreshable(&self) -> bool {
+        !self.refresh.is_empty()
+    }
+}
+
 impl<G: TagGrant> Issuer for TokenMap<G> {
     fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
         self.set_duration(&mut grant);
