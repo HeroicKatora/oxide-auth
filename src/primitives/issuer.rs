@@ -11,7 +11,7 @@ use chrono::{Duration, Utc};
 
 use super::Time;
 use super::grant::Grant;
-use super::generator::{TagGrant, Assertion};
+use super::generator::{TagGrant, TaggedAssertion, Assertion};
 
 /// Issuers create bearer tokens.
 ///
@@ -289,6 +289,7 @@ pub struct TokenSigner {
     signer: Assertion,
     // FIXME: make this an AtomicU64 once stable.
     counter: AtomicUsize,
+    have_refresh: bool,
 }
 
 impl TokenSigner {
@@ -301,6 +302,7 @@ impl TokenSigner {
             duration: None,
             signer: secret.into(),
             counter: AtomicUsize::new(0),
+            have_refresh: false,
         }
     }
 
@@ -342,12 +344,55 @@ impl TokenSigner {
         self.duration = None;
     }
 
+    /// Determine whether to generate refresh tokens.
+    ///
+    /// By default, this option is *off*. Since the `TokenSigner` can on its own not revoke any
+    /// tokens it should be considered carefullly whether to issue very long-living and powerful
+    /// refresh tokens. On instance where this might be okay is as a component of a grander token
+    /// architecture that adds a revocation mechanism.
+    pub fn generate_refresh_tokens(&mut self, refresh: bool) {
+        self.have_refresh = refresh;
+    }
+
     /// Get the next counter value.
     fn next_counter(&self) -> usize {
         // Acquire+Release is overkill. We only need to ensure that each return value occurs at
         // most once. We would even be content with getting the counter out-of-order in a single
         // thread.
         self.counter.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn refreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()> {
+        let first_ctr = self.next_counter() as u64;
+        let second_ctr = self.next_counter() as u64;
+
+        let token = self.as_token()
+            .sign(first_ctr, grant)?;
+        let refresh = self.as_refresh()
+            .sign(second_ctr, grant)?;
+
+        Ok(IssuedToken {
+            token,
+            refresh,
+            until: grant.until,
+        })
+    }
+
+    fn unrefreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()> {
+        let counter = self.next_counter() as u64;
+
+        let token = self.as_token()
+            .sign(counter, grant)?;
+
+        Ok(IssuedToken::without_refresh(token, grant.until))
+    }
+
+    fn as_token(&self) -> TaggedAssertion {
+        self.signer.tag("token")
+    }
+
+    fn as_refresh(&self) -> TaggedAssertion {
+        self.signer.tag("refresh")
     }
 }
 
@@ -442,23 +487,24 @@ impl<'a> Issuer for &'a TokenSigner {
         if let Some(duration) = &self.duration {
             grant.until = Utc::now() + *duration;
         }
-        let first_ctr = self.next_counter() as u64;
-        let second_ctr = self.next_counter() as u64;
-        let token = self.signer.tag("token").sign(first_ctr, &grant)?;
-        let refresh = self.signer.tag("refresh").sign(second_ctr, &grant)?;
-        Ok(IssuedToken {
-            token,
-            refresh,
-            until: grant.until,
-        })
+
+        if self.have_refresh {
+            self.refreshable_token(&grant)
+        } else {
+            self.unrefreshable_token(&grant)
+        }
     }
 
     fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
-        Ok(self.signer.tag("token").extract(token).ok())
+        Ok(self.as_token().extract(token).ok())
     }
 
     fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
-        Ok(self.signer.tag("refresh").extract(token).ok())
+        if !self.have_refresh {
+            return Ok(None)
+        }
+
+        Ok(self.as_refresh().extract(token).ok())
     }
 }
 
