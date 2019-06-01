@@ -123,9 +123,12 @@ pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerT
     let redirect_uri = request
         .redirect_uri()
         .ok_or(Error::invalid())?;
-    let redirect_uri = redirect_uri.as_ref();
+    let redirect_uri = redirect_uri
+        .as_ref()
+        .parse()
+        .map_err(|_| Error::invalid())?;
 
-    if (saved_params.client_id.as_ref(), saved_params.redirect_uri.as_str()) != (client_id, redirect_uri) {
+    if (saved_params.client_id.as_ref(), &saved_params.redirect_uri) != (client_id, &redirect_uri) {
         return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant))
     }
 

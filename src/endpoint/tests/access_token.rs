@@ -162,6 +162,61 @@ fn access_valid_private() {
     setup.test_success(valid_public);
 }
 
+// When creating a client from a preparsed url expect all equivalent urls to also be valid
+// parameters for the redirect_uri. Partly because `Url` already does some normalization during
+// parsing. The RFC recommends string-based comparison when the 'client registration included the
+// full redirection URI'. When passing an URL however, for the moment the only way, this does not
+// apply and would be counter intuitive as such information is not preserved in `url`.
+#[test]
+fn access_equivalent_url() {
+    use primitives::authorizer::Authorizer;
+
+    const CLIENT_ID: &str = "ConfusingClient";
+    const REDIRECT_URL: &str = "https://client.example";
+    const ALTERNATIVE_URL: &str = "https://client.example/";
+
+    let mut setup = AccessTokenSetup::public_client();
+
+    let confusing_client = Client::public(CLIENT_ID,
+        REDIRECT_URL.parse().unwrap(),
+        EXAMPLE_SCOPE.parse().unwrap());
+
+    setup.registrar.register_client(confusing_client);
+
+    let authrequest = Grant {
+        client_id: CLIENT_ID.to_string(),
+        owner_id: EXAMPLE_OWNER_ID.to_string(),
+        redirect_uri: REDIRECT_URL.parse().unwrap(),
+        scope: EXAMPLE_SCOPE.parse().unwrap(),
+        until: Utc::now() + Duration::hours(1),
+        extensions: Extensions::new(),
+    };
+
+    let authtoken = setup.authorizer.authorize(authrequest.clone()).unwrap();
+    setup.test_success(CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("client_id", CLIENT_ID),
+                ("code", &authtoken),
+                ("redirect_uri", REDIRECT_URL)]
+            .iter().to_single_value_query()),
+        auth: None,
+    });
+
+    let authtoken = setup.authorizer.authorize(authrequest).unwrap();
+    setup.test_success(CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("client_id", CLIENT_ID),
+                ("code", &authtoken),
+                ("redirect_uri", ALTERNATIVE_URL)]
+            .iter().to_single_value_query()),
+        auth: None,
+    });
+}
+
 #[test]
 fn access_request_unknown_client() {
     let mut setup = AccessTokenSetup::private_client();
