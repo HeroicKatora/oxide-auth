@@ -113,6 +113,10 @@ pub enum RegistrarError {
 /// There are two types of clients, public and confidential. Public clients operate without proof
 /// of identity while confidential clients are granted additional assertions on their communication
 /// with the servers. They might be allowed more freedom as they are harder to impersonate.
+// TODO(from #29): allow verbatim urls. Parsing to Url instigates some normalization making the
+// string representation less predictable. A verbatim url would allow comparing the `redirect_uri`
+// parameter with simple string comparison, a potential speedup.
+// TODO: there is no more an apparent reason for this to be a strictly owning struct.
 #[derive(Clone, Debug)]
 pub struct Client {
     client_id: String,
