@@ -38,6 +38,7 @@ Additional
 [![Crates.io Status](https://img.shields.io/crates/v/oxide-auth.svg)](https://crates.io/crates/oxide-auth)
 [![Docs.rs Status](https://docs.rs/oxide-auth/badge.svg)](https://docs.rs/oxide-auth/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/HeroicKatora/oxide-auth/dev-v0.4.0/docs/LICENSE)
+[![CI Status](https://api.cirrus-ci.com/github/HeroicKatora/oxide-auth.svg)](https://cirrus-ci.com/github/HeroicKatora/oxide-auth)
 
 A more or less comprehensive list of changes is contained in the
 [changelog][CHANGES]. Sometimes less as larger releases and reworks profit from
