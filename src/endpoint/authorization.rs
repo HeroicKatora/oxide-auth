@@ -24,7 +24,7 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
     request: PhantomData<R>,
 
     /// The query in the url.
-    query: Cow<'a, QueryParameter + 'static>,
+    query: Cow<'a, dyn QueryParameter + 'static>,
 
     /// An error if one occurred.
     error: Option<R::Error>,
@@ -44,7 +44,7 @@ struct AuthorizationPartial<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebReques
     inner: AuthorizationPartialInner<'a, E, R>,
 
     /// TODO: offer this in the public api instead of dropping the request.
-    _with_request: Option<Box<FnOnce(R) -> ()>>,
+    _with_request: Option<Box<dyn FnOnce(R) -> ()>>,
 }
 
 /// Result type from processing an authentication request.
@@ -245,21 +245,21 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
 }
 
 impl<E: Endpoint<R>, R: WebRequest> WrappedAuthorization<E, R> {
-    fn owner_solicitor(&mut self) -> &mut OwnerSolicitor<R> {
+    fn owner_solicitor(&mut self) -> &mut dyn OwnerSolicitor<R> {
         self.inner.owner_solicitor().unwrap()
     }
 }
 
 impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorization<E, R> {
-    fn registrar(&self) -> &Registrar {
+    fn registrar(&self) -> &dyn Registrar {
         self.inner.registrar().unwrap()
     }
 
-    fn authorizer(&mut self) -> &mut Authorizer {
+    fn authorizer(&mut self) -> &mut dyn Authorizer {
         self.inner.authorizer_mut().unwrap()
     }
 
-    fn extension(&mut self) -> &mut Extension {
+    fn extension(&mut self) -> &mut dyn Extension {
         self.inner.extension()
             .and_then(|ext| ext.authorization())
             .unwrap_or(&mut self.extension_fallback)

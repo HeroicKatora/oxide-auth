@@ -31,7 +31,7 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
     request: PhantomData<R>,
 
     /// The query in the url.
-    body: Cow<'a, QueryParameter + 'static>,
+    body: Cow<'a, dyn QueryParameter + 'static>,
 
     /// The authorization tuple
     authorization: Option<Authorization>,
@@ -131,19 +131,19 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(endpoint: &mut E, request: &mut R,
 }
 
 impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
-    fn registrar(&self) -> &Registrar {
+    fn registrar(&self) -> &dyn Registrar {
         self.inner.registrar().unwrap()
     }
 
-    fn authorizer(&mut self) -> &mut Authorizer {
+    fn authorizer(&mut self) -> &mut dyn Authorizer {
         self.inner.authorizer_mut().unwrap()
     }
 
-    fn issuer(&mut self) -> &mut Issuer {
+    fn issuer(&mut self) -> &mut dyn Issuer {
         self.inner.issuer_mut().unwrap()
     }
 
-    fn extension(&mut self) -> &mut Extension {
+    fn extension(&mut self) -> &mut dyn Extension {
         self.inner.extension()
             .and_then(|ext| ext.access_token())
             .unwrap_or(&mut self.extension_fallback)

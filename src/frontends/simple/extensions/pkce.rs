@@ -4,7 +4,7 @@ use super::{AddonResult, Value};
 pub use code_grant::extensions::Pkce;
 
 impl AuthorizationAddon for Pkce {
-    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
         let method = request.extension("code_challenge_method");
         let challenge = request.extension("code_challenge");
 
@@ -19,7 +19,7 @@ impl AuthorizationAddon for Pkce {
 }
 
 impl AccessTokenAddon for Pkce {
-    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+    fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         let verifier = request.extension("code_verifier");
 
         match self.verify(data, verifier) {

@@ -111,17 +111,17 @@ impl<'r> WebRequest for OAuthRequest<'r> {
     type Error = WebError;
     type Response = Response<'r>;
 
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         match self.query.as_ref() {
-            Ok(query) => Ok(Cow::Borrowed(query as &QueryParameter)),
+            Ok(query) => Ok(Cow::Borrowed(query as &dyn QueryParameter)),
             Err(err) => Err(*err),
         }
     }
 
-    fn urlbody(&mut self) ->  Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn urlbody(&mut self) ->  Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         match self.body.as_ref() {
             Ok(None) => Err(WebError::BodyNeeded),
-            Ok(Some(body)) => Ok(Cow::Borrowed(body as &QueryParameter)),
+            Ok(Some(body)) => Ok(Cow::Borrowed(body as &dyn QueryParameter)),
             Err(err) => Err(*err),
         }
     }

@@ -182,7 +182,7 @@ pub struct ApprovedGrant {
 /// better ideas, I'll be grateful for opening an item on the Issue tracker.
 pub trait OptRegistrar {
     /// Reference this as a `Registrar` or `Option::None`.
-    fn opt_ref(&self) -> Option<&Registrar>;
+    fn opt_ref(&self) -> Option<&dyn Registrar>;
 }
 
 /// Like `AsMut<Authorizer +'_>` but in a way that is expressible.
@@ -203,7 +203,7 @@ pub trait OptRegistrar {
 /// better ideas, I'll be grateful for opening an item on the Issue tracker.
 pub trait OptAuthorizer {
     /// Reference this mutably as an `Authorizer` or `Option::None`.
-    fn opt_mut(&mut self) -> Option<&mut Authorizer>;
+    fn opt_mut(&mut self) -> Option<&mut dyn Authorizer>;
 }
 
 /// Like `AsMut<Issuer +'_>` but in a way that is expressible.
@@ -224,7 +224,7 @@ pub trait OptAuthorizer {
 /// better ideas, I'll be grateful for opening an item on the Issue tracker.
 pub trait OptIssuer {
     /// Reference this mutably as an `Issuer` or `Option::None`.
-    fn opt_mut(&mut self) -> Option<&mut Issuer>;
+    fn opt_mut(&mut self) -> Option<&mut dyn Issuer>;
 }
 
 /// Independent component responsible for instantiating responses.
@@ -233,9 +233,9 @@ pub trait ResponseCreator<W: WebRequest> {
     fn create(&mut self, request: &mut W, kind: Template) -> W::Response;
 }
 
-type Authorization<'a, W> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), Vacant, &'a mut(OwnerSolicitor<W> + 'a), Vacant, Vacant>;
-type AccessToken<'a> = Generic<&'a (Registrar + 'a), &'a mut(Authorizer + 'a), &'a mut(Issuer + 'a), Vacant, Vacant, Vacant>;
-type Resource<'a> = Generic<Vacant, Vacant, &'a mut (Issuer + 'a), Vacant, &'a [Scope], Vacant>;
+type Authorization<'a, W> = Generic<&'a (dyn Registrar + 'a), &'a mut(dyn Authorizer + 'a), Vacant, &'a mut(dyn OwnerSolicitor<W> + 'a), Vacant, Vacant>;
+type AccessToken<'a> = Generic<&'a (dyn Registrar + 'a), &'a mut(dyn Authorizer + 'a), &'a mut(dyn Issuer + 'a), Vacant, Vacant, Vacant>;
+type Resource<'a> = Generic<Vacant, Vacant, &'a mut (dyn Issuer + 'a), Vacant, &'a [Scope], Vacant>;
 
 /// Create an ad-hoc authorization flow.
 ///
@@ -245,7 +245,7 @@ type Resource<'a> = Generic<Vacant, Vacant, &'a mut (Issuer + 'a), Vacant, &'a [
 /// But this is not as versatile and extensible, so it should be used with care.  The fact that it
 /// only takes references is a conscious choice to maintain forwards portability while encouraging
 /// the transition to custom `Endpoint` implementations instead.
-pub fn authorization_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut Authorizer, solicitor: &'a mut OwnerSolicitor<W>)
+pub fn authorization_flow<'a, W>(registrar: &'a dyn Registrar, authorizer: &'a mut dyn Authorizer, solicitor: &'a mut dyn OwnerSolicitor<W>)
     -> AuthorizationFlow<Authorization<'a, W>, W>
     where W: WebRequest, W::Response: Default
 {
@@ -272,7 +272,7 @@ pub fn authorization_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut A
 /// But this is not as versatile and extensible, so it should be used with care.  The fact that it
 /// only takes references is a conscious choice to maintain forwards portability while encouraging
 /// the transition to custom `Endpoint` implementations instead.
-pub fn access_token_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut Authorizer, issuer: &'a mut Issuer) 
+pub fn access_token_flow<'a, W>(registrar: &'a dyn Registrar, authorizer: &'a mut dyn Authorizer, issuer: &'a mut dyn Issuer) 
     -> AccessTokenFlow<AccessToken<'a>, W>
     where W: WebRequest, W::Response: Default
 {
@@ -299,7 +299,7 @@ pub fn access_token_flow<'a, W>(registrar: &'a Registrar, authorizer: &'a mut Au
 /// But this is not as versatile and extensible, so it should be used with care.  The fact that it
 /// only takes references is a conscious choice to maintain forwards portability while encouraging
 /// the transition to custom `Endpoint` implementations instead.
-pub fn resource_flow<'a, W>(issuer: &'a mut Issuer, scopes: &'a [Scope])
+pub fn resource_flow<'a, W>(issuer: &'a mut dyn Issuer, scopes: &'a [Scope])
     -> ResourceFlow<Resource<'a>, W>
     where W: WebRequest, W::Response: Default
 {
@@ -429,23 +429,23 @@ where
 {
     type Error = Error<W>;
 
-    fn registrar(&self) -> Option<&Registrar> {
+    fn registrar(&self) -> Option<&dyn Registrar> {
         self.registrar.opt_ref()
     }
 
-    fn authorizer_mut(&mut self) -> Option<&mut Authorizer> {
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
         self.authorizer.opt_mut()
     }
 
-    fn issuer_mut(&mut self) -> Option<&mut Issuer> {
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
         self.issuer.opt_mut()
     }
 
-    fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<W>> {
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<W>> {
         Some(&mut self.solicitor)
     }
 
-    fn scopes(&mut self) -> Option<&mut Scopes<W>> {
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<W>> {
         Some(&mut self.scopes)
     }
 
@@ -463,37 +463,37 @@ where
 }
 
 impl<T: Registrar> OptRegistrar for T {
-    fn opt_ref(&self) -> Option<&Registrar> {
+    fn opt_ref(&self) -> Option<&dyn Registrar> {
         Some(self)
     }
 }
 
 impl<T: Authorizer> OptAuthorizer for T {
-    fn opt_mut(&mut self) -> Option<&mut Authorizer> {
+    fn opt_mut(&mut self) -> Option<&mut dyn Authorizer> {
         Some(self)
     }
 }
 
 impl<T: Issuer> OptIssuer for T {
-    fn opt_mut(&mut self) -> Option<&mut Issuer> {
+    fn opt_mut(&mut self) -> Option<&mut dyn Issuer> {
         Some(self)
     }
 }
 
 impl OptRegistrar for Vacant {
-    fn opt_ref(&self) -> Option<&Registrar> {
+    fn opt_ref(&self) -> Option<&dyn Registrar> {
         Option::None
     }
 }
 
 impl OptAuthorizer for Vacant {
-    fn opt_mut(&mut self) -> Option<&mut Authorizer> {
+    fn opt_mut(&mut self) -> Option<&mut dyn Authorizer> {
         Option::None
     }
 }
 
 impl OptIssuer for Vacant {
-    fn opt_mut(&mut self) -> Option<&mut Issuer> {
+    fn opt_mut(&mut self) -> Option<&mut dyn Issuer> {
         Option::None
     }
 }

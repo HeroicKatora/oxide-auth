@@ -234,12 +234,12 @@ pub trait WebRequest {
     ///
     /// An Err return value indicates a malformed query or an otherwise malformed WebRequest. Note
     /// that an empty query should result in `Ok(HashMap::new())` instead of an Err.
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error>;
+    fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error>;
 
     /// Retrieve the parsed `application/x-form-urlencoded` body of the request.
     ///
     /// An Err value / indicates a malformed body or a different Content-Type.
-    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error>;
+    fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error>;
 
     /// Contents of the authorization header or none if none exists. An Err value indicates a
     /// malformed header or request.
@@ -282,12 +282,12 @@ pub trait WebResponse {
 /// without affecting existing implementations.
 pub trait Extension {
     /// The handler for authorization code extensions.
-    fn authorization(&mut self) -> Option<&mut AuthorizationExtension> {
+    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
         None
     }
 
     /// The handler for access token extensions.
-    fn access_token(&mut self) -> Option<&mut AccessTokenExtension> {
+    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
         None
     }
 }
@@ -318,31 +318,31 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// Returning `None` will implicate failing any flow that requires a registrar but does not
     /// have any effect on flows that do not require one.
-    fn registrar(&self) -> Option<&Registrar>;
+    fn registrar(&self) -> Option<&dyn Registrar>;
     
     /// An authorizer if this endpoint can access one.
     ///
     /// Returning `None` will implicate failing any flow that requires an authorizer but does not
     /// have any effect on flows that do not require one.
-    fn authorizer_mut(&mut self) -> Option<&mut Authorizer>;
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer>;
 
     /// An issuer if this endpoint can access one.
     ///
     /// Returning `None` will implicate failing any flow that requires an issuer but does not have
     /// any effect on flows that do not require one.
-    fn issuer_mut(&mut self) -> Option<&mut Issuer>;
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer>;
 
     /// Return the system that checks owner consent.
     ///
     /// Returning `None` will implicated failing the authorization code flow but does have any
     /// effect on other flows.
-    fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<Request>>;
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<Request>>;
 
     /// Determine the required scopes for a request.
     ///
     /// The client must fulfill any one scope, so returning an empty slice will always deny the
     /// request.
-    fn scopes(&mut self) -> Option<&mut Scopes<Request>>;
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<Request>>;
 
     /// Generate a prototype response.
     ///
@@ -360,7 +360,7 @@ pub trait Endpoint<Request: WebRequest> {
     /// Get the central extension instance this endpoint.
     ///
     /// Returning `None` is the default implementation and acts as simply providing any extensions.
-    fn extension(&mut self) -> Option<&mut Extension> {
+    fn extension(&mut self) -> Option<&mut dyn Extension> {
         None
     }
 }
@@ -439,11 +439,11 @@ impl<'a, W: WebRequest> WebRequest for &'a mut W {
     type Error = W::Error;
     type Response = W::Response;
 
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         (**self).query()
     }
 
-    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         (**self).urlbody()
     }
 
@@ -455,23 +455,23 @@ impl<'a, W: WebRequest> WebRequest for &'a mut W {
 impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     type Error = E::Error;
 
-    fn registrar(&self) -> Option<&Registrar> {
+    fn registrar(&self) -> Option<&dyn Registrar> {
         (**self).registrar()
     }
     
-    fn authorizer_mut(&mut self) -> Option<&mut Authorizer> {
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
         (**self).authorizer_mut()
     }
 
-    fn issuer_mut(&mut self) -> Option<&mut Issuer> {
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
         (**self).issuer_mut()
     }
 
-    fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<R>> {
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<R>> {
         (**self).owner_solicitor()
     }
 
-    fn scopes(&mut self) -> Option<&mut Scopes<R>> {
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<R>> {
         (**self).scopes()
     }
 
@@ -487,7 +487,7 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
         (**self).web_error(err)
     }
 
-    fn extension(&mut self) -> Option<&mut Extension> {
+    fn extension(&mut self) -> Option<&mut dyn Extension> {
         (**self).extension()
     }
 }
@@ -495,23 +495,23 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
 impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
     type Error = E::Error;
 
-    fn registrar(&self) -> Option<&Registrar> {
+    fn registrar(&self) -> Option<&dyn Registrar> {
         (**self).registrar()
     }
     
-    fn authorizer_mut(&mut self) -> Option<&mut Authorizer> {
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
         (**self).authorizer_mut()
     }
 
-    fn issuer_mut(&mut self) -> Option<&mut Issuer> {
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
         (**self).issuer_mut()
     }
 
-    fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<R>> {
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<R>> {
         (**self).owner_solicitor()
     }
 
-    fn scopes(&mut self) -> Option<&mut Scopes<R>> {
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<R>> {
         (**self).scopes()
     }
 
@@ -527,7 +527,7 @@ impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
         (**self).web_error(err)
     }
 
-    fn extension(&mut self) -> Option<&mut Extension> {
+    fn extension(&mut self) -> Option<&mut dyn Extension> {
         (**self).extension()
     }
 }

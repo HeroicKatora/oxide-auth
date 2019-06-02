@@ -12,8 +12,8 @@ use primitives::grant::{Extensions, GrantExtension};
 /// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
 /// other types.
 pub struct AddonList {
-    authorization: Vec<Arc<AuthorizationAddon + Send + Sync + 'static>>,
-    access_token: Vec<Arc<AccessTokenAddon + Send + Sync + 'static>>,
+    authorization: Vec<Arc<dyn AuthorizationAddon + Send + Sync + 'static>>,
+    access_token: Vec<Arc<dyn AccessTokenAddon + Send + Sync + 'static>>,
 }
 
 impl AddonList {
@@ -58,17 +58,17 @@ impl Default for AddonList {
 }
 
 impl Extension for AddonList {
-    fn authorization(&mut self) -> Option<&mut AuthorizationExtension> {
+    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
         Some(self)
     }
 
-    fn access_token(&mut self) -> Option<&mut AccessTokenExtension> {
+    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
         Some(self)
     }
 }
 
 impl AccessTokenExtension for AddonList {
-    fn extend(&mut self, request: &Request, mut data: Extensions) -> std::result::Result<Extensions, ()> {
+    fn extend(&mut self, request: &dyn Request, mut data: Extensions) -> std::result::Result<Extensions, ()> {
         let mut result_data = Extensions::new();
 
         for ext in self.access_token.iter() {
@@ -87,7 +87,7 @@ impl AccessTokenExtension for AddonList {
 }
 
 impl AuthorizationExtension for AddonList {
-    fn extend(&mut self, request: &AuthRequest) -> Result<Extensions, ()> {
+    fn extend(&mut self, request: &dyn AuthRequest) -> Result<Extensions, ()> {
         let mut result_data = Extensions::new();
 
         for ext in self.authorization.iter() {
