@@ -24,7 +24,9 @@ struct WrappedRequest<R: WebRequest> {
     authorization: Option<String>,
 
     /// An error if one occurred.
-    error: Option<Option<R::Error>>,
+    ///
+    /// Actual parsing of the authorization header is done in the lower level.
+    error: Option<R::Error>,
 }
 
 struct Scoped<'a, E: 'a, R: 'a> {
@@ -123,7 +125,7 @@ impl<R: WebRequest> WrappedRequest<R> {
         WrappedRequest {
             request: PhantomData,
             authorization: None,
-            error: Some(Some(error)),
+            error: Some(error),
         }
     }
 }
