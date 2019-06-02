@@ -42,7 +42,7 @@ pub trait AuthorizationAddon: GrantExtension {
     /// encoded form by returning `Ok(extension_data)` while errors can be signaled via `Err(())`.
     /// Extensions can also store their pure existance by initializing the extension struct without
     /// data. Specifically, the data can be used in a corresponding `AccessTokenExtension`.
-    fn execute(&self, request: &AuthorizationRequest) -> AddonResult;
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult;
 }
 
 /// An extension reacting to an access token request with a provided access token.
@@ -52,11 +52,11 @@ pub trait AccessTokenAddon: GrantExtension {
     /// The semantics are equivalent to that of `CodeExtension` except that any data which was
     /// returned as a response to the authorization code request is provided as an additional
     /// parameter.
-    fn execute(&self, request: &AccessTokenRequest, code_data: Option<Value>) -> AddonResult;
+    fn execute(&self, request: &dyn AccessTokenRequest, code_data: Option<Value>) -> AddonResult;
 }
 
 impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for &'a T {
-    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
         (**self).execute(request)
     }
 }
@@ -64,32 +64,32 @@ impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for &'a T {
 impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for Cow<'a, T> 
     where T: Clone + ToOwned
 {
-    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
         self.as_ref().execute(request)
     }
 }
 
 impl<T: AuthorizationAddon + ?Sized> AuthorizationAddon for Box<T> {
-    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
         (**self).execute(request)
     }
 }
 
 impl<T: AuthorizationAddon + ?Sized> AuthorizationAddon for Arc<T> {
-    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
         (**self).execute(request)
     }
 }
 
 impl<T: AuthorizationAddon + ?Sized> AuthorizationAddon for Rc<T> {
-    fn execute(&self, request: &AuthorizationRequest) -> AddonResult {
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
         (**self).execute(request)
     }
 }
 
 
 impl<'a, T: AccessTokenAddon + ?Sized> AccessTokenAddon for &'a T {
-    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+    fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         (**self).execute(request, data)
     }
 }
@@ -97,25 +97,25 @@ impl<'a, T: AccessTokenAddon + ?Sized> AccessTokenAddon for &'a T {
 impl<'a, T: AccessTokenAddon + ?Sized> AccessTokenAddon for Cow<'a, T> 
     where T: Clone + ToOwned
 {
-    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+    fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         self.as_ref().execute(request, data)
     }
 }
 
 impl<T: AccessTokenAddon + ?Sized> AccessTokenAddon for Box<T> {
-    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+    fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         (**self).execute(request, data)
     }
 }
 
 impl<T: AccessTokenAddon + ?Sized> AccessTokenAddon for Arc<T> {
-    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+    fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         (**self).execute(request, data)
     }
 }
 
 impl<T: AccessTokenAddon + ?Sized> AccessTokenAddon for Rc<T> {
-    fn execute(&self, request: &AccessTokenRequest, data: Option<Value>) -> AddonResult {
+    fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         (**self).execute(request, data)
     }
 }

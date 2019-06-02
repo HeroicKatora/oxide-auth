@@ -29,7 +29,7 @@ pub trait Authorizer {
 /// This authorizer saves a mapping of generated strings to their associated grants. The generator
 /// is itself trait based and can be chosen during construction. It is assumed to not be possible
 /// for two different grants to generate the same token in the issuer.
-pub struct AuthMap<I: TagGrant=Box<TagGrant + Send + Sync + 'static>> {
+pub struct AuthMap<I: TagGrant=Box<dyn TagGrant + Send + Sync + 'static>> {
     tagger: I,
     usage: u64,
     tokens: HashMap<String, Grant>
@@ -121,7 +121,7 @@ pub mod tests {
     /// Tests some invariants that should be upheld by all authorizers.
     ///
     /// Custom implementations may want to import and use this in their own tests.
-    pub fn simple_test_suite(authorizer: &mut Authorizer) {
+    pub fn simple_test_suite(authorizer: &mut dyn Authorizer) {
         let grant = Grant {
             owner_id: "Owner".to_string(),
             client_id: "Client".to_string(),

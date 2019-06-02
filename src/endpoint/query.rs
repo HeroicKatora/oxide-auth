@@ -81,8 +81,8 @@ impl NormalizedParameter {
     }
 }
 
-impl Borrow<QueryParameter> for NormalizedParameter {
-    fn borrow(&self) -> &(QueryParameter + 'static) {
+impl Borrow<dyn QueryParameter> for NormalizedParameter {
+    fn borrow(&self) -> &(dyn QueryParameter + 'static) {
         self
     }
 }
@@ -129,7 +129,7 @@ where
    }
 }
 
-impl ToOwned for QueryParameter {
+impl ToOwned for dyn QueryParameter {
     type Owned = NormalizedParameter;
 
     fn to_owned(&self) -> Self::Owned {
@@ -303,12 +303,12 @@ mod test {
     #[allow(unused)]
     #[allow(dead_code)]
     fn test_query_parameter_impls() {
-        let _ = (&HashMap::<String, String>::new()) as &QueryParameter;
-        let _ = (&HashMap::<&'static str, &'static str>::new()) as &QueryParameter;
-        let _ = (&HashMap::<Cow<'static, str>, Cow<'static, str>>::new()) as &QueryParameter;
+        let _ = (&HashMap::<String, String>::new()) as &dyn QueryParameter;
+        let _ = (&HashMap::<&'static str, &'static str>::new()) as &dyn QueryParameter;
+        let _ = (&HashMap::<Cow<'static, str>, Cow<'static, str>>::new()) as &dyn QueryParameter;
 
-        let _ = (&HashMap::<String, Vec<String>>::new()) as &QueryParameter;
-        let _ = (&HashMap::<String, Box<String>>::new()) as &QueryParameter;
-        let _ = (&HashMap::<String, Box<[Cow<'static, str>]>>::new()) as &QueryParameter;
+        let _ = (&HashMap::<String, Vec<String>>::new()) as &dyn QueryParameter;
+        let _ = (&HashMap::<String, Box<String>>::new()) as &dyn QueryParameter;
+        let _ = (&HashMap::<String, Box<[Cow<'static, str>]>>::new()) as &dyn QueryParameter;
     }
 }

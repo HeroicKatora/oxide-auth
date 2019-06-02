@@ -53,23 +53,23 @@ where
 {
     type Error = Inner::Error;
 
-    fn registrar(&self) -> Option<&Registrar> {
+    fn registrar(&self) -> Option<&dyn Registrar> {
         self.inner.registrar()
     }
 
-    fn authorizer_mut(&mut self) -> Option<&mut Authorizer> {
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
         self.inner.authorizer_mut()
     }
 
-    fn issuer_mut(&mut self) -> Option<&mut Issuer> {
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
         self.inner.issuer_mut()
     }
 
-    fn owner_solicitor(&mut self) -> Option<&mut OwnerSolicitor<Request>> {
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<Request>> {
         self.inner.owner_solicitor()
     }
 
-    fn scopes(&mut self) -> Option<&mut Scopes<Request>> {
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<Request>> {
         self.inner.scopes()
     }
 
@@ -87,7 +87,7 @@ where
         self.inner.web_error(err)
     }
 
-    fn extension(&mut self) -> Option<&mut Extension> {
+    fn extension(&mut self) -> Option<&mut dyn Extension> {
         Some(&mut self.addons)
     }
 }

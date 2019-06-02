@@ -46,11 +46,11 @@ pub trait Extension {
     ///
     /// The input data comes from the extension data produced in the handling of the
     /// authorization code request.
-    fn extend(&mut self, request: &Request, data: Extensions) -> std::result::Result<Extensions, ()>;
+    fn extend(&mut self, request: &dyn Request, data: Extensions) -> std::result::Result<Extensions, ()>;
 }
 
 impl Extension for () {
-    fn extend(&mut self, _: &Request, _: Extensions) -> std::result::Result<Extensions, ()> {
+    fn extend(&mut self, _: &dyn Request, _: Extensions) -> std::result::Result<Extensions, ()> {
         Ok(Extensions::new())
     }
 }
@@ -62,22 +62,22 @@ impl Extension for () {
 /// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait Endpoint {
     /// Get the client corresponding to some id.
-    fn registrar(&self) -> &Registrar;
+    fn registrar(&self) -> &dyn Registrar;
 
     /// Get the authorizer from which we can recover the authorization.
-    fn authorizer(&mut self) -> &mut Authorizer;
+    fn authorizer(&mut self) -> &mut dyn Authorizer;
 
     /// Return the issuer instance to create the access token.
-    fn issuer(&mut self) -> &mut Issuer;
+    fn issuer(&mut self) -> &mut dyn Issuer;
 
     /// The system of used extension, extending responses.
     ///
     /// It is possible to use `&mut ()`.
-    fn extension(&mut self) -> & mut Extension;
+    fn extension(&mut self) -> & mut dyn Extension;
 }
 
 /// Try to redeem an authorization code.
-pub fn access_token(handler: &mut Endpoint, request: &Request) -> Result<BearerToken> {
+pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
     if !request.valid() {
         return Err(Error::invalid())
     }
@@ -255,8 +255,6 @@ impl ErrorDescription {
     /// Convert the error into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(self) -> String {
-        use std::iter::IntoIterator;
-        use std::collections::HashMap;
         let asmap = self.error.into_iter()
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();

@@ -26,13 +26,13 @@ impl<'a, 'b, 'c: 'b> WebRequest for &'a mut Request<'b, 'c> {
     type Response = Response;
     type Error = Error;
 
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         serde_urlencoded::from_str(self.url.query().unwrap_or(""))
             .map_err(|_| Error::BadRequest)
             .map(Cow::Owned)
     }
 
-    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         let content_type = self.headers.get::<headers::ContentType>();
         let formatted = content_type
             .map(|ct| ct == &headers::ContentType::form_url_encoded())

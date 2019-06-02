@@ -148,7 +148,7 @@ pub struct EncodedClient {
 /// Recombines an `EncodedClient` and a  `PasswordPolicy` to check authentication.
 pub struct RegisteredClient<'a> {
     client: &'a EncodedClient,
-    policy: &'a PasswordPolicy,
+    policy: &'a dyn PasswordPolicy,
 }
 
 /// Enumeration of the two defined client types.
@@ -167,7 +167,7 @@ pub enum ClientType {
 /// A very simple, in-memory hash map of client ids to Client entries.
 pub struct ClientMap {
     clients: HashMap<String, EncodedClient>,
-    password_policy: Option<Box<PasswordPolicy>>,
+    password_policy: Option<Box<dyn PasswordPolicy>>,
 }
 
 impl fmt::Debug for ClientType {
@@ -208,7 +208,7 @@ impl Client {
     /// This could apply a one-way function to the passphrase using an adequate password hashing
     /// method. The resulting passdata is then used for validating authentication details provided
     /// when later reasserting the identity of a client.
-    pub fn encode(self, policy: &PasswordPolicy) -> EncodedClient {
+    pub fn encode(self, policy: &dyn PasswordPolicy) -> EncodedClient {
         let encoded_client = match self.client_type {
             ClientType::Public => ClientType::Public,
             ClientType::Confidential { passdata: passphrase }
@@ -231,7 +231,7 @@ impl<'a> RegisteredClient<'a> {
     ///
     /// The policy should be the same or equivalent to the policy used to create the encoded client
     /// data, as otherwise authentication will obviously not work.
-    pub fn new(client: &'a EncodedClient, policy: &'a PasswordPolicy) -> Self {
+    pub fn new(client: &'a EncodedClient, policy: &'a dyn PasswordPolicy) -> Self {
         RegisteredClient {
             client,
             policy,
@@ -393,7 +393,7 @@ impl ClientMap {
     }
 
     // This is not an instance method because it needs to borrow the box but register needs &mut
-    fn current_policy<'a>(policy: &'a Option<Box<PasswordPolicy>>) -> &'a PasswordPolicy {
+    fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> &'a dyn PasswordPolicy {
         policy
             .as_ref().map(|boxed| &**boxed)
             .unwrap_or(Pbkdf2::static_default())

@@ -114,7 +114,7 @@ impl Extensions {
     }
 
     /// Set the stored content for a `GrantExtension` instance.
-    pub fn set(&mut self, extension: &GrantExtension, content: Value) {
+    pub fn set(&mut self, extension: &dyn GrantExtension, content: Value) {
         self.extensions.insert(extension.identifier().to_string(), content);
     }
 
@@ -127,7 +127,7 @@ impl Extensions {
     ///
     /// This removes the data from the store to avoid possible mixups and to allow a copyless
     /// retrieval of bigger data strings.
-    pub fn remove(&mut self, extension: &GrantExtension) -> Option<Value> {
+    pub fn remove(&mut self, extension: &dyn GrantExtension) -> Option<Value> {
         self.extensions.remove(extension.identifier())
     }
 

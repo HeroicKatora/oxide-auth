@@ -101,11 +101,11 @@ pub trait Endpoint {
     fn scopes(&mut self) -> &[Scope];
 
     /// Issuer which provides the tokens used for authorization by the client.
-    fn issuer(&mut self) -> &Issuer;
+    fn issuer(&mut self) -> &dyn Issuer;
 }
 
 /// The result will indicate whether the resource access should be allowed or not.
-pub fn protect(handler: &mut Endpoint, req: &Request) -> Result<Grant> {
+pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
     let authenticate = Authenticate {
         realm: None,
         scope: handler.scopes().get(0).cloned(),

@@ -5,7 +5,7 @@
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
 use std::sync::{MutexGuard, RwLockWriteGuard};
-use std::sync::atomic::{ATOMIC_USIZE_INIT, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{Duration, Utc};
 
@@ -51,7 +51,7 @@ pub struct IssuedToken {
 /// The generator is itself trait based and can be chosen during construction. It is assumed to not
 /// be possible (or at least very unlikely during their overlapping lifetime) for two different
 /// grants to generate the same token in the grant tagger.
-pub struct TokenMap<G: TagGrant=Box<TagGrant + Send + Sync + 'static>> {
+pub struct TokenMap<G: TagGrant=Box<dyn TagGrant + Send + Sync + 'static>> {
     duration: Option<Duration>,
     generator: G,
     usage: u64,
@@ -159,7 +159,7 @@ impl TokenSigner {
         TokenSigner { 
             duration: None,
             signer: secret.into(),
-            counter: ATOMIC_USIZE_INIT,
+            counter: AtomicUsize::new(0),
         }
     }
 
@@ -320,7 +320,7 @@ pub mod tests {
     /// Generation of a valid refresh token is not tested against.
     ///
     /// Custom implementations may want to import and use this in their own tests.
-    pub fn simple_test_suite(issuer: &mut Issuer) {
+    pub fn simple_test_suite(issuer: &mut dyn Issuer) {
         let request = Grant {
             client_id: "Client".to_string(),
             owner_id: "Owner".to_string(),

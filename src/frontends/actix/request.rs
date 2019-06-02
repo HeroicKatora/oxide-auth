@@ -241,15 +241,15 @@ impl WebRequest for OAuthRequest {
     type Error = OAuthError;
     type Response = OAuthResponse;
 
-     fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
          self.query.as_ref()
-             .map(|query| Cow::Borrowed(query as &QueryParameter))
+             .map(|query| Cow::Borrowed(query as &dyn QueryParameter))
              .map_err(|_| OAuthError::BadRequest)
      }
 
-     fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+     fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
          self.body.as_ref()
-             .map(|body| Cow::Borrowed(body as &QueryParameter))
+             .map(|body| Cow::Borrowed(body as &dyn QueryParameter))
              .map_err(|_| OAuthError::BadRequest)
      }
 

@@ -42,11 +42,11 @@ pub trait Request {
 /// An endpoint not having any extension may use `&mut ()` as the result of system.
 pub trait Extension {
     /// Inspect the request to produce extension data.
-    fn extend(&mut self, request: &Request) -> std::result::Result<Extensions, ()>;
+    fn extend(&mut self, request: &dyn Request) -> std::result::Result<Extensions, ()>;
 }
 
 impl Extension for () {
-    fn extend(&mut self, _: &Request) -> std::result::Result<Extensions, ()> {
+    fn extend(&mut self, _: &dyn Request) -> std::result::Result<Extensions, ()> {
         Ok(Extensions::new())
     }
 }
@@ -58,15 +58,15 @@ impl Extension for () {
 /// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait Endpoint {
     /// 'Bind' a client and redirect uri from a request to internally approved parameters.
-    fn registrar(&self) -> &Registrar;
+    fn registrar(&self) -> &dyn Registrar;
 
     /// Generate an authorization code for a given grant.
-    fn authorizer(&mut self) -> &mut Authorizer;
+    fn authorizer(&mut self) -> &mut dyn Authorizer;
 
     /// An extension implementation of this endpoint.
     ///
     /// It is possible to use `&mut ()`.
-    fn extension(&mut self) -> &mut Extension;
+    fn extension(&mut self) -> &mut dyn Extension;
 }
 
 /// Retrieve allowed scope and redirect url from the registrar.
@@ -78,7 +78,7 @@ pub trait Endpoint {
 /// If the client is not registered, the request will otherwise be ignored, if the request has
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
-pub fn authorization_code(handler: &mut Endpoint, request: &Request)
+pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request)
 -> self::Result<Pending> {
     if !request.valid() {
         return Err(Error::Ignore)
@@ -179,7 +179,7 @@ impl Pending {
     ///
     /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
     /// same endpoint as was used to create the pending request.
-    pub fn authorize(self, handler: &mut Endpoint, owner_id: Cow<str>) -> Result<Url> {
+    pub fn authorize(self, handler: &mut dyn Endpoint, owner_id: Cow<str>) -> Result<Url> {
        let mut url = self.pre_grant.redirect_uri.clone();
 
        let grant = handler.authorizer().authorize(Grant {

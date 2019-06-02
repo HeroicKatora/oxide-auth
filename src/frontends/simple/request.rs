@@ -114,11 +114,11 @@ impl WebRequest for Request {
     type Error = NoError;
     type Response = Response;
 
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         Ok(Cow::Borrowed(&self.query))
     }
 
-    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         Ok(Cow::Borrowed(&self.urlbody))
     }
 
@@ -193,11 +193,11 @@ impl<W: WebRequest, F, T> WebRequest for MapErr<W, F, T> where F: FnMut(W::Error
     type Error = T;
     type Response = MapErr<W::Response, F, T>;
 
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         self.0.query().map_err(&mut self.1)
     }
 
-    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         self.0.urlbody().map_err(&mut self.1)
     }
 

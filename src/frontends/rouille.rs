@@ -30,14 +30,14 @@ impl<'a> WebRequest for &'a Request {
     type Error = WebError;
     type Response = Response;
 
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         let query = self.raw_query_string();
         let data = serde_urlencoded::from_str(query)
             .map_err(|_| WebError::Encoding)?;
         Ok(Cow::Owned(data))
     }
 
-    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
+    fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         match self.header("Content-Type") {
             None | Some("application/x-www-form-urlencoded") => (),
             _ => return Err(WebError::Encoding),

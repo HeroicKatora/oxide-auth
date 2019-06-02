@@ -28,7 +28,7 @@ pub fn authorization<R, A, S, W>(
     request: W,
     response: W::Response
 )
-    -> Box<Future<Item=W::Response, Error=W::Error> + 'static>
+    -> Box<dyn Future<Item=W::Response, Error=W::Error> + 'static>
 where
     R: Registrar + 'static,
     A: Authorizer + 'static,
@@ -57,7 +57,7 @@ pub fn access_token<R, A, I, W>(
     request: W,
     response: W::Response
 )
-    -> Box<Future<Item=W::Response, Error=W::Error> + 'static>
+    -> Box<dyn Future<Item=W::Response, Error=W::Error> + 'static>
 where
     R: Registrar + 'static,
     A: Authorizer + 'static,
@@ -86,7 +86,7 @@ pub fn resource<I, W, C>(
     request: W,
     response: W::Response
 )
-    -> Box<Future<Item=Grant, Error=ResourceProtection<W::Response>> + 'static>
+    -> Box<dyn Future<Item=Grant, Error=ResourceProtection<W::Response>> + 'static>
 where
     I: Issuer + 'static,
     C: Scopes<W> + 'static,

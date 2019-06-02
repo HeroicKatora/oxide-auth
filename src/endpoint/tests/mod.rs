@@ -79,12 +79,12 @@ impl WebRequest for CraftedRequest {
     type Response = CraftedResponse;
     type Error = CraftedError;
 
-    fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
-        self.query.as_ref().map(|hm| Cow::Borrowed(hm as &QueryParameter)).ok_or(CraftedError::Crafted)
+    fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
+        self.query.as_ref().map(|hm| Cow::Borrowed(hm as &dyn QueryParameter)).ok_or(CraftedError::Crafted)
     }
 
-    fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, Self::Error> {
-        self.urlbody.as_ref().map(|hm| Cow::Borrowed(hm as &QueryParameter)).ok_or(CraftedError::Crafted)
+    fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
+        self.urlbody.as_ref().map(|hm| Cow::Borrowed(hm as &dyn QueryParameter)).ok_or(CraftedError::Crafted)
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
