@@ -317,7 +317,7 @@ impl Pbkdf2 {
     ///
     /// This function will panic when the `strength` is larger or equal to `32`.
     pub fn set_relative_strength(&mut self, strength: u8) {
-        assert!(strength < 64, "Strength value out of range (0-31): {}", strength);
+        assert!(strength < 32, "Strength value out of range (0-31): {}", strength);
         self.iterations = 1u32 << strength as u32;
     }
 
