@@ -255,8 +255,6 @@ impl ErrorDescription {
     /// Convert the error into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(self) -> String {
-        use std::iter::IntoIterator;
-        use std::collections::HashMap;
         let asmap = self.error.into_iter()
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();

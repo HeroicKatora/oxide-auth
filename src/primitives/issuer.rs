@@ -5,7 +5,7 @@
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
 use std::sync::{MutexGuard, RwLockWriteGuard};
-use std::sync::atomic::{ATOMIC_USIZE_INIT, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{Duration, Utc};
 
@@ -159,7 +159,7 @@ impl TokenSigner {
         TokenSigner { 
             duration: None,
             signer: secret.into(),
-            counter: ATOMIC_USIZE_INIT,
+            counter: AtomicUsize::new(0),
         }
     }
 
