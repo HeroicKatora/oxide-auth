@@ -130,7 +130,7 @@ fn b64encode(data: &[u8]) -> String {
 
 impl Method {
     fn from_parameter(method: Cow<str>, challenge: Cow<str>) -> Result<Self, ()> {
-        match &*method {
+        match method.as_ref() {
             "plain" => Ok(Method::Plain(challenge.into_owned())),
             "S256" => Ok(Method::Sha256(challenge.into_owned())),
             _ => Err(()),
@@ -165,10 +165,10 @@ impl Method {
 
     fn verify(&self, verifier: &str) -> Result<(), ()> {
         match self {
-            &Method::Plain(ref encoded) =>
+            Method::Plain(encoded) =>
                 verify_slices_are_equal(encoded.as_bytes(), verifier.as_bytes())
                     .map_err(|_| ()),
-            &Method::Sha256(ref encoded) => {
+            Method::Sha256(encoded) => {
                 let digest = digest(&SHA256, verifier.as_bytes());
                 let b64digest = b64encode(digest.as_ref());
                 verify_slices_are_equal(encoded.as_bytes(), b64digest.as_bytes())

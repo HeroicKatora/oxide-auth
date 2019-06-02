@@ -108,7 +108,7 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
 
     let code = request
         .code()
-        .ok_or(Error::invalid())?;
+        .ok_or_else(Error::invalid)?;
     let code = code.as_ref();
 
     let saved_params = match handler.authorizer().extract(code) {
@@ -122,7 +122,7 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
 
     let redirect_uri = request
         .redirect_uri()
-        .ok_or(Error::invalid())?;
+        .ok_or_else(Error::invalid)?;
     let redirect_uri = redirect_uri
         .as_ref()
         .parse()

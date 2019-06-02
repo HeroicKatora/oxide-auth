@@ -2,7 +2,7 @@ use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
-use std::hash::Hash;
+use std::hash::{BuildHasher, Hash};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -75,9 +75,10 @@ impl NormalizedParameter {
     /// Since each key must appear at most once, we do not remove it from the map but instead mark
     /// the key as having a duplicate entry.
     pub fn insert_or_poison(&mut self, key: Cow<'static, str>, val: Cow<'static, str>) {
+        let unique_val = Some(val);
         self.inner.entry(key)
             .and_modify(|val| *val = None)
-            .or_insert(Some(val));
+            .or_insert(unique_val);
     }
 }
 
@@ -149,7 +150,7 @@ pub unsafe trait UniqueValue {
     fn get_unique(&self) -> Option<&str>;
 }
 
-unsafe impl<K, V> QueryParameter for HashMap<K, V>
+unsafe impl<K, V, S: BuildHasher> QueryParameter for HashMap<K, V, S>
 where
     K: Borrow<str> + Eq + Hash,
     V: UniqueValue + Eq + Hash,

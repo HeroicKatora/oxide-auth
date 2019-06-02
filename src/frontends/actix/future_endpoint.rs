@@ -215,11 +215,12 @@ impl RegistrarProxy {
         || self.check.borrow().is_waiting()
     }
 
-    #[allow(unused, dead_code)]
+    #[allow(dead_code)]
     pub fn error(&self) -> Option<MailboxError> {
-        self.bound.borrow().error()
-            .or(self.negotiate.borrow().error())
-            .or(self.check.borrow().error())
+        let berr = self.bound.borrow().error();
+        let nerr = self.negotiate.borrow().error();
+        let cerr = self.check.borrow().error();
+        berr.or(nerr).or(cerr)
     }
     
     pub fn rearm(&mut self) {
@@ -262,7 +263,7 @@ impl Registrar for RegistrarProxy {
                     client_id: Cow::Owned(client.client_id.into_owned()),
                     redirect_uri: Cow::Owned(client.redirect_uri.into_owned()),
                 },
-                scope: scope,
+                scope,
             };
             self.negotiate.borrow_mut().send(negotiate);
         }
@@ -278,7 +279,7 @@ impl Registrar for RegistrarProxy {
         if self.check.borrow().unsent() {
             let check = m::Check {
                 client: client_id.to_owned(),
-                passphrase: passphrase.map(|p| p.to_owned()),
+                passphrase: passphrase.map(ToOwned::to_owned),
             };
             self.check.borrow_mut().send(check);
         }
@@ -306,10 +307,11 @@ impl AuthorizerProxy {
         || self.extract.is_waiting()
     }
 
-    #[allow(unused, dead_code)]
+    #[allow(dead_code)]
     pub fn error(&self) -> Option<MailboxError> {
-        self.authorize.error()
-            .or(self.extract.error())
+        let aerr = self.authorize.error();
+        let eerr = self.extract.error();
+        aerr.or(eerr)
     }
     
     pub fn rearm(&mut self) {
@@ -365,11 +367,12 @@ impl IssuerProxy {
         || self.recover_refresh.borrow().is_waiting()
     }
 
-    #[allow(unused, dead_code)]
+    #[allow(dead_code)]
     pub fn error(&self) -> Option<MailboxError> {
-        self.issue.error()
-            .or(self.recover_token.borrow().error())
-            .or(self.recover_refresh.borrow().error())
+        let ierr = self.issue.error();
+        let terr = self.recover_token.borrow().error();
+        let rerr = self.recover_refresh.borrow().error();
+        ierr.or(terr).or(rerr)
     }
     
     pub fn rearm(&mut self) {
@@ -600,11 +603,11 @@ where
 
         // Now we are at the errors produced by the endpoint.
         // Since we control the endpoint, second representations is `OAuthError`.
-        let () = match err {
+        match err {
             SimpleError::OAuth(OAuthError::PrimitiveError) => (),
             SimpleError::OAuth(err) => return Err(ResourceProtection::Error(err.into())),
             SimpleError::Web(err) => return Err(ResourceProtection::Error(err)),
-        };
+        }
 
         // Are we getting this primitive error due to a pending reply?
         if !self.issuer.is_waiting() {
