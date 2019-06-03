@@ -2,6 +2,18 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.4.3 (2019-Jun-03)
+
+Bugfix release
+
+Fixed the following bugs:
+- Fix pbkdf2 based password policy strength check. It will now properly panic
+  instead of silently panicking when provided with values `>32` (now behaves
+  like the the documentation suggested).
+- Client provided `redirect_uri` is now always equality checked by URI-path.
+  String-based comparison would sometimes require unexpected parameter values.
+- Improved release confidence with CI.
+
 # v0.4.2 (2019-Feb-15)
 
 Documentation release
