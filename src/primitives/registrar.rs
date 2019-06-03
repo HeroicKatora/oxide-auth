@@ -165,6 +165,7 @@ pub enum ClientType {
 }
 
 /// A very simple, in-memory hash map of client ids to Client entries.
+#[derive(Default)]
 pub struct ClientMap {
     clients: HashMap<String, EncodedClient>,
     password_policy: Option<Box<dyn PasswordPolicy>>,
@@ -246,7 +247,7 @@ impl<'a> RegisteredClient<'a> {
             (None, &ClientType::Public) => Ok(()),
             (Some(provided), &ClientType::Confidential{ passdata: ref stored })
                 => self.policy.check(&self.client.client_id, provided, stored),
-            _ => return Err(Unspecified)
+            _ => Err(Unspecified)
         }
     }
 }
@@ -289,7 +290,7 @@ impl Default for Pbkdf2 {
     fn default() -> Self {
         Pbkdf2 {
             random: Some(SystemRandom::new()),
-            .. *Self::static_default()
+            .. *PBKDF2_DEFAULTS
         }
     }
 }
@@ -318,14 +319,7 @@ impl Pbkdf2 {
     /// This function will panic when the `strength` is larger or equal to `32`.
     pub fn set_relative_strength(&mut self, strength: u8) {
         assert!(strength < 32, "Strength value out of range (0-31): {}", strength);
-        self.iterations = 1u32 << strength as u32;
-    }
-
-    fn static_default() -> &'static Self {
-        &Pbkdf2 {
-            random: None,
-            iterations: (1 << 16),
-        }
+        self.iterations = 1u32 << strength;
     }
 
     fn salt(&self, user_identifier: &[u8]) -> Vec<u8> {
@@ -343,10 +337,19 @@ impl Pbkdf2 {
     }
 }
 
+// A default instance for pbkdf2, randomness is sampled from the system each time.
+//
+// TODO: in the future there might be a way to get static memory initialized with an rng at load
+// time by the loader. Then, a constant instance of the random generator may be available and we
+// could get rid of the `Option`.
+static PBKDF2_DEFAULTS: &Pbkdf2 = &Pbkdf2 {
+    random: None,
+    iterations: (1 << 16),
+};
+
 impl PasswordPolicy for Pbkdf2 {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
-        let mut output = Vec::with_capacity(64);
-        output.resize(64, 0);
+        let mut output = vec![0; 64];
         output.append(&mut self.salt(client_id.as_bytes()));
         {
             let (output, salt) = output.split_at_mut(64);
@@ -375,10 +378,7 @@ impl PasswordPolicy for Pbkdf2 {
 impl ClientMap {
     /// Create an empty map without any clients in it.
     pub fn new() -> ClientMap {
-        ClientMap {
-            clients: HashMap::new(),
-            password_policy: None,
-        }
+        ClientMap::default()
     }
 
     /// Insert or update the client record.
@@ -396,7 +396,7 @@ impl ClientMap {
     fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> &'a dyn PasswordPolicy {
         policy
             .as_ref().map(|boxed| &**boxed)
-            .unwrap_or(Pbkdf2::static_default())
+            .unwrap_or(PBKDF2_DEFAULTS)
     }
 }
 

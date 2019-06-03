@@ -123,7 +123,7 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
             (token, refresh)
         };
 
-        let until = grant.until.clone();
+        let until = grant.until;
         self.access.insert(token.clone(), grant.clone());
         self.refresh.insert(refresh.clone(), grant);
         self.usage = next_usage;

@@ -37,7 +37,14 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
     authorization: Option<Authorization>,
 
     /// An error if one occurred.
-    error: Option<Option<R::Error>>,
+    error: Option<FailParse<R::Error>>,
+}
+
+struct Invalid;
+
+enum FailParse<E> {
+    Invalid,
+    Err(E),
 }
 
 struct Authorization(String, Vec<u8>);
@@ -145,7 +152,7 @@ impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
 
     fn extension(&mut self) -> &mut dyn Extension {
         self.inner.extension()
-            .and_then(|ext| ext.access_token())
+            .and_then(super::Extension::access_token)
             .unwrap_or(&mut self.extension_fallback)
     }
 }
@@ -156,23 +163,23 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             .unwrap_or_else(Self::from_err)
     }
 
-    fn new_or_fail(request: &'a mut R) -> Result<Self, Option<R::Error>> {
+    fn new_or_fail(request: &'a mut R) -> Result<Self, FailParse<R::Error>> {
         // If there is a header, it must parse correctly.
         let authorization = match request.authheader() {
-            Err(err) => return Err(Some(err)),
+            Err(err) => return Err(FailParse::Err(err)),
             Ok(Some(header)) => Self::parse_header(header).map(Some)?,
             Ok(None) => None,
         };
 
         Ok(WrappedRequest {
             request: PhantomData,
-            body: request.urlbody()?,
+            body: request.urlbody().map_err(FailParse::Err)?,
             authorization,
             error: None,
         })
     }
 
-    fn from_err(err: Option<R::Error>) -> Self {
+    fn from_err(err: FailParse<R::Error>) -> Self {
         WrappedRequest {
             request: PhantomData,
             body: Cow::Owned(Default::default()),
@@ -181,29 +188,29 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
         }
     }
 
-    fn parse_header(header: Cow<str>) -> Result<Authorization, Option<R::Error>> {
+    fn parse_header(header: Cow<str>) -> Result<Authorization, Invalid> {
         let authorization = {
             if !header.starts_with("Basic ") {
-                return Err(None)
+                return Err(Invalid)
             }
 
             let combined = match base64::decode(&header[6..]) {
-                Err(_) => return Err(None),
+                Err(_) => return Err(Invalid),
                 Ok(vec) => vec,
             };
 
             let mut split = combined.splitn(2, |&c| c == b':');
             let client_bin = match split.next() {
-                None => return Err(None),
+                None => return Err(Invalid),
                 Some(client) => client,
             };
             let passwd = match split.next() {
-                None => return Err(None),
+                None => return Err(Invalid),
                 Some(passwd64) => passwd64,
             };
 
             let client = match from_utf8(client_bin) {
-                Err(_) => return Err(None),
+                Err(_) => return Err(Invalid),
                 Ok(client) => client,
             };
 
@@ -242,5 +249,11 @@ impl<'a, R: WebRequest> TokenRequest for WrappedRequest<'a, R> {
 
     fn extension(&self, key: &str) -> Option<Cow<str>> {
         self.body.unique_value(key)
+    }
+}
+
+impl<E> From<Invalid> for FailParse<E> {
+    fn from(_: Invalid) -> Self {
+        FailParse::Invalid
     }
 }

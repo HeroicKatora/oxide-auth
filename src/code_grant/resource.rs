@@ -71,7 +71,7 @@ pub enum Error {
     PrimitiveError,
 }
 
-const BEARER_START: &'static str = "Bearer ";
+const BEARER_START: &str = "Bearer ";
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -163,7 +163,7 @@ pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
         });
     }
 
-    return Ok(grant)
+    Ok(grant)
 }
 
 impl ErrorCode {

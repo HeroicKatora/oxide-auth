@@ -127,7 +127,7 @@ impl Assertion {
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
     pub fn ephermal() -> Assertion {
-        SigningKey::generate(&SHA256, &mut SystemRandom::new()).unwrap().into()
+        SigningKey::generate(&SHA256, &SystemRandom::new()).unwrap().into()
     }
 
     /// Get a reference to generator for the given tag.
@@ -315,7 +315,7 @@ mod time_serde {
 impl SerdeAssertionGrant {
     fn try_from(grant: &Grant) -> Result<Self, ()> {
         let mut public_extensions: HashMap<String, Option<String>> = HashMap::new();
-        if let Some(_) = grant.extensions.iter_private().next() {
+        if grant.extensions.iter_private().any(|_| true) {
             return Err(())
         };
         for (name, content) in grant.extensions.iter_public() {
@@ -326,7 +326,7 @@ impl SerdeAssertionGrant {
             client_id: grant.client_id.clone(),
             scope: grant.scope.clone(),
             redirect_uri: grant.redirect_uri.clone(),
-            until: grant.until.clone(),
+            until: grant.until,
             public_extensions,
         })
     }
@@ -342,7 +342,7 @@ impl SerdeAssertionGrant {
             scope: self.scope,
             redirect_uri: self.redirect_uri,
             until: self.until,
-            extensions: extensions,
+            extensions,
         }
     }
 }

@@ -112,7 +112,7 @@ impl fmt::Debug for AddonList {
         impl<'a, T: GrantExtension> fmt::Debug for ExtIter<'a, T> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.debug_list()
-                    .entries(self.0.clone().map(|t| t.identifier()))
+                    .entries(self.0.clone().map(T::identifier))
                     .finish()
             }
         }

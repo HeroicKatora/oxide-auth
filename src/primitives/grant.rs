@@ -40,7 +40,7 @@ pub enum Value {
 ///
 /// This also serves as a clean interface for both frontend and backend to reliably and
 /// conveniently manipulate or query the stored data sets.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct Extensions {
     extensions: HashMap<String, Value>,
 }
@@ -108,9 +108,7 @@ impl Value {
 impl Extensions {
     /// Create a new extension store.
     pub fn new() -> Extensions {
-        Extensions {
-            extensions: HashMap::new(),
-        }
+        Extensions::default()
     }
 
     /// Set the stored content for a `GrantExtension` instance.
@@ -158,8 +156,8 @@ impl<'a> Iterator for PublicExtensions<'a> {
         loop {
             match self.0.next() {
                 None => return None,
-                Some((key, &Value::Public(ref content)))
-                    => return Some((key, content.as_ref().map(|st| st.as_str()))),
+                Some((key, Value::Public(content)))
+                    => return Some((key, content.as_ref().map(String::as_str))),
                 _ => (),
             }
         }
@@ -173,8 +171,8 @@ impl<'a> Iterator for PrivateExtensions<'a> {
         loop {
             match self.0.next() {
                 None => return None,
-                Some((key, &Value::Private(ref content)))
-                    => return Some((key, content.as_ref().map(|st| st.as_str()))),
+                Some((key, Value::Private(content)))
+                    => return Some((key, content.as_ref().map(String::as_str))),
                 _ => (),
             }
         }

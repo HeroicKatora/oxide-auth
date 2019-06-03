@@ -152,7 +152,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request)
 
     Ok(Pending {
         pre_grant,
-        state: state.map(|cow| cow.into_owned()),
+        state: state.map(Cow::into_owned),
         extensions: grant_extension,
     })
 }
@@ -238,7 +238,7 @@ impl ErrorUrl {
     fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl where S: AsRef<str> {
         url.query_pairs_mut()
             .extend_pairs(state.as_ref().map(|st| ("state", st.as_ref())));
-        ErrorUrl{ base_uri: url, error: error }
+        ErrorUrl{ base_uri: url, error }
     }
 
     /// Get a handle to the description the client will receive.

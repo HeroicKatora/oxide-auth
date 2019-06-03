@@ -255,9 +255,9 @@ impl WebRequest for OAuthRequest {
 
      fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error>{
          match &self.auth {
-             &Ok(Some(ref string)) => Ok(Some(Cow::Borrowed(string))),
-             &Ok(None) => Ok(None),
-             &Err(_) => Err(OAuthError::BadRequest)
+             Ok(Some(string)) => Ok(Some(Cow::Borrowed(string))),
+             Ok(None) => Ok(None),
+             Err(_) => Err(OAuthError::BadRequest)
          }
      }
 }

@@ -96,15 +96,15 @@ impl str::FromStr for Scope {
         if let Some(ch) = string.chars().find(|&ch| Scope::invalid_scope_char(ch)) {
             return Err(ParseScopeErr::InvalidCharacter(ch))
         }
-        let tokens = string.split(' ').filter(|s| s.len() > 0);
-        Ok(Scope{ tokens: tokens.map(|r| r.to_string()).collect() })
+        let tokens = string.split(' ').filter(|s| !s.is_empty());
+        Ok(Scope{ tokens: tokens.map(str::to_string).collect() })
     }
 }
 
 impl fmt::Display for ParseScopeErr {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            &ParseScopeErr::InvalidCharacter(ref chr)
+            ParseScopeErr::InvalidCharacter(chr)
                 => write!(fmt, "Encountered invalid character in scope: {}", chr)
         }
     }
@@ -121,8 +121,8 @@ impl fmt::Debug for Scope {
 impl fmt::Display for Scope {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let output = self.tokens.iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<&str>>()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
             .join(" ");
         fmt.write_str(&output)
     }

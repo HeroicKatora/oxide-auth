@@ -223,8 +223,8 @@ impl IntoIterator for AuthorizationError {
     type IntoIter = IntoIter<(&'static str, Cow<'static, str>)>;
     fn into_iter(self) -> Self::IntoIter {
         let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
-        self.description.map(|d| vec.push(("description", d)));
-        self.uri.map(|uri| vec.push(("uri", uri)));
+        vec.extend(self.description.map(|d| ("description", d)));
+        vec.extend(self.uri.map(|uri| ("uri", uri)));
         vec.into_iter()
     }
 }
@@ -235,8 +235,8 @@ impl IntoIterator for AccessTokenError {
     type IntoIter = IntoIter<(&'static str, Cow<'static, str>)>;
     fn into_iter(self) -> Self::IntoIter {
         let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
-        self.description.map(|d| vec.push(("description", d)));
-        self.uri.map(|uri| vec.push(("uri", uri)));
+        vec.extend(self.description.map(|d| ("description", d)));
+        vec.extend(self.uri.map(|uri| ("uri", uri)));
         vec.into_iter()
     }
 }
