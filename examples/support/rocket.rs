@@ -31,7 +31,7 @@ impl Fairing for ClientFairing {
         };
         Ok(rocket
             .manage(Client::new(config))
-            .mount("/clientside", routes![oauth_endpoint, client_view, client_debug]))
+            .mount("/clientside", routes![oauth_endpoint, client_view, client_debug, refresh]))
     }
 }
 
@@ -70,9 +70,17 @@ fn client_view(state: State<Client>) -> Result<Html<String>, Custom<String>> {
         <a href=\"http://localhost:8000/\">http://localhost:8000/</a>.
         Its contents are:
         <article>{:?}</article>
+        <form action=\"/clientside/refresh\" method=\"post\"><button>Refresh token</button></form>
         </main></html>", state.as_html(), protected_page);
 
     Ok(Html(display_page))
+}
+
+#[post("/refresh")]
+fn refresh(state: State<Client>) -> Result<Redirect, Custom<String>> {
+    state.refresh()
+        .map_err(internal_error)
+        .map(|()| Redirect::found("/clientside"))
 }
 
 #[get("/debug")]
