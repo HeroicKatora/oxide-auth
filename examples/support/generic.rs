@@ -10,7 +10,13 @@
 //! a page in the browser.
 #![allow(unused)]
 
+/// Simplistic reqwest client.
+mod client;
+
 use oxide_auth::endpoint::PreGrant;
+use std::fmt;
+
+pub use self::client::{Client, Config as ClientConfig, Error as ClientError};
 
 /// Try to open the server url `http://localhost:8020` in the browser, or print a guiding statement
 /// to the console if this is not possible.
