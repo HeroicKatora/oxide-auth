@@ -6,7 +6,7 @@ use code_grant::refresh::{refresh, Error, Endpoint as RefreshEndpoint, Request};
 use primitives::{registrar::Registrar, issuer::Issuer};
 use super::{Endpoint, InnerTemplate, OAuthError, QueryParameter, WebRequest, WebResponse};
 
-/// Guards resources by requiring OAuth authorization.
+/// Takes requests from clients to refresh their access tokens.
 pub struct RefreshFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     endpoint: WrappedRefresh<E, R>,
 }
@@ -33,6 +33,19 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
 struct Authorization(String, Vec<u8>);
 
 impl<E, R> RefreshFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+    /// Wrap the endpoint if it supports handling refresh requests.
+    ///
+    /// Also binds the endpoint to the particular `WebRequest` type through the type system. The
+    /// endpoint needs to provide (return `Some`):
+    ///
+    /// * a `Registrar` from `registrar`
+    /// * an `Issuer` from `issuer_mut`
+    ///
+    /// ## Panics
+    ///
+    /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
+    /// endpoint, for details see the documentation of `Endpoint` and `execute`. For 
+    /// consistent endpoints, the panic is instead caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.registrar().is_none() {
             return Err(endpoint.error(OAuthError::PrimitiveError));
@@ -50,6 +63,13 @@ impl<E, R> RefreshFlow<E, R> where E: Endpoint<R>, R: WebRequest {
         })
     }
 
+
+    /// Use the checked endpoint to refresh a token.
+    ///
+    /// ## Panics
+    ///
+    /// When the registrar, authorizer, or issuer returned by the endpoint is suddenly 
+    /// `None` when previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
         let refreshed = refresh(
             &mut self.endpoint,

@@ -62,6 +62,7 @@ pub struct AuthorizationError {
 }
 
 impl AuthorizationError {
+    #[allow(dead_code)]
     pub(crate) fn new(error: AuthorizationErrorType) -> Self {
         AuthorizationError {
             error,

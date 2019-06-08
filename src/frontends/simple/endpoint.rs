@@ -319,6 +319,14 @@ pub fn resource_flow<'a, W>(issuer: &'a mut dyn Issuer, scopes: &'a [Scope])
     }
 }
 
+/// Create an ad-hoc refresh flow.
+///
+/// Since all necessary primitives are expected in the function syntax, this is guaranteed to never
+/// fail or panic, compared to preparing one with `ResourceFlow`. 
+///
+/// But this is not as versatile and extensible, so it should be used with care.  The fact that it
+/// only takes references is a conscious choice to maintain forwards portability while encouraging
+/// the transition to custom `Endpoint` implementations instead.
 pub fn refresh_flow<'a, W>(registrar: &'a dyn Registrar, issuer: &'a mut dyn Issuer)
     -> RefreshFlow<Refresh<'a>, W> where W: WebRequest, W::Response: Default
 {

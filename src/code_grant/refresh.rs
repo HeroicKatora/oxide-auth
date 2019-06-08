@@ -36,6 +36,11 @@ pub trait Request {
     fn extension(&self, key: &str) -> Option<Cow<str>>;
 }
 
+/// The specific endpoin trait for refreshing.
+///
+/// Each method will only be invoked exactly once when processing a correct and authorized request,
+/// and potentially less than once when the request is faulty.  These methods should be implemented
+/// by internally using `primitives`, as it is implemented in the `frontend` module.
 pub trait Endpoint {
     /// Authenticate the requesting confidential client.
     fn registrar(&self) -> &dyn Registrar;

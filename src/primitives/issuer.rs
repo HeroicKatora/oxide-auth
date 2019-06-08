@@ -51,6 +51,7 @@ pub struct IssuedToken {
     pub until: Time,
 }
 
+/// Refresh token information returned to a client.
 #[derive(Clone, Debug)]
 pub struct RefreshedToken {
     /// The bearer token.
