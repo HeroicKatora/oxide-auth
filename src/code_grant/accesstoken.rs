@@ -355,7 +355,7 @@ impl BearerToken {
         struct Serial<'a> {
             access_token: &'a str,
             #[serde(skip_serializing_if="Option::is_none")]
-            refresh: Option<&'a str>,
+            refresh_token: Option<&'a str>,
             token_type: &'a str,
             expires_in: String,
             scope: &'a str,
@@ -364,7 +364,7 @@ impl BearerToken {
         let remaining = self.0.until.signed_duration_since(Utc::now());
         let serial = Serial {
             access_token: self.0.token.as_str(),
-            refresh: Some(self.0.refresh.as_str())
+            refresh_token: Some(self.0.refresh.as_str())
                 .filter(|_| self.0.refreshable()),
             token_type: "bearer",
             expires_in: remaining.num_seconds().to_string(),
@@ -392,7 +392,7 @@ mod tests {
         let mut token = serde_json::from_str::<HashMap<String, String>>(&json).unwrap();
 
         assert_eq!(token.remove("access_token"), Some("access".to_string()));
-        assert_eq!(token.remove("refresh"), Some("refresh".to_string()));
+        assert_eq!(token.remove("refresh_token"), Some("refresh".to_string()));
         assert_eq!(token.remove("scope"), Some("scope".to_string()));
         assert_eq!(token.remove("token_type"), Some("bearer".to_string()));
         assert!(token.remove("expires_in").is_some());
@@ -409,7 +409,7 @@ mod tests {
         let mut token = serde_json::from_str::<HashMap<String, String>>(&json).unwrap();
 
         assert_eq!(token.remove("access_token"), Some("access".to_string()));
-        assert_eq!(token.remove("refresh"), None);
+        assert_eq!(token.remove("refresh_token"), None);
         assert_eq!(token.remove("scope"), Some("scope".to_string()));
         assert_eq!(token.remove("token_type"), Some("bearer".to_string()));
         assert!(token.remove("expires_in").is_some());
