@@ -22,7 +22,7 @@ use rocket::response::Responder;
 struct MyState {
     registrar: Mutex<ClientMap>,
     authorizer: Mutex<AuthMap<RandomGenerator>>,
-    issuer: Mutex<TokenSigner>,
+    issuer: Mutex<TokenMap<RandomGenerator>>,
 }
 
 #[get("/authorize")]
@@ -120,7 +120,7 @@ impl MyState {
                     "default-scope".parse().unwrap())
             ].into_iter().collect()),
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
-            issuer: Mutex::new(TokenSigner::ephemeral()),
+            issuer: Mutex::new(TokenMap::new(RandomGenerator::new(16))),
         }
     }
 
