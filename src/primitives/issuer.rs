@@ -179,7 +179,7 @@ impl TokenSigner {
     ///     .unwrap());
     /// ```
     pub fn ephemeral() -> TokenSigner {
-        TokenSigner::new(Assertion::ephermal())
+        TokenSigner::new(Assertion::ephemeral())
     }
 
     /// Set the validity of all issued grants to the specified duration.

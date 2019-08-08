@@ -126,7 +126,14 @@ impl Assertion {
     }
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
+    #[deprecated = "Use the correctly named `ephemeral` instead."]
+    #[doc(hidden)]
     pub fn ephermal() -> Assertion {
+        Self::ephemeral()
+    }
+
+    /// Construct an assertion instance whose tokens are only valid for the program execution.
+    pub fn ephemeral() -> Self {
         SigningKey::generate(&SHA256, &SystemRandom::new()).unwrap().into()
     }
 
