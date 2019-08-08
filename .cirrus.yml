@@ -22,6 +22,7 @@ nightly_task:
   cargo_cache:
     folder: $CARGO_HOME/registry
     fingerprint_script: cat Cargo.lock
+  pre_script: cargo --version
   build_script: cargo build --no-default-features --features "rocket-frontend"
   test_script: cargo test --no-default-features --features "rocket-frontend"
   before_cache_script: rm -rf $CARGO_HOME/registry/index
