@@ -322,12 +322,15 @@ mod time_serde {
 impl SerdeAssertionGrant {
     fn try_from(grant: &Grant) -> Result<Self, ()> {
         let mut public_extensions: HashMap<String, Option<String>> = HashMap::new();
-        if grant.extensions.iter_private().any(|_| true) {
+
+        if grant.extensions.private().any(|_| true) {
             return Err(())
-        };
-        for (name, content) in grant.extensions.iter_public() {
+        }
+
+        for (name, content) in grant.extensions.public() {
             public_extensions.insert(name.to_string(), content.map(str::to_string));
         }
+
         Ok(SerdeAssertionGrant {
             owner_id: grant.owner_id.clone(),
             client_id: grant.client_id.clone(),

@@ -118,7 +118,7 @@ impl Extensions {
 
     /// Set content for an extension without a corresponding instance.
     pub fn set_raw(&mut self, identifier: String, content: Value) {
-        self.extensions.insert(identifier.to_string(), content);
+        self.extensions.insert(identifier, content);
     }
 
     /// Retrieve the stored data of an instance.
@@ -130,18 +130,46 @@ impl Extensions {
     }
 
     /// Iterate of the public extensions whose presence and content is not secret.
+    #[deprecated = "Use the simpler `public` instead."]
     pub fn iter_public(&self) -> PublicExtensions {
-        PublicExtensions(self.extensions.iter())
+        self.public()
+    }
+
+    /// Iterate of the public extensions whose presence and content is not secret.
+    pub fn public(&self) -> PublicExtensions {
+        PublicExtensions { iter: self.extensions.iter(), private: false }
     }
 
     /// Iterate of the private extensions whose presence and content must not be revealed.
+    ///
+    /// Note: The return type is `PublicExtensions` by accident. This will be fixed in the next
+    /// breaking release. The values yielded by the iterator are the private extensions, contrary
+    /// to its name and short description.
+    #[deprecated = "The method return type is incorrect. Use the `private` method instead,
+        or `public` if you actually intended to iterate public extensions."]
     pub fn iter_private(&self) -> PublicExtensions {
-        PublicExtensions(self.extensions.iter())
+        PublicExtensions { iter: self.extensions.iter(), private: true }
+    }
+
+    /// Iterate of the private extensions whose presence and content must not be revealed.
+    pub fn private(&self) -> PrivateExtensions {
+        PrivateExtensions(self.extensions.iter())
     }
 }
 
 /// An iterator over the public extensions of a grant.
-pub struct PublicExtensions<'a>(Iter<'a, String, Value>);
+///
+/// Note: Due to an api bug that would require a breaking change, this type is also created with
+/// the [`Extensions::iter_private`][1] method. It will yield the private extensions in that case.
+/// This behaviour will be removed in the next breaking release.
+///
+/// [1]: struct.Extensions.html#method.iter_private
+pub struct PublicExtensions<'a> {
+    iter: Iter<'a, String, Value>,
+    /// FIXME: marker to simulate the `PrivateExtensions` instead. This avoids a breaking change,
+    /// so remove this in the next major version.
+    private: bool,
+}
 
 /// An iterator over the private extensions of a grant.
 ///
@@ -149,14 +177,26 @@ pub struct PublicExtensions<'a>(Iter<'a, String, Value>);
 /// clients and third parties.
 pub struct PrivateExtensions<'a>(Iter<'a, String, Value>);
 
+impl PublicExtensions<'_> {
+    /// Check if this iterator was created with [`iter_private`] and iterates private extensions.
+    ///
+    /// See the struct documentation for a note on why this method exists.
+    #[deprecated = "This interface should not be required and will be removed."]
+    pub fn is_private(&self) -> bool {
+        self.private
+    }
+}
+
 impl<'a> Iterator for PublicExtensions<'a> {
     type Item = (&'a str, Option<&'a str>);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.0.next() {
+            match self.iter.next() {
                 None => return None,
-                Some((key, Value::Public(content)))
+                Some((key, Value::Public(content))) if !self.private
+                    => return Some((key, content.as_ref().map(String::as_str))),
+                Some((key, Value::Private(content))) if self.private
                     => return Some((key, content.as_ref().map(String::as_str))),
                 _ => (),
             }
@@ -208,5 +248,48 @@ impl<T: GrantExtension + ?Sized> GrantExtension for Arc<T> {
 impl<T: GrantExtension + ?Sized> GrantExtension for Rc<T> {
     fn identifier(&self) -> &'static str {
         (**self).identifier()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Extensions, Value};
+
+    #[test]
+    #[allow(deprecated)]
+    fn iteration() {
+        let mut extensions = Extensions::new();
+        extensions.set_raw("pub".into(), Value::Public(Some("content".into())));
+        extensions.set_raw("pub_none".into(), Value::Public(None));
+        extensions.set_raw("priv".into(), Value::Private(Some("private".into())));
+        extensions.set_raw("priv_none".into(), Value::Private(None));
+
+        assert_eq!(extensions.public()
+            .filter(|&(name, value)| name == "pub" && value == Some("content"))
+            .count(), 1);
+        assert_eq!(extensions.iter_public()
+            .filter(|&(name, value)| name == "pub" && value == Some("content"))
+            .count(), 1);
+        assert_eq!(extensions.public()
+            .filter(|&(name, value)| name == "pub_none" && value == None)
+            .count(), 1);
+        assert_eq!(extensions.iter_public()
+            .filter(|&(name, value)| name == "pub_none" && value == None)
+            .count(), 1);
+        assert_eq!(extensions.public().count(), 2);
+
+        assert_eq!(extensions.private()
+            .filter(|&(name, value)| name == "priv" && value == Some("private"))
+            .count(), 1);
+        assert_eq!(extensions.iter_private()
+            .filter(|&(name, value)| name == "priv" && value == Some("private"))
+            .count(), 1);
+        assert_eq!(extensions.private()
+            .filter(|&(name, value)| name == "priv_none" && value == None)
+            .count(), 1);
+        assert_eq!(extensions.iter_private()
+            .filter(|&(name, value)| name == "priv_none" && value == None)
+            .count(), 1);
+        assert_eq!(extensions.private().count(), 2);
     }
 }
