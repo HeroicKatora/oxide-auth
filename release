@@ -20,6 +20,15 @@ check_release_changes() {
 	[[ -z $(grep "# v$new_version" Changes.md) ]]
 }
 
+make_git_tag() {
+	# Extract the verion specific section from Changes.md
+	#   Delete lines until $new_version header
+	#   Delete lines starting from the next header
+	#   Delete all empty lines at the start
+	# Use as the initial message for a signed tag, but open edit anyways
+	sed -e '1,/'"$new_version"'/d;/\#/,$d;/./,$!d' Changes.md | git tag -s $is_force -F - -e "v$new_version"
+}
+
 new_version="$(determine_new_version)"
 
 # check it is a sane version number
@@ -75,4 +84,4 @@ check_release_changes && { echo "Fail: No changelog regarding this release"; exi
 # Packaging works. Note: does not publish the version.
 cargo package || { echo "Fail: cargo could not package successfully"; exit 1; }
 
-[[ -z $do_tag ]] || git tag -s $is_force "v$new_version"
+[[ -z $do_tag ]] || make_git_tag
