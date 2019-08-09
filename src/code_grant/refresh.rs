@@ -80,6 +80,15 @@ pub struct ErrorDescription {
 type Result<T> = std::result::Result<T, Error>;
 
 /// Try to get a refreshed access token.
+///
+/// This has four basic phases:
+/// 1. Ensure the request is valid based on the basic requirements (includes required parameters)
+/// 2. Check any included authentication
+/// 3. Try to recover the refresh token
+///     3.1. Check that it belongs to the authenticated client
+///     3.2. If there was no authentication, assert token does not require authentication
+///     3.3. Check the intrinsic validity (timestamp, scope)
+/// 4. Query the backend for a renewed (bearer) token
 pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
     -> Result<BearerToken> 
 {
@@ -87,17 +96,36 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
         return Err(Error::invalid(AccessTokenErrorType::InvalidRequest))
     }
 
+    // REQUIRED, so not having it makes it an invalid request.
+    let token = request.refresh_token();
+    let token = token.ok_or(Error::invalid(AccessTokenErrorType::InvalidRequest))?;
+
+    // REQUIRED, otherwise invalid request.
+    match request.grant_type() {
+        Some(ref cow) if cow == "refresh_token" => (),
+        None => return Err(Error::invalid(AccessTokenErrorType::InvalidRequest)),
+        Some(_) => return Err(Error::invalid(AccessTokenErrorType::UnsupportedGrantType)),
+    };
+
     // The server MUST authenticate the client if authentication is included.
     // ... MUST request client authentication for confidential clients.
     //
     // In effect, if this is `Some(_)` we should error due to wrong refresh token before we have
     // validated that the authorization authenticates a client? But we must inspect the token to
     // know if there is a client to validate.
-    let authorization = request.authorization();
-
-    // REQUIRED, so not having it makes it an invalid request.
-    let token = request.refresh_token();
-    let token = token.ok_or(Error::invalid(AccessTokenErrorType::InvalidRequest))?;
+    let authenticated = match request.authorization() {
+        Some((client, passdata)) => {
+            handler
+                .registrar()
+                .check(&client, Some(&passdata))
+                .map_err(|err| match err {
+                    RegistrarError::PrimitiveError => Error::Primitive,
+                    RegistrarError::Unspecified => Error::unauthorized("basic"),
+                })?;
+            Some(client)
+        },
+        None => None,
+    };
 
     // MUST validate the refresh token.
     let grant = handler
@@ -106,47 +134,39 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
         // Primitive error is ok, that's like internal server error.
         .map_err(|()| Error::Primitive)?;
 
-    let grant_client = grant.as_ref().map(|grant| grant.client_id.clone());
+    let grant = grant
+        // ... is invalid, ... (Section 5.2)
+        .ok_or_else(|| Error::invalid(AccessTokenErrorType::InvalidGrant))?;
 
-    // Find client to authenticate either through header or the grant data.
-    //
-    // Always use the header data if present to prevent 2-for-1 attempts against client auth and
-    // token simultaneously.
-    let (client_to_auth, passdata) = match &authorization {
-        Some((client, pass)) => (Some(client.as_ref()), Some(pass.as_ref())),
+    // ... MUST ensure that the refresh token was issued to the authenticated client.
+    match authenticated {
+        Some(client) => {
+            if grant.client_id.as_str() != client {
+                // ... or was issued to another client (Section 5.2)
+                // importantly, the client authentication itself was okay, so we don't respond with
+                // Unauthorized but with BadRequest.
+                return Err(Error::invalid(AccessTokenErrorType::InvalidGrant))
+            }
+        },
+        
         // ... MUST require client authentication for confidential clients.
         //
         // We'll see if this was confidential by trying to auth with no passdata. If that fails,
         // then the client should have authenticated with header information.
-        None => (grant_client.as_ref().map(|client| client.as_str()), None),
-    };
-
-    if let Some(client) = client_to_auth {
-        handler
-            .registrar()
-            .check(client, passdata)
-            .map_err(|err| match err {
-                RegistrarError::PrimitiveError => Error::Primitive,
-                RegistrarError::Unspecified => Error::unauthorized("basic"),
-            })?;
+        None => {
+            handler
+                .registrar()
+                .check(&grant.client_id, None)
+                .map_err(|err| match err {
+                    RegistrarError::PrimitiveError => Error::Primitive,
+                    RegistrarError::Unspecified => Error::unauthorized("basic"),
+                })?;;
+        }
     }
 
-    match request.grant_type() {
-        Some(ref cow) if cow == "refresh_token" => (),
-        None => return Err(Error::invalid(AccessTokenErrorType::InvalidRequest)),
-        Some(_) => return Err(Error::invalid(AccessTokenErrorType::UnsupportedGrantType)),
-    };
-
-    let grant = grant
-        // ... is invalid, expired, revoked, ... (Section 5.2)
-        .ok_or_else(|| Error::invalid(AccessTokenErrorType::InvalidGrant))?;
-
-    // ... MUST ensure that the refresh token was issued to the authenticated client.
-    if let Some(client) = client_to_auth {
-        if grant.client_id.as_str() != client {
-            // ... or was issued to another client (Section 5.2)
-            return Err(Error::unauthorized("basic"))
-        }
+    // .. is expired, revoked, ... (Section 5.2)
+    if grant.until <= Utc::now() {
+        return Err(Error::invalid(AccessTokenErrorType::InvalidGrant));
     }
 
     let scope = match request.scope() {
