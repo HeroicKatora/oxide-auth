@@ -11,6 +11,20 @@ according migration note.
 
 This document is independent of the [release notes](Changes.md).
 
+# [NEXT] v0.5 – Enstatite
+
+As advised in deprecation warnings, the iterators for public and private
+extension data of a grant are now constructed via the `public` and `private`
+method respectively and the older `iter_public` and `iter_private` method have
+been removed. The `is_private` method of `PublicExtensions` is now obsolete and
+has been removed since the return type of `private` is now correct.
+
+The wrongly spelled `ephermal` constructor of the `Assertion` grant generator
+has been replaced by `ephemeral`.
+
+The crate has been split into a core (`oxide-auth`) and several sub-crates for
+each frontend version
+
 ## v0.4.1
 
 The iron frontend has been reworked greatly. It no longer wraps endpoint
@@ -28,7 +42,7 @@ Support for a Bearer token authorizing Middleware implementation has not yet
 been implemented. Also, see the notes on `QueryParamter` and module reordering
 below in the general migration notes for `v0.4.0`.
 
-## v0.4.0 – Diamond
+# v0.4.0 – Diamond
 
 Below is a reverse chronological list of recommended migration notes. These
 have been collected while improving incrementally in preview versions. Read

@@ -2,6 +2,20 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.4.4 (2019-Aug-09)
+
+Bugfix release
+
+- Fix `iter_private` to iterate private extension data instead of public. This
+  was a consequence of a wrong return type, which will be corrected in `v0.5`.
+  Until then, the `PublicExtensions` iterator yields private extension data if
+  constructed in `iter_private`. The correct interface is already available
+  under the terser names `public` and `private`.
+- Fix `Assertion` grants silently dropping private extensions instead of
+  erroring (due to the above)
+- The `ephemeral` constructor of Assertion grant generator is now spelled
+  correctly. The old version will stay available until `v0.5`.
+
 # v0.4.3 (2019-Jun-03)
 
 Bugfix release
