@@ -27,6 +27,12 @@ nightly_task:
   test_script: cargo test --no-default-features --features "rocket-frontend"
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
+release_task:
+  only_if: $CIRRUS_BRANCH =~ 'release.*'
+  container:
+    image: rust:latest
+  script: ./release
+
 doc_task:
   container:
     image: rustlang/rust:nightly

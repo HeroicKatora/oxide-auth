@@ -4,8 +4,11 @@ determine_new_version() {
 }
 
 check_notexists_version() {
+	cirrus_agent="${CIRRUS_CI/?*/(Cirrus-CI)}"
+	final_agent="Release-Script/1.0 ${cirrus_agent:-(local)} (for static-alloc) (author:HeroicKatora)"
+	echo $final_agent
 	# Does the api information start with: '{"errors":'
-	[[ $(wget -U "Release-Script (for oxide-auth) (author:HeroicKatora)" "https://crates.io/api/v1/crates/oxide-auth/$new_version" -qO -) == "{\"errors\":"* ]]
+	[[ $(wget -U "%final_agent" "https://crates.io/api/v1/crates/oxide-auth/$new_version" -qO -) == "{\"errors\":"* ]]
 }
 
 count_wip_marker() {
@@ -23,11 +26,13 @@ new_version="$(determine_new_version)"
 [[ -z $(grep -vE '[0-9a-zA-Z.-]*' <<< "$new_version" ) ]] || { echo "Fail: Check version number: ${new_version}"; exit 1; }
 
 is_force=""
+do_tag=""
 
 for param in $@
 do
 	case "$param" in
 		-f) is_force="-f";;
+		--tag) do_tag="yes";;
 		--help) ;&
 		-h) { cat << EOF
 usage: release [-f] [-h|--help] <version>
@@ -70,4 +75,4 @@ check_release_changes && { echo "Fail: No changelog regarding this release"; exi
 # Packaging works. Note: does not publish the version.
 cargo package || { echo "Fail: cargo could not package successfully"; exit 1; }
 
-git tag -s $is_force "v$new_version"
+[[ -z $do_tag ]] || git tag -s $is_force "v$new_version"
