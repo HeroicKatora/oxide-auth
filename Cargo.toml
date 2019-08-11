@@ -75,3 +75,8 @@ required-features = ["iron-frontend"]
 
 [package.metadata.docs.rs]
 features = ["actix-frontend", "iron-frontend", "rocket-frontend", "rouille-frontend"]
+
+# Iron dependencies route-recognizer fails on nightly due to deprecation.
+[patch.crates-io.route-recognizer]
+git = "https://github.com/miller-time/route-recognizer.rs"
+rev = "d7bc06d2dc58a2c59d8f2cfbee2ab23b8188700d"
