@@ -76,6 +76,27 @@ pub trait Endpoint {
     fn extension(&mut self) -> & mut dyn Extension;
 }
 
+enum Credentials<'a> {
+    /// No credentials were offered.
+    None,
+    /// One set of credentials was offered.
+    Authenticated {
+        client_id: &'a str,
+        passphrase: &'a [u8],
+    },
+    /// No password but name was offered.
+    ///
+    /// This must happen only when the credentials were part of the request body but used to
+    /// indicate the name of a public client.
+    Unauthenticated {
+        client_id: &'a str,
+    },
+    /// Multiple possible credentials were offered.
+    ///
+    /// This is a security issue, only one attempt must be made per request.
+    Duplicate,
+}
+
 /// Try to redeem an authorization code.
 pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
     if !request.valid() {
@@ -84,11 +105,24 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
 
     let authorization = request.authorization();
     let client_id = request.client_id();
-    let (client_id, auth): (&str, Option<&[u8]>) = match (&client_id, &authorization) {
-        (&None, &Some((ref client_id, ref auth))) => (client_id.as_ref(), Some(auth.as_ref())),
-        (&Some(ref client_id), &None) => (client_id.as_ref(), None),
-        _ => return Err(Error::invalid()),
-    };
+    let client_secret = request.extension("client_secret");
+
+    let mut credentials = Credentials::None;
+    if let Some((client_id, auth)) = &authorization {
+        credentials.authenticate(client_id.as_ref(), auth.as_ref());
+    }
+
+    if let Some(client_id) = &client_id {
+        if let Some(auth) = &client_secret {
+            credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes());
+        } else {
+            credentials.unauthenticated(client_id.as_ref());
+        }
+    }
+
+    let (client_id, auth) = credentials
+        .into_client()
+        .ok_or_else(Error::invalid)?;
 
     handler.registrar()
         .check(&client_id, auth)
@@ -157,6 +191,36 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
     }))?;
 
     Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
+}
+
+impl<'a> Credentials<'a> {
+    pub fn authenticate(&mut self, client_id: &'a str, passphrase: &'a [u8]) {
+        self.add(Credentials::Authenticated { client_id, passphrase })
+    }
+
+    pub fn unauthenticated(&mut self, client_id: &'a str) {
+        self.add(Credentials::Unauthenticated { client_id })
+    }
+
+    pub fn into_client(self) -> Option<(&'a str, Option<&'a [u8]>)> {
+        match self {
+            Credentials::Authenticated { client_id, passphrase, }
+                => Some((client_id, Some(passphrase))),
+            Credentials::Unauthenticated { client_id }
+                => Some((client_id, None)),
+            _ => None,
+        }
+    }
+
+    fn add(&mut self, new: Self) {
+        use std::mem::replace;
+        let old = replace(self, Credentials::None);
+        let next = match old {
+            Credentials::None => new,
+            _ => Credentials::Duplicate,
+        };
+        replace(self, next);
+    }
 }
 
 /// Defines actions for the response to an access token request.
