@@ -16,8 +16,15 @@ use super::*;
 /// directly contact the OAuth endpoint–authenticating itself–to receive the access
 /// token. The token is then used as authorization in requests to the resource. This
 /// request MUST be protected by TLS.
+///
+/// Client credentials can be allowed to appear in the request body instead of being
+/// required to be passed as HTTP Basic authorization. This is not recommended and must be
+/// enabled explicitely. See [`allow_credentials_in_body`] for details.
+///
+/// [`allow_credentials_in_body`]: #method.allow_credentials_in_body
 pub struct AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     endpoint: WrappedToken<E, R>,
+    allow_credentials_in_body: bool,
 }
 
 struct WrappedToken<E: Endpoint<R>, R: WebRequest> {
@@ -38,6 +45,9 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
 
     /// An error if one occurred.
     error: Option<FailParse<R::Error>>,
+
+    /// The credentials-in-body flag from the flow.
+    allow_credentials_in_body: bool,
 }
 
 struct Invalid;
@@ -79,7 +89,19 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
                 extension_fallback: (),
                 r_type: PhantomData
             },
+            allow_credentials_in_body: false,
         })
+    }
+
+    /// Credentials in body should only be enabled if use of HTTP Basic is not possible. 
+    ///
+    /// Allows the request body to contain the `client_secret` as a form parameter. This is NOT
+    /// RECOMMENDED and need not be supported. The parameters MUST NOT appear in the request URI
+    /// itself.
+    ///
+    /// Thus support is disabled by default and must be explicitely enabled.
+    pub fn allow_credentials_in_body(&mut self, allow: bool) {
+        self.allow_credentials_in_body = allow;
     }
 
     /// Use the checked endpoint to check for authorization for a resource.
@@ -91,7 +113,7 @@ impl<E, R> AccessTokenFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
         let issued = access_token(
             &mut self.endpoint,
-            &WrappedRequest::new(&mut request));
+            &WrappedRequest::new(&mut request, self.allow_credentials_in_body));
 
         let token = match issued {
             Err(error) => return token_error(&mut self.endpoint.inner, &mut request, error),
@@ -158,12 +180,14 @@ impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
 }
 
 impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
-    pub fn new(request: &'a mut R) -> Self {
-        Self::new_or_fail(request)
+    pub fn new(request: &'a mut R, credentials: bool) -> Self {
+        Self::new_or_fail(request, credentials)
             .unwrap_or_else(Self::from_err)
     }
 
-    fn new_or_fail(request: &'a mut R) -> Result<Self, FailParse<R::Error>> {
+    fn new_or_fail(request: &'a mut R, credentials: bool)
+        -> Result<Self, FailParse<R::Error>>
+    {
         // If there is a header, it must parse correctly.
         let authorization = match request.authheader() {
             Err(err) => return Err(FailParse::Err(err)),
@@ -176,6 +200,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             body: request.urlbody().map_err(FailParse::Err)?,
             authorization,
             error: None,
+            allow_credentials_in_body: credentials,
         })
     }
 
@@ -185,6 +210,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             body: Cow::Owned(Default::default()),
             authorization: None,
             error: Some(err),
+            allow_credentials_in_body: false,
         }
     }
 
@@ -249,6 +275,10 @@ impl<'a, R: WebRequest> TokenRequest for WrappedRequest<'a, R> {
 
     fn extension(&self, key: &str) -> Option<Cow<str>> {
         self.body.unique_value(key)
+    }
+
+    fn allow_credentials_in_body(&self) -> bool {
+        self.allow_credentials_in_body
     }
 }
 
