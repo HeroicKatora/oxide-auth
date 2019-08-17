@@ -123,6 +123,19 @@ impl AccessTokenSetup {
         let response = access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer)
             .execute(request)
             .expect("Expected non-error reponse");
+
+        self.assert_ok_access_token(response);
+    }
+
+    fn test_success_body_credentials(&mut self, request: CraftedRequest) {
+        let mut flow = access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer);
+        flow.allow_credentials_in_body(true);
+        let response = flow.execute(request)
+            .expect("Expected non-error response");
+        self.assert_ok_access_token(response);
+    }
+
+    fn assert_ok_access_token(&mut self, response: CraftedResponse) {
         assert_eq!(response.status, Status::Ok);
     }
 }
@@ -430,4 +443,62 @@ fn access_request_wrong_grant_type() {
     };
 
     setup.test_simple_error(wrong_grant_type);
+}
+
+#[test]
+fn private_in_body() {
+    let mut setup = AccessTokenSetup::private_client();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("client_secret", EXAMPLE_PASSPHRASE)]
+            .iter().to_single_value_query()),
+        auth: None,
+    };
+
+    setup.test_success_body_credentials(valid_public);
+}
+
+#[test]
+fn unwanted_private_in_body_fails() {
+    let mut setup = AccessTokenSetup::private_client();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("client_secret", EXAMPLE_PASSPHRASE)]
+            .iter().to_single_value_query()),
+        auth: None,
+    };
+
+    // in body must only succeed if we enabled it explicitely in the flow.
+    setup.test_simple_error(valid_public);
+}
+
+#[test]
+fn private_duplicate_authentication() {
+    let mut setup = AccessTokenSetup::private_client();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("client_secret", EXAMPLE_PASSPHRASE)]
+            .iter().to_single_value_query()),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(valid_public);
 }

@@ -36,6 +36,17 @@ pub trait Request {
 
     /// Retrieve an additional parameter used in an extension
     fn extension(&self, key: &str) -> Option<Cow<str>>;
+
+    /// Credentials in body should only be enabled if use of HTTP Basic is not possible. 
+    ///
+    /// Allows the request body to contain the `client_secret` as a form parameter. This is NOT
+    /// RECOMMENDED and need not be supported. The parameters MUST NOT appear in the request URI
+    /// itself.
+    ///
+    /// Under these considerations, support must be explicitely enabled.
+    fn allow_credentials_in_body(&self) -> bool {
+        false
+    }
 }
 
 /// A system of addons provided additional data.
@@ -113,10 +124,14 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
     }
 
     if let Some(client_id) = &client_id {
-        if let Some(auth) = &client_secret {
-            credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes());
-        } else {
-            credentials.unauthenticated(client_id.as_ref());
+        match &client_secret {
+            Some(auth) if request.allow_credentials_in_body() => {
+                credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes())
+            },
+            // Ignore parameter if not allowed.
+            Some(_) | None => {
+                credentials.unauthenticated(client_id.as_ref())
+            },
         }
     }
 
