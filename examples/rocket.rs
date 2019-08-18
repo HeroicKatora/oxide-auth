@@ -119,7 +119,14 @@ impl MyState {
                     "http://localhost:8000/clientside/endpoint".parse().unwrap(),
                     "default-scope".parse().unwrap())
             ].into_iter().collect()),
+            // Authorization tokens are 16 byte random keys to a memory hash map.
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
+            // Bearer tokens are also random generated but 256-bit tokens, since they live longer
+            // and this example is somewhat paranoid.
+            //
+            // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can
+            // be read and parsed by anyone, but not maliciously created. However, they can not be
+            // revoked and thus don't offer even longer lived refresh tokens.
             issuer: Mutex::new(TokenMap::new(RandomGenerator::new(16))),
         }
     }
