@@ -11,6 +11,10 @@ check_notexists_version() {
 	[[ $(wget -U "%final_agent" "https://crates.io/api/v1/crates/oxide-auth/$new_version" -qO -) == "{\"errors\":"* ]]
 }
 
+git_considered_clean() {
+	[[ -z $(git status -s) ]]
+}
+
 count_wip_marker() {
 	# WIP alone is not a marker
 	[[ -z $(grep "\[WIP\]" Migration.md Readme.md) ]]
@@ -18,6 +22,13 @@ count_wip_marker() {
 
 check_release_changes() {
 	[[ -z $(grep "# v$new_version" Changes.md) ]]
+}
+
+check_target_features() {
+	cargo build --no-default-features --features="actix-frontend" --example actix &&
+	cargo +nightly build --no-default-features --features="rocket-frontend" --example rocket &&
+	cargo build --no-default-features --features="iron-frontend" --example iron &&
+	cargo build --no-default-features --features="rouille-frontend" --example rouille
 }
 
 make_git_tag() {
@@ -60,7 +71,7 @@ exit 1; } ;;
 done
 
 # Check that the working dir is clean. May comment this out if it produces problems.
-[[ -z $(git status -s) ]] || { echo "Fail: Working directory is not clean"; exit 1; }
+git_considered_clean || { echo "Fail: Working directory is not clean"; exit 1; }
 
 # Check that for every author, we have at least name or mail recorded in Contributors.txt
 # For each commit author, checks that either his/her name or respective mail
@@ -83,5 +94,7 @@ check_release_changes && { echo "Fail: No changelog regarding this release"; exi
 
 # Packaging works. Note: does not publish the version.
 cargo package || { echo "Fail: cargo could not package successfully"; exit 1; }
+
+check_target_features || { echo "Fail: one or more required target-feature combinations doesnt compile its example properly"; exit 1; }
 
 [[ -z $do_tag ]] || make_git_tag

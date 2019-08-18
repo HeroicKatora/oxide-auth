@@ -11,10 +11,11 @@ use std::thread;
 
 use actix::{Actor, Addr};
 use actix_web::{server, App, HttpRequest, HttpResponse};
+use actix_web::middleware::Logger;
 use futures::{Future, future};
 
 use oxide_auth::frontends::actix::{AsActor, OAuth, OAuthFailure, OAuthResponse, OwnerConsent, PreGrant, ResourceProtection};
-use oxide_auth::frontends::actix::{authorization, access_token, resource};
+use oxide_auth::frontends::actix::{authorization, access_token, refresh, resource};
 use oxide_auth::frontends::simple::endpoint::FnSolicitor;
 use oxide_auth::primitives::prelude::*;
 
@@ -29,7 +30,7 @@ here</a> to begin the authorization process.
 struct State {
     registrar: Addr<AsActor<ClientMap>>,
     authorizer: Addr<AsActor<AuthMap<RandomGenerator>>>,
-    issuer: Addr<AsActor<TokenSigner>>,
+    issuer: Addr<AsActor<TokenMap<RandomGenerator>>>,
     scopes: &'static [Scope],
 }
 
@@ -44,8 +45,16 @@ pub fn main() {
         "default".parse().unwrap()); // Allowed client scope
     clients.register_client(client);
 
+    // Authorization tokens are 16 byte random keys to a memory hash map.
     let authorizer = AuthMap::new(RandomGenerator::new(16));
-    let issuer = TokenSigner::ephemeral();
+
+    // Bearer tokens are also random generated but 256-bit tokens, since they live longer and this
+    // example is somewhat paranoid.
+    //
+    // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can be read
+    // and parsed by anyone, but not maliciously created. However, they can not be revoked and thus
+    // don't offer even longer lived refresh tokens.
+    let issuer = TokenMap::new(RandomGenerator::new(16));
 
     let scopes = vec!["default".parse().unwrap()].into_boxed_slice();
     // Emulate static initialization for complex type
@@ -61,6 +70,7 @@ pub fn main() {
     // Create the main server instance
     server::new(
         move || App::with_state(state.clone())
+            .middleware(Logger::default())
             .resource("/authorize", |r| {
                 r.get().a(|req: &HttpRequest<State>| {
                     let state = req.state().clone();
@@ -94,6 +104,17 @@ pub fn main() {
                     .and_then(|request| access_token(
                             state.registrar,
                             state.authorizer,
+                            state.issuer,
+                            request,
+                            OAuthResponse::default()))
+                    .map(OAuthResponse::unwrap)
+                    .map_err(OAuthFailure::from)
+            }))
+            .resource("/refresh", |r| r.post().a(|req: &HttpRequest<State>| {
+                let state = req.state().clone();
+                req.oauth2()
+                    .and_then(|request| refresh(
+                            state.registrar,
                             state.issuer,
                             request,
                             OAuthResponse::default()))

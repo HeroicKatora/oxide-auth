@@ -12,7 +12,7 @@ use primitives::issuer::Issuer;
 use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
-use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
+use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow, RefreshFlow};
 use endpoint::{Endpoint, OAuthError, PreGrant, Template, Scopes};
 use endpoint::{OwnerConsent, OwnerSolicitor};
 use endpoint::WebRequest;
@@ -235,6 +235,7 @@ pub trait ResponseCreator<W: WebRequest> {
 
 type Authorization<'a, W> = Generic<&'a (dyn Registrar + 'a), &'a mut(dyn Authorizer + 'a), Vacant, &'a mut(dyn OwnerSolicitor<W> + 'a), Vacant, Vacant>;
 type AccessToken<'a> = Generic<&'a (dyn Registrar + 'a), &'a mut(dyn Authorizer + 'a), &'a mut(dyn Issuer + 'a), Vacant, Vacant, Vacant>;
+type Refresh<'a> = Generic<&'a (dyn Registrar + 'a), Vacant, &'a mut(dyn Issuer + 'a), Vacant, Vacant, Vacant>;
 type Resource<'a> = Generic<Vacant, Vacant, &'a mut (dyn Issuer + 'a), Vacant, &'a [Scope], Vacant>;
 
 /// Create an ad-hoc authorization flow.
@@ -318,6 +319,32 @@ pub fn resource_flow<'a, W>(issuer: &'a mut dyn Issuer, scopes: &'a [Scope])
     }
 }
 
+/// Create an ad-hoc refresh flow.
+///
+/// Since all necessary primitives are expected in the function syntax, this is guaranteed to never
+/// fail or panic, compared to preparing one with `ResourceFlow`. 
+///
+/// But this is not as versatile and extensible, so it should be used with care.  The fact that it
+/// only takes references is a conscious choice to maintain forwards portability while encouraging
+/// the transition to custom `Endpoint` implementations instead.
+pub fn refresh_flow<'a, W>(registrar: &'a dyn Registrar, issuer: &'a mut dyn Issuer)
+    -> RefreshFlow<Refresh<'a>, W> where W: WebRequest, W::Response: Default
+{
+    let flow = RefreshFlow::prepare(Generic {
+        registrar,
+        authorizer: Vacant,
+        issuer,
+        solicitor: Vacant,
+        scopes: Vacant,
+        response: Vacant,
+    });
+
+    match flow {
+        Err(_) => unreachable!(),
+        Ok(flow) => flow,
+    }
+}
+
 impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
     /// Change the used solicitor.
     pub fn with_solicitor<N>(self, new_solicitor: N) -> Generic<R, A, I, N, C, L> {
@@ -343,7 +370,7 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
         }
     }
 
-    /// Create an authorizer flow.
+    /// Create an authorization flow.
     ///
     /// Opposed to `AuthorizationFlow::prepare` this statically ensures that the construction
     /// succeeds.
@@ -376,10 +403,25 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
         }
     }
 
+    /// Create a token refresh flow.
+    ///
+    /// Opposed to `RefreshFlow::prepare` this statically ensures that the construction succeeds.
+    pub fn to_refresh<W: WebRequest>(self) -> RefreshFlow<Self, W>
+    where
+        Self: Endpoint<W>,
+        R: Registrar,
+        I: Issuer,
+    {
+        match RefreshFlow::prepare(self) {
+            Ok(flow) => flow,
+            Err(_) => unreachable!(),
+        }
+    }
+
+
     /// Create a resource access flow.
     ///
-    /// Opposed to `ResourceFlow::prepare` this statically ensures that the construction
-    /// succeeds.
+    /// Opposed to `ResourceFlow::prepare` this statically ensures that the construction succeeds.
     pub fn to_resource<W: WebRequest>(self) -> ResourceFlow<Self, W>
     where
         Self: Endpoint<W>,

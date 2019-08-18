@@ -1,4 +1,4 @@
-use primitives::authorizer::AuthMap;
+use primitives::authorizer::{AuthMap, Authorizer};
 use primitives::issuer::TokenMap;
 use primitives::grant::{Grant, Extensions};
 use primitives::registrar::{Client, ClientMap};
@@ -25,7 +25,6 @@ struct AccessTokenSetup {
 
 impl AccessTokenSetup {
     fn private_client() -> Self {
-        use primitives::authorizer::Authorizer;
         let mut registrar = ClientMap::new();
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
@@ -60,7 +59,6 @@ impl AccessTokenSetup {
     }
 
     fn public_client() -> Self {
-        use primitives::authorizer::Authorizer;
         let mut registrar = ClientMap::new();
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));

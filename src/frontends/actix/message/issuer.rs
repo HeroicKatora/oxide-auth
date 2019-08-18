@@ -1,4 +1,4 @@
-use primitives::issuer::{Issuer, IssuedToken};
+use primitives::issuer::{Issuer, IssuedToken, RefreshedToken};
 use primitives::grant::Grant;
 
 use super::super::actix::{Handler, Message};
@@ -12,6 +12,19 @@ pub struct Issue {
 
 impl Message for Issue {
     type Result = Result<IssuedToken, ()>;
+}
+
+/// Issue a renewed bearer token.
+pub struct Refresh {
+    /// The refresh token with which to issue a refreshed bearer token.
+    pub token: String,
+
+    /// The grant defining client, scope and timeframe of the token.
+    pub grant: Grant,
+}
+
+impl Message for Refresh {
+    type Result = Result<RefreshedToken, ()>;
 }
 
 /// Try to find the grant of a specific token.
@@ -41,6 +54,14 @@ impl<I: Issuer + 'static> Handler<Issue> for AsActor<I> {
 
     fn handle(&mut self, msg: Issue, _: &mut Self::Context) -> Self::Result {
         self.0.issue(msg.grant)
+    }
+}
+
+impl<I: Issuer + 'static> Handler<Refresh> for AsActor<I> {
+    type Result = Result<RefreshedToken, ()>;
+
+    fn handle(&mut self, msg: Refresh, _: &mut Self::Context) -> Self::Result {
+        self.0.refresh(&msg.token, msg.grant)
     }
 }
 

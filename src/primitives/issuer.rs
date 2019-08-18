@@ -4,14 +4,14 @@
 //! renewed. There exist two fundamental implementation as well, one utilizing in memory hash maps
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
-use std::sync::{MutexGuard, RwLockWriteGuard};
+use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{Duration, Utc};
 
 use super::Time;
 use super::grant::Grant;
-use super::generator::{TagGrant, Assertion};
+use super::generator::{TagGrant, TaggedAssertion, Assertion};
 
 /// Issuers create bearer tokens.
 ///
@@ -21,7 +21,12 @@ use super::generator::{TagGrant, Assertion};
 /// they do not intend to offer a statefull refresh api).
 pub trait Issuer {
     /// Create a token authorizing the request parameters
-    fn issue(&mut self, Grant) -> Result<IssuedToken, ()>;
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()>;
+
+    /// Refresh a token.
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
+        Err(())
+    }
 
     /// Get the values corresponding to a bearer token
     fn recover_token<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
@@ -46,6 +51,24 @@ pub struct IssuedToken {
     pub until: Time,
 }
 
+/// Refresh token information returned to a client.
+#[derive(Clone, Debug)]
+pub struct RefreshedToken {
+    /// The bearer token.
+    pub token: String,
+
+    /// The new refresh token.
+    ///
+    /// If this is set, the old refresh token has been invalidated.
+    pub refresh: Option<String>,
+
+    /// Expiration timestamp (Utc).
+    ///
+    /// Technically, a time to live is expected in the response but this will be transformed later.
+    /// In a direct backend access situation, this enables high precision timestamps.
+    pub until: Time,
+}
+
 /// Keeps track of access and refresh tokens by a hash-map.
 ///
 /// The generator is itself trait based and can be chosen during construction. It is assumed to not
@@ -55,8 +78,19 @@ pub struct TokenMap<G: TagGrant=Box<dyn TagGrant + Send + Sync + 'static>> {
     duration: Option<Duration>,
     generator: G,
     usage: u64,
-    access: HashMap<String, Grant>,
-    refresh: HashMap<String, Grant>,
+    access: HashMap<Arc<str>, Arc<Token>>,
+    refresh: HashMap<Arc<str>, Arc<Token>>,
+}
+
+struct Token {
+    /// Back link to the access token.
+    access: Arc<str>,
+
+    /// Link to a refresh token for this grant, if it exists.
+    refresh: Option<Arc<str>>,
+
+    /// The grant that was originally granted.
+    grant: Grant,
 }
 
 impl<G: TagGrant> TokenMap<G> {
@@ -98,13 +132,80 @@ impl<G: TagGrant> TokenMap<G> {
     /// is modified (if a `duration` was previously set).
     pub fn import_grant(&mut self, token: String, mut grant: Grant) {
         self.set_duration(&mut grant);
-        self.access.insert(token, grant);
+        let key: Arc<str> = Arc::from(token);
+        let token = Token::from_access(key.clone(), grant);
+        self.access.insert(key, Arc::new(token));
     }
 
     fn set_duration(&self, grant: &mut Grant) {
         if let Some(duration) = &self.duration {
             grant.until = Utc::now() + *duration;
         }
+    }
+}
+
+impl Token {
+    fn from_access(access: Arc<str>, grant: Grant) -> Self {
+        Token {
+            access,
+            refresh: None,
+            grant,
+        }
+    }
+
+    fn from_refresh(access: Arc<str>, refresh: Arc<str>, grant: Grant) -> Self {
+        Token {
+            access,
+            refresh: Some(refresh),
+            grant,
+        }
+    }
+}
+
+impl IssuedToken {
+    /// Construct a token that can not be refreshed.
+    ///
+    /// Use this constructor for custom issuers that can not revoke their tokens. Since refresh
+    /// tokens are both long-lived and more powerful than their access token counterparts, it is
+    /// more dangerous to have an unrevokable refresh token. This is currently semantically
+    /// equivalent to an empty refresh token but may change in a future iteration of the interface.
+    /// While the member attributes may change, this method will not change as quickly and thus
+    /// offers some additional compatibility.
+    ///
+    /// ```
+    /// # use oxide_auth::primitives::grant::Grant;
+    /// use oxide_auth::primitives::issuer::{Issuer, IssuedToken};
+    ///
+    /// struct MyIssuer;
+    ///
+    /// impl MyIssuer {
+    ///     fn access_token(&mut self, grant: &Grant) -> String {
+    ///         // .. your implementation
+    /// #       unimplemented!()
+    ///     }
+    /// }
+    ///
+    /// impl Issuer for MyIssuer {
+    ///     fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
+    ///         let token = self.access_token(&grant);
+    ///         Ok(IssuedToken::without_refresh(token, grant.until))
+    ///     }
+    ///     // …
+    /// # fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
+    /// # fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
+    /// }
+    /// ```
+    pub fn without_refresh(token: String, until: Time) -> Self {
+        IssuedToken {
+            token,
+            refresh: "".into(),
+            until,
+        }
+    }
+
+    /// Determine if the access token can be refreshed.
+    pub fn refreshable(&self) -> bool {
+        !self.refresh.is_empty()
     }
 }
 
@@ -117,25 +218,73 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         // second.
         let next_usage = self.usage.wrapping_add(2);
 
-        let (token, refresh) = {
-            let token = self.generator.tag(next_usage - 2, &grant)?;
-            let refresh = self.generator.tag(next_usage - 1, &grant)?;
-            (token, refresh)
+        let (access, refresh) = {
+            let access = self.generator.tag(self.usage, &grant)?;
+            let refresh = self.generator.tag(self.usage.wrapping_add(1), &grant)?;
+            (access, refresh)
         };
 
-        let until = grant.until;
-        self.access.insert(token.clone(), grant.clone());
-        self.refresh.insert(refresh.clone(), grant);
+        let until = grant.until.clone();
+        let access_key: Arc<str> = Arc::from(access.clone());
+        let refresh_key: Arc<str> = Arc::from(refresh.clone());
+        let token = Token::from_refresh(access_key.clone(), refresh_key.clone(), grant);
+        let token = Arc::new(token);
+
+        self.access.insert(access_key, token.clone());
+        self.refresh.insert(refresh_key, token);
         self.usage = next_usage;
-        Ok(IssuedToken { token, refresh, until })
+        Ok(IssuedToken {
+            token: access,
+            refresh,
+            until,
+        })
+    }
+
+    fn refresh(&mut self, refresh: &str, mut grant: Grant) -> Result<RefreshedToken, ()> {
+        // Remove the old token.
+        let (refresh_key, mut token) = self.refresh.remove_entry(refresh)
+            // Should only be called on valid refresh tokens.
+            .ok_or(())?
+            .clone();
+
+        assert!(Arc::ptr_eq(token.refresh.as_ref().unwrap(), &refresh_key));
+        self.set_duration(&mut grant);
+        let until = grant.until.clone();
+
+        let next_usage = self.usage.wrapping_add(1);
+        let new_access = self.generator.tag(self.usage, &grant)?;
+        let new_key: Arc<str> = Arc::from(new_access.clone());
+
+        if let Some(atoken) = self.access.remove(&token.access) {
+            assert!(Arc::ptr_eq(&token, &atoken));
+        }
+
+        {
+            // Should now be the only `Arc` pointing to this.
+            let mut_token = Arc::get_mut(&mut token).unwrap_or_else(
+                || unreachable!("Grant data was only shared with access and refresh"));
+            // Remove the old access token, insert the new.
+            mut_token.access = new_key.clone();
+            mut_token.grant = grant;
+        }
+
+        self.access.insert(new_key, token.clone());
+        self.refresh.insert(refresh_key, token);
+
+        self.usage = next_usage;
+        Ok(RefreshedToken {
+            token: new_access,
+            refresh: None,
+            until,
+        })
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.access.get(token).cloned())
+        Ok(self.access.get(token).map(|token| token.grant.clone()))
     }
 
     fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.refresh.get(token).cloned())
+        Ok(self.refresh.get(token).map(|token| token.grant.clone()))
     }
 }
 
@@ -148,6 +297,7 @@ pub struct TokenSigner {
     signer: Assertion,
     // FIXME: make this an AtomicU64 once stable.
     counter: AtomicUsize,
+    have_refresh: bool,
 }
 
 impl TokenSigner {
@@ -160,6 +310,7 @@ impl TokenSigner {
             duration: None,
             signer: secret.into(),
             counter: AtomicUsize::new(0),
+            have_refresh: false,
         }
     }
 
@@ -201,6 +352,16 @@ impl TokenSigner {
         self.duration = None;
     }
 
+    /// Determine whether to generate refresh tokens.
+    ///
+    /// By default, this option is *off*. Since the `TokenSigner` can on its own not revoke any
+    /// tokens it should be considered carefullly whether to issue very long-living and powerful
+    /// refresh tokens. On instance where this might be okay is as a component of a grander token
+    /// architecture that adds a revocation mechanism.
+    pub fn generate_refresh_tokens(&mut self, refresh: bool) {
+        self.have_refresh = refresh;
+    }
+
     /// Get the next counter value.
     fn next_counter(&self) -> usize {
         // Acquire+Release is overkill. We only need to ensure that each return value occurs at
@@ -208,11 +369,48 @@ impl TokenSigner {
         // thread.
         self.counter.fetch_add(1, Ordering::Relaxed)
     }
+
+    fn refreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()> {
+        let first_ctr = self.next_counter() as u64;
+        let second_ctr = self.next_counter() as u64;
+
+        let token = self.as_token()
+            .sign(first_ctr, grant)?;
+        let refresh = self.as_refresh()
+            .sign(second_ctr, grant)?;
+
+        Ok(IssuedToken {
+            token,
+            refresh,
+            until: grant.until,
+        })
+    }
+
+    fn unrefreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()> {
+        let counter = self.next_counter() as u64;
+
+        let token = self.as_token()
+            .sign(counter, grant)?;
+
+        Ok(IssuedToken::without_refresh(token, grant.until))
+    }
+
+    fn as_token(&self) -> TaggedAssertion {
+        self.signer.tag("token")
+    }
+
+    fn as_refresh(&self) -> TaggedAssertion {
+        self.signer.tag("refresh")
+    }
 }
 
 impl<'s, I: Issuer + ?Sized> Issuer for &'s mut I {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (**self).issue(grant)
+    }
+
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        (**self).refresh(token, grant)
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
@@ -229,6 +427,10 @@ impl<I: Issuer + ?Sized> Issuer for Box<I> {
         (**self).issue(grant)
     }
 
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        (**self).refresh(token, grant)
+    }
+
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (**self).recover_token(token)
     }
@@ -243,6 +445,10 @@ impl<'s, I: Issuer + ?Sized> Issuer for MutexGuard<'s, I> {
         (**self).issue(grant)
     }
 
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        (**self).refresh(token, grant)
+    }
+
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (**self).recover_token(token)
     }
@@ -255,6 +461,10 @@ impl<'s, I: Issuer + ?Sized> Issuer for MutexGuard<'s, I> {
 impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (**self).issue(grant)
+    }
+
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        (**self).refresh(token, grant)
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
@@ -285,23 +495,24 @@ impl<'a> Issuer for &'a TokenSigner {
         if let Some(duration) = &self.duration {
             grant.until = Utc::now() + *duration;
         }
-        let first_ctr = self.next_counter() as u64;
-        let second_ctr = self.next_counter() as u64;
-        let token = self.signer.tag("token").sign(first_ctr, &grant)?;
-        let refresh = self.signer.tag("refresh").sign(second_ctr, &grant)?;
-        Ok(IssuedToken {
-            token,
-            refresh,
-            until: grant.until,
-        })
+
+        if self.have_refresh {
+            self.refreshable_token(&grant)
+        } else {
+            self.unrefreshable_token(&grant)
+        }
     }
 
     fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
-        Ok(self.signer.tag("token").extract(token).ok())
+        Ok(self.as_token().extract(token).ok())
     }
 
     fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
-        Ok(self.signer.tag("refresh").extract(token).ok())
+        if !self.have_refresh {
+            return Ok(None)
+        }
+
+        Ok(self.as_refresh().extract(token).ok())
     }
 }
 
@@ -313,6 +524,17 @@ pub mod tests {
     use primitives::generator::RandomGenerator;
     use chrono::{Duration, Utc};
 
+    fn grant_template() -> Grant {
+        Grant {
+            client_id: "Client".to_string(),
+            owner_id: "Owner".to_string(),
+            redirect_uri: "https://example.com".parse().unwrap(),
+            scope: "default".parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
+        }
+    }
+
     /// Tests the simplest invariants that should be upheld by all authorizers.
     ///
     /// This create a token, without any extensions, an lets the issuer generate a issued token.
@@ -321,14 +543,7 @@ pub mod tests {
     ///
     /// Custom implementations may want to import and use this in their own tests.
     pub fn simple_test_suite(issuer: &mut dyn Issuer) {
-        let request = Grant {
-            client_id: "Client".to_string(),
-            owner_id: "Owner".to_string(),
-            redirect_uri: "https://example.com".parse().unwrap(),
-            scope: "default".parse().unwrap(),
-            until: Utc::now() + Duration::hours(1),
-            extensions: Extensions::new(),
-        };
+        let request = grant_template();
 
         let issued = issuer.issue(request.clone())
             .expect("Issuing failed");
@@ -352,13 +567,34 @@ pub mod tests {
     #[test]
     fn signer_test_suite() {
         let mut signer = TokenSigner::ephemeral();
+        // Refresh tokens must be unique if generated. If they are not even generated, they are
+        // obviously not unique.
+        signer.generate_refresh_tokens(true);
         simple_test_suite(&mut signer);
+    }
+
+    #[test]
+    fn signer_no_default_refresh() {
+        let mut signer = TokenSigner::ephemeral();
+        let issued = signer.issue(grant_template());
+
+        let token = issued.expect("Issuing without refresh token failed");
+        assert!(!token.refreshable());
     }
 
     #[test]
     fn random_test_suite() {
         let mut token_map = TokenMap::new(RandomGenerator::new(16));
         simple_test_suite(&mut token_map);
+    }
+
+    #[test]
+    fn random_has_refresh() {
+        let mut token_map = TokenMap::new(RandomGenerator::new(16));
+        let issued = token_map.issue(grant_template());
+
+        let token = issued.expect("Issuing without refresh token failed");
+        assert!(token.refreshable());
     }
 
     #[test]

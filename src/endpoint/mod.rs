@@ -31,6 +31,7 @@
 mod authorization;
 mod accesstoken;
 mod error;
+mod refresh;
 mod resource;
 mod query;
 
@@ -58,6 +59,7 @@ pub use primitives::registrar::PreGrant;
 pub use self::authorization::*;
 pub use self::accesstoken::*;
 pub use self::error::OAuthError;
+pub use self::refresh::RefreshFlow;
 pub use self::resource::*;
 pub use self::query::*;
 

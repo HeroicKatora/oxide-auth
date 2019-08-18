@@ -22,7 +22,7 @@ use rocket::response::Responder;
 struct MyState {
     registrar: Mutex<ClientMap>,
     authorizer: Mutex<AuthMap<RandomGenerator>>,
-    issuer: Mutex<TokenSigner>,
+    issuer: Mutex<TokenMap<RandomGenerator>>,
 }
 
 #[get("/authorize")]
@@ -53,6 +53,17 @@ fn token<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
     oauth.add_body(body);
     state.endpoint()
         .to_access_token()
+        .execute(oauth)
+        .map_err(|err| err.pack::<OAuthFailure>())
+}
+
+#[post("/refresh", data="<body>")]
+fn refresh<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
+    -> Result<Response<'r>, OAuthFailure>
+{
+    oauth.add_body(body);
+    state.endpoint()
+        .to_refresh()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
@@ -91,7 +102,8 @@ fn main() {
             authorize,
             authorize_consent,
             token,
-            protected_resource
+            protected_resource,
+            refresh,
         ])
         // We only attach the test client here because there can only be one rocket.
         .attach(support::ClientFairing)
@@ -107,8 +119,15 @@ impl MyState {
                     "http://localhost:8000/clientside/endpoint".parse().unwrap(),
                     "default-scope".parse().unwrap())
             ].into_iter().collect()),
+            // Authorization tokens are 16 byte random keys to a memory hash map.
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
-            issuer: Mutex::new(TokenSigner::ephemeral()),
+            // Bearer tokens are also random generated but 256-bit tokens, since they live longer
+            // and this example is somewhat paranoid.
+            //
+            // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can
+            // be read and parsed by anyone, but not maliciously created. However, they can not be
+            // revoked and thus don't offer even longer lived refresh tokens.
+            issuer: Mutex::new(TokenMap::new(RandomGenerator::new(16))),
         }
     }
 

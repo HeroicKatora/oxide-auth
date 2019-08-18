@@ -1,34 +1,29 @@
-extern crate reqwest;
 extern crate actix_web;
-extern crate serde;
-extern crate serde_json;
 
 #[path="generic.rs"]
 mod generic;
 
-pub use self::generic::*;
+pub use self::generic::{Client, ClientConfig, ClientError, open_in_browser, consent_page_html};
 
-use self::reqwest::header;
 use self::actix_web::*;
 use self::actix_web::App;
 
-use std::collections::HashMap;
-use std::io::Read;
-use std::sync::RwLock;
+pub fn dummy_client() -> App<Client> {
+    let config = ClientConfig {
+        client_id: "LocalClient".into(),
+        protected_url: "http://localhost:8020/".into(),
+        token_url: "http://localhost:8020/token".into(),
+        refresh_url: "http://localhost:8020/refresh".into(),
+        redirect_uri: "http://localhost:8021/endpoint".into(),
+    };
 
-#[derive(Default)]
-pub struct State {
-    token: RwLock<Option<String>>,
-    token_map: RwLock<Option<String>>,
+    App::with_state(Client::new(config))
+        .route("/endpoint", http::Method::GET, endpoint_impl)
+        .route("/refresh", http::Method::POST, refresh)
+        .route("/", http::Method::GET, get_with_token)
 }
 
-pub fn dummy_client() -> App<State> {
-    App::with_state(State::default())
-        .handler("/endpoint", endpoint_impl)
-        .handler("/", get_with_token)
-}
-
-fn endpoint_impl(request: &HttpRequest<State>) -> HttpResponse {
+fn endpoint_impl(request: HttpRequest<Client>) -> HttpResponse {
     if let Some(cause) = request.query().get("error") {
         return HttpResponse::BadRequest()
             .body(format!("Error during owner authorization: {:?}", cause))
@@ -40,73 +35,25 @@ fn endpoint_impl(request: &HttpRequest<State>) -> HttpResponse {
         Some(code) => code.clone(),
     };
 
-    // Construct a request against http://localhost:8020/token, the access token endpoint
-    let client = reqwest::Client::new();
-    let mut params = HashMap::new();
-    params.insert("grant_type", "authorization_code");
-    params.insert("client_id", "LocalClient");
-    params.insert("code", &code);
-    params.insert("redirect_uri", "http://localhost:8021/endpoint");
-    let access_token_request = client
-        .post("http://localhost:8020/token")
-        .form(&params).build().unwrap();
-    let mut token_response = match client.execute(access_token_request) {
-        Ok(response) => response,
-        Err(_) => return HttpResponse::BadRequest()
-            .body("Could not fetch bearer token"),
-    };
-    let mut token = String::new();
-    token_response.read_to_string(&mut token).unwrap();
-    let token_map: HashMap<String, String> = match serde_json::from_str(&token) {
-        Ok(token_map) => token_map,
-        Err(err) => return HttpResponse::BadRequest()
-            .body(format!("Error unwrapping json response, got {:?} instead", err)),
-    };
-
-    if token_map.get("error").is_some() || !token_map.get("access_token").is_some() {
-        return HttpResponse::BadRequest()
-            .body(token);
+    match request.state().authorize(&code) {
+        Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
+        Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
-
-    let token = token_map.get("access_token").unwrap();
-    let token_map = serde_json::to_string_pretty(&token_map).unwrap();
-    let token_map = token_map.replace(",", ",</br>");
-
-    let mut set_map = request.state().token_map.write().unwrap();
-    *set_map = Some(token_map);
-
-    let mut set_token = request.state().token.write().unwrap();
-    *set_token = Some(token.to_string());
-
-    HttpResponse::Found()
-        .header("Location", "/")
-        .finish()
 }
 
-fn get_with_token(request: &HttpRequest<State>) -> HttpResponse {
-    let token = request.state().token.read().unwrap();
-    let token = match *token {
-        None => return HttpResponse::Ok().body("No token yet"),
-        Some(ref token) => token,
-    };
+fn refresh(request: HttpRequest<Client>) -> HttpResponse {
+    match request.state().refresh() {
+        Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
+        Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
+    }
+}
 
-    let token_map = request.state().token_map.read().unwrap();
-    let token_map = token_map.as_ref().unwrap();
-
-    let client = reqwest::Client::new();
-    // Request the page with the oauth token
-    let page_request = client
-        .get("http://localhost:8020/")
-        .header(header::AUTHORIZATION, "Bearer ".to_string() + token)
-        .build()
-        .unwrap();
-    let mut page_response = match client.execute(page_request) {
-        Ok(response) => response,
-        Err(_) => return HttpResponse::BadRequest()
-            .body("Could not access protected resource"),
+fn get_with_token(request: HttpRequest<Client>) -> HttpResponse {
+    let state = request.state();
+    let protected_page = match state.retrieve_protected_page() {
+        Ok(page) => page,
+        Err(err) => return HttpResponse::InternalServerError().body(format!("{}", err)),
     };
-    let mut protected_page = String::new();
-    page_response.read_to_string(&mut protected_page).unwrap();
 
     let display_page = format!(
         "<html><style>
@@ -119,9 +66,11 @@ fn get_with_token(request: &HttpRequest<State>) -> HttpResponse {
         <a href=\"http://localhost:8020/\">http://localhost:8020/</a>.
         Its contents are:
         <article>{}</article>
-        </main></html>", token_map, protected_page);
+        <form action=\"refresh\" method=\"post\"><button>Refresh token</button></form>
+        </main></html>", state.as_html(), protected_page);
 
     HttpResponse::Ok()
         .content_type("text/html")
         .body(display_page)
 }
+

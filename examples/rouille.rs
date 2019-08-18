@@ -9,7 +9,7 @@ mod support;
 use std::sync::Mutex;
 use std::thread;
 
-use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, ResourceFlow};
+use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, RefreshFlow, ResourceFlow};
 use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint};
 use oxide_auth::primitives::prelude::*;
 use rouille::{Request, Response, ResponseBody, Server};
@@ -30,8 +30,13 @@ pub fn main() {
     // Authorization tokens are 16 byte random keys to a memory hash map.
     let authorizer = AuthMap::new(RandomGenerator::new(16));
 
-    // Bearer tokens are signed (but not encrypted) using a passphrase.
-    let issuer = TokenSigner::ephemeral();
+    // Bearer tokens are also random generated but 256-bit tokens, since they live longer and this
+    // example is somewhat paranoid.
+    //
+    // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can be read
+    // and parsed by anyone, but not maliciously created. However, they can not be revoked and thus
+    // don't offer even longer lived refresh tokens.
+    let issuer = TokenMap::new(RandomGenerator::new(32));
 
     let endpoint = Mutex::new(GenericEndpoint {
         registrar,
@@ -85,6 +90,13 @@ here</a> to begin the authorization process.
                     .execute(request)
                     .unwrap_or_else(|_| Response::empty_400())
             },
+            (POST) ["/refresh"] => {
+                let mut locked = endpoint.lock().unwrap();
+                RefreshFlow::prepare(&mut *locked)
+                    .expect("Can not fail")
+                    .execute(request)
+                    .unwrap_or_else(|_| Response::empty_400())
+            },
             _ => Response::empty_404()
         )
     });
@@ -96,7 +108,7 @@ here</a> to begin the authorization process.
     );
     // Start a dummy client instance which simply relays the token/response
     let client = thread::spawn(||
-        Server::new(("localhost", 8021), support::dummy_client)
+        Server::new(("localhost", 8021), support::dummy_client())
             .expect("Failed to start client")
             .run()
     );

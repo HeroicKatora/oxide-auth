@@ -2,11 +2,11 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 
 use primitives::authorizer::Authorizer;
-use primitives::issuer::{Issuer, IssuedToken};
+use primitives::issuer::{Issuer, IssuedToken, RefreshedToken};
 use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::scope::Scope;
 use primitives::grant::Grant;
-use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow};
+use endpoint::{AccessTokenFlow, AuthorizationFlow, RefreshFlow, ResourceFlow};
 use endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest, WebResponse};
 use frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
 
@@ -102,6 +102,32 @@ where
     })
 }
 
+/// Run an refresh token request asynchonously using actor primitives.
+///
+/// Due to limitiations with the underlying primitives not yet being fully written with async in
+/// mind, there are no extensions and no custom `Endpoint` representations.
+pub fn refresh<R, I, W>(
+    registrar: Addr<AsActor<R>>,
+    issuer: Addr<AsActor<I>>,
+    request: W,
+    response: W::Response
+)
+    -> Box<dyn Future<Item=W::Response, Error=W::Error> + 'static>
+where
+    R: Registrar + 'static,
+    I: Issuer + 'static,
+    W: WebRequest + 'static,
+    W::Error: From<OAuthError>,
+    W::Response: 'static,
+{
+    Box::new(RefreshFuture {
+        registrar: RegistrarProxy::new(registrar),
+        issuer: IssuerProxy::new(issuer),
+        request,
+        response: Some(response),
+    })
+}
+
 /// A wrapper around a result allowing more specific interpretation.
 ///
 /// Simplifies trait semantics while also providing additional documentation on the semantics of
@@ -159,6 +185,7 @@ struct AuthorizerProxy {
 
 struct IssuerProxy {
     issue: Buffer<m::Issue>,
+    refresh: Buffer<m::Refresh>,
     recover_token: RefCell<Buffer<m::RecoverToken>>,
     recover_refresh: RefCell<Buffer<m::RecoverRefresh>>,
 }
@@ -185,6 +212,14 @@ struct ResourceFuture<W, C> where W: WebRequest {
     issuer: IssuerProxy,
     request: W,
     scopes: C,
+    response: Option<W::Response>,
+}
+
+struct RefreshFuture<W> where W: WebRequest {
+    registrar: RegistrarProxy,
+    issuer: IssuerProxy,
+    request: W,
+    // Is an option because we may need to take it out.
     response: Option<W::Response>,
 }
 
@@ -356,6 +391,7 @@ impl IssuerProxy {
     {
         IssuerProxy {
             issue: Buffer::new(issuer.clone().recipient()),
+            refresh: Buffer::new(issuer.clone().recipient()),
             recover_token: RefCell::new(Buffer::new(issuer.clone().recipient())),
             recover_refresh: RefCell::new(Buffer::new(issuer.recipient())),
         }
@@ -363,6 +399,7 @@ impl IssuerProxy {
 
     pub fn is_waiting(&self) -> bool {
         self.issue.is_waiting()
+        || self.refresh.is_waiting()
         || self.recover_token.borrow().is_waiting()
         || self.recover_refresh.borrow().is_waiting()
     }
@@ -370,13 +407,15 @@ impl IssuerProxy {
     #[allow(dead_code)]
     pub fn error(&self) -> Option<MailboxError> {
         let ierr = self.issue.error();
+        let ferr = self.refresh.error();
         let terr = self.recover_token.borrow().error();
         let rerr = self.recover_refresh.borrow().error();
-        ierr.or(terr).or(rerr)
+        ierr.or(ferr).or(terr).or(rerr)
     }
     
     pub fn rearm(&mut self) {
         self.issue.rearm();
+        self.refresh.rearm();
         self.recover_token.borrow_mut().rearm();
         self.recover_refresh.borrow_mut().rearm();
     }
@@ -393,6 +432,24 @@ impl Issuer for IssuerProxy {
         }
 
         match self.issue.poll() {
+            Ok(Async::NotReady) => Err(()),
+            Ok(Async::Ready(Ok(token))) => Ok(token),
+            Ok(Async::Ready(Err(()))) => Err(()),
+            Err(()) => Err(()),
+        }
+    }
+
+    fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        if self.refresh.unsent() {
+            let refresh = m::Refresh {
+                token: token.to_string(),
+                grant,
+            };
+
+            self.refresh.send(refresh);
+        }
+
+        match self.refresh.poll() {
             Ok(Async::NotReady) => Err(()),
             Ok(Async::Ready(Ok(token))) => Ok(token),
             Ok(Async::Ready(Err(()))) => Err(()),
@@ -615,6 +672,58 @@ where
             return Err(ResourceProtection::Error(OAuthError::PrimitiveError.into()));
         }
 
+        self.issuer.rearm();
+        Ok(Async::NotReady)
+    }
+}
+
+impl<W: WebRequest> Future for RefreshFuture<W>
+where
+    W::Error: From<OAuthError>
+{
+    type Item = W::Response;
+    type Error = W::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let response_mut = &mut self.response;
+        let result = {
+            let endpoint = Generic {
+                registrar: &self.registrar,
+                authorizer: Vacant,
+                issuer: &mut self.issuer,
+                solicitor: Vacant,
+                scopes: Vacant,
+                response: || { response_mut.take().unwrap() },
+            };
+
+            let mut flow = match RefreshFlow::prepare(endpoint) {
+                Ok(flow) => flow,
+                Err(_) => unreachable!("Preconditions always fulfilled"),
+            };
+
+            flow.execute(&mut self.request)
+        };
+
+        // Weed out the terminating results.
+        let oerr = match result {
+            Ok(response) => return Ok(Async::Ready(response)),
+            Err(SimpleError::Web(err)) => return Err(err),
+            Err(SimpleError::OAuth(oauth)) => oauth,
+        };
+
+        // Could it have been the registrar or authorizer that failed?
+        match dbg!(oerr) {
+            OAuthError::PrimitiveError => (),
+            other => return Err(other.into()),
+        }
+
+        // Are we getting this primitive error due to a pending reply?
+        if !self.registrar.is_waiting() && !self.issuer.is_waiting() {
+            // No, this was fatal
+            return Err(dbg!(OAuthError::PrimitiveError).into());
+        }
+
+        self.registrar.rearm();
         self.issuer.rearm();
         Ok(Async::NotReady)
     }

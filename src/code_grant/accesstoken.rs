@@ -349,14 +349,69 @@ impl ErrorDescription {
 impl BearerToken {
     /// Convert the token into a json string, viable for being sent over a network with
     /// `application/json` encoding.
+    // FIXME: rename to `into_json` or have `&self` argument.
     pub fn to_json(self) -> String {
+        #[derive(Serialize)]
+        struct Serial<'a> {
+            access_token: &'a str,
+            #[serde(skip_serializing_if="Option::is_none")]
+            refresh_token: Option<&'a str>,
+            token_type: &'a str,
+            expires_in: String,
+            scope: &'a str,
+        }
+
         let remaining = self.0.until.signed_duration_since(Utc::now());
-        let kvmap: HashMap<_, _> = vec![
-            ("access_token", self.0.token),
-            ("refresh_token", self.0.refresh),
-            ("token_type", "bearer".to_string()),
-            ("expires_in", remaining.num_seconds().to_string()),
-            ("scope", self.1)].into_iter().collect();
-        serde_json::to_string(&kvmap).unwrap()
+        let serial = Serial {
+            access_token: self.0.token.as_str(),
+            refresh_token: Some(self.0.refresh.as_str())
+                .filter(|_| self.0.refreshable()),
+            token_type: "bearer",
+            expires_in: remaining.num_seconds().to_string(),
+            scope: self.1.as_str(),
+        };
+
+        serde_json::to_string(&serial).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn bearer_token_encoding() {
+        let token = BearerToken(IssuedToken {
+            token: "access".into(),
+            refresh: "refresh".into(),
+            until: Utc::now(),
+        }, "scope".into());
+
+        let json = token.to_json();
+        let mut token = serde_json::from_str::<HashMap<String, String>>(&json).unwrap();
+
+        assert_eq!(token.remove("access_token"), Some("access".to_string()));
+        assert_eq!(token.remove("refresh_token"), Some("refresh".to_string()));
+        assert_eq!(token.remove("scope"), Some("scope".to_string()));
+        assert_eq!(token.remove("token_type"), Some("bearer".to_string()));
+        assert!(token.remove("expires_in").is_some());
+    }
+
+    #[test]
+    fn no_refresh_encoding() {
+        let token = BearerToken(IssuedToken::without_refresh(
+            "access".into(),
+            Utc::now(),
+        ), "scope".into());
+
+        let json = token.to_json();
+        let mut token = serde_json::from_str::<HashMap<String, String>>(&json).unwrap();
+
+        assert_eq!(token.remove("access_token"), Some("access".to_string()));
+        assert_eq!(token.remove("refresh_token"), None);
+        assert_eq!(token.remove("scope"), Some("scope".to_string()));
+        assert_eq!(token.remove("token_type"), Some("bearer".to_string()));
+        assert!(token.remove("expires_in").is_some());
     }
 }

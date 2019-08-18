@@ -62,6 +62,15 @@ pub struct AuthorizationError {
 }
 
 impl AuthorizationError {
+    #[allow(dead_code)]
+    pub(crate) fn new(error: AuthorizationErrorType) -> Self {
+        AuthorizationError {
+            error,
+            description: None,
+            uri: None,
+        }
+    }
+
     pub(crate) fn set_type(&mut self, new_type: AuthorizationErrorType) {
         self.error = new_type;
     }
@@ -134,7 +143,11 @@ impl AccessTokenErrorType {
 
 /// Represents parameters of an error in an [Issuing Error Response][Issuing Error].
 ///
+/// This is used for both access token requests, and [token refresh requests] as they use the same
+/// internal error representations in the RFC as well.
+///
 /// [Issuing Error]: https://tools.ietf.org/html/rfc6749#section-5.2
+/// [token refresh requests]: https://tools.ietf.org/html/rfc6749#section-7
 #[derive(Clone, Debug)]
 pub struct AccessTokenError {
     error: AccessTokenErrorType,
@@ -143,6 +156,14 @@ pub struct AccessTokenError {
 }
 
 impl AccessTokenError {
+    pub(crate) fn new(error: AccessTokenErrorType) -> Self {
+        AccessTokenError {
+            error,
+            description: None,
+            uri: None,
+        }
+    }
+
     pub(crate) fn set_type(&mut self, new_type: AccessTokenErrorType) {
         self.error = new_type;
     }

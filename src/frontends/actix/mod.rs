@@ -27,7 +27,7 @@ pub use self::request::OAuthFuture;
 pub use self::request::OAuthRequest;
 pub use self::request::OAuthResponse;
 
-pub use self::future_endpoint::{ResourceProtection, access_token, authorization, resource};
+pub use self::future_endpoint::{ResourceProtection, access_token, authorization, refresh, resource};
 
 /// Bundles all oauth related methods under a single type.
 pub trait OAuth {

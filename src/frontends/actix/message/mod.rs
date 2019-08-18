@@ -15,7 +15,7 @@ use primitives::grant::Grant;
 use endpoint::WebRequest;
 
 pub use self::authorizer::{Authorize, Extract};
-pub use self::issuer::{Issue, RecoverToken, RecoverRefresh};
+pub use self::issuer::{Issue, RecoverToken, RecoverRefresh, Refresh};
 pub use self::registrar::{BoundRedirect, Check, Negotiate};
 
 /// A request for an authorization code from an endpoint actor.
