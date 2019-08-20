@@ -2,6 +2,7 @@
 //!
 //! Following the simplistic and minimal style of rouille, this module defines only the
 //! implementations for `WebRequest` and `WebResponse` and re-exports the available flows.
+use core::ops::Deref;
 use std::borrow::Cow;
 
 use oxide_auth::endpoint::{QueryParameter, WebRequest, WebResponse};
@@ -23,10 +24,12 @@ pub enum WebError {
     Encoding,
 }
 
+#[derive(Debug)]
 pub struct Request<'a> {
     inner: &'a rouille::Request,
 }
 
+#[derive(Debug)]
 pub struct Response {
     inner: rouille::Response,
 }
@@ -34,6 +37,24 @@ pub struct Response {
 impl<'a> Request<'a> {
     pub fn new(inner: &'a rouille::Request) -> Self {
         Request { inner }
+    }
+}
+
+impl Response {
+    pub fn into_inner(self) -> rouille::Response {
+        self.inner
+    }
+}
+
+impl From<rouille::Response> for Response {
+    fn from(inner: rouille::Response) -> Self {
+        Response { inner }
+    }
+}
+
+impl From<Response> for rouille::Response {
+    fn from(response: Response) -> Self {
+        response.inner
     }
 }
 
@@ -104,6 +125,14 @@ impl WebResponse for Response {
         self.inner.headers.push(("Content-Type".into(), "application/json".into()));
         self.inner.data = rouille::ResponseBody::from_string(data);
         Ok(())
+    }
+}
+
+impl Deref for Request<'_> {
+    type Target = rouille::Request;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner
     }
 }
 

@@ -1,18 +1,17 @@
 #[macro_use]
 extern crate rouille;
-extern crate oxide_auth;
-extern crate url;
 
-#[path = "support/rouille.rs"]
+#[path = "../../examples/support/rouille.rs"]
 mod support;
 
 use std::sync::Mutex;
 use std::thread;
 
 use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, RefreshFlow, ResourceFlow};
-use oxide_auth::frontends::rouille::{FnSolicitor, GenericEndpoint};
 use oxide_auth::primitives::prelude::*;
-use rouille::{Request, Response, ResponseBody, Server};
+use oxide_auth_rouille::{Request, Response as OAuthResponse};
+use oxide_auth_rouille::{FnSolicitor, GenericEndpoint};
+use rouille::{Response, ResponseBody, Server};
 
 /// Example of a main function of a rouille server supporting oauth.
 pub fn main() {
@@ -44,7 +43,7 @@ pub fn main() {
         issuer,
         solicitor: FnSolicitor(solicitor),
         scopes: vec!["default".parse::<Scope>().unwrap()],
-        response: Response::empty_404,
+        response: || OAuthResponse::from(Response::empty_404()),
     });
 
     // Create the main server instance
@@ -54,9 +53,11 @@ pub fn main() {
                 let mut locked = endpoint.lock().unwrap();
                 if let Err(err) = ResourceFlow::prepare(&mut *locked)
                     .expect("Can not fail")
-                    .execute(request)
+                    .execute(Request::new(request))
                 { // Does not have the proper authorization token
-                    let mut response = err.unwrap_or_else(|_| Response::empty_400());
+                    let mut response = err
+                        .map(OAuthResponse::into_inner)
+                        .unwrap_or_else(|_| Response::empty_400());
 let text = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
@@ -73,28 +74,32 @@ here</a> to begin the authorization process.
                 let mut locked = endpoint.lock().unwrap();
                 AuthorizationFlow::prepare(&mut *locked)
                     .expect("Can not fail")
-                    .execute(request)
+                    .execute(Request::new(request))
+                    .map(OAuthResponse::into_inner)
                     .unwrap_or_else(|_| Response::empty_400())
             },
             (POST) ["/authorize"] => {
                 let mut locked = endpoint.lock().unwrap();
                 AuthorizationFlow::prepare(&mut *locked)
                     .expect("Can not fail")
-                    .execute(request)
+                    .execute(Request::new(request))
+                    .map(OAuthResponse::into_inner)
                     .unwrap_or_else(|_| Response::empty_400())
             },
             (POST) ["/token"] => {
                 let mut locked = endpoint.lock().unwrap();
                 AccessTokenFlow::prepare(&mut *locked)
                     .expect("Can not fail")
-                    .execute(request)
+                    .execute(Request::new(request))
+                    .map(OAuthResponse::into_inner)
                     .unwrap_or_else(|_| Response::empty_400())
             },
             (POST) ["/refresh"] => {
                 let mut locked = endpoint.lock().unwrap();
                 RefreshFlow::prepare(&mut *locked)
                     .expect("Can not fail")
-                    .execute(request)
+                    .execute(Request::new(request))
+                    .map(OAuthResponse::into_inner)
                     .unwrap_or_else(|_| Response::empty_400())
             },
             _ => Response::empty_404()
@@ -124,11 +129,11 @@ here</a> to begin the authorization process.
 /// In a POST request, this will display a page to the user asking for his permission to proceed.
 /// The submitted form will then trigger the other authorization handler which actually completes
 /// the flow.
-fn solicitor(request: &mut &Request, grant: &PreGrant) -> OwnerConsent<Response> {
+fn solicitor(request: &mut Request, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
     if request.method() == "GET" {
         let text = support::consent_page_html("/authorize".into(), grant);
         let response = Response::html(text);
-        OwnerConsent::InProgress(response)
+        OwnerConsent::InProgress(response.into())
     } else if request.method() == "POST" {
         // No real user authentication is done here, in production you MUST use session keys or equivalent
         if let Some(_) = request.get_param("allow") {
