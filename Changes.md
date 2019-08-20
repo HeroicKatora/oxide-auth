@@ -2,16 +2,26 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
-# v0.4.5 (2019-???-??) [WIP]
+# v0.4.5 (2019-???-??)
 
 Feature release
 
 Added token refresh
- - New `RefreshFlow` utilizing the same `Endpoint` trait as other flows.
- - An empty refresh token in `IssuedToken` is now interpreted as an elided
-   refresh token and the response to the client will not include one.
- - Dedicated `Issuer::refresh` method with default (error-)impl to generate
-   updated tokens.
+- New `RefreshFlow` utilizing the same `Endpoint` trait as other flows.
+- An empty refresh token in `IssuedToken` is now interpreted as an elided
+  refresh token and the response to the client will not include one.
+- Dedicated `Issuer::refresh` method with default (error-)impl to generate
+  updated tokens.
+- Differentiation between access token and refresh token requests needs to be
+  done manually by user code for the moment.
+
+Allow client secret in access token request body
+- Optional, and NOT RECOMMENDED feature of rfc6749.
+- Can be explicitely enabled in an `AccessTokenFlow`.
+
+Ergonomic improvements
+- Reworked examples to be based on the same client. Thus, they all have similar
+  appearance and supported feature set.
 
 # v0.4.4 (2019-Aug-09)
 

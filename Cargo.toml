@@ -1,10 +1,10 @@
 [package]
 name = "oxide-auth"
-version = "0.4.4"
+version = "0.4.5"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
-description = "A OAuth2 server library, for actix, gotham or other libraries, featuring a set of configurable and pluggable backends."
+description = "A OAuth2 server library, for actix, rocket, iron or other libraries, featuring a set of configurable and pluggable backends."
 readme = "Readme.md"
 
 keywords = ["oauth", "server", "oauth2"]

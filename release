@@ -25,10 +25,14 @@ check_release_changes() {
 }
 
 check_target_features() {
-	cargo build --no-default-features --features="actix-frontend" --example actix &&
-	cargo +nightly build --no-default-features --features="rocket-frontend" --example rocket &&
-	cargo build --no-default-features --features="iron-frontend" --example iron &&
-	cargo build --no-default-features --features="rouille-frontend" --example rouille
+	if [[ -z $CIRRUS_CI ]]; then
+		cargo build --no-default-features --features="actix-frontend" --example actix &&
+		cargo +nightly build --no-default-features --features="rocket-frontend" --example rocket &&
+		cargo build --no-default-features --features="iron-frontend" --example iron &&
+		cargo build --no-default-features --features="rouille-frontend" --example rouille
+	else
+		echo "Executing on CI, skipping feature checks"
+	fi
 }
 
 make_git_tag() {
