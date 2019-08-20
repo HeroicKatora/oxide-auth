@@ -3,6 +3,7 @@ name = "oxide-auth-rouille"
 version = "0.0.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
+edition = "2018"
 
 description = "A OAuth2 server library, for actix, gotham or other libraries, featuring a set of configurable and pluggable backends."
 
@@ -17,3 +18,4 @@ path = "rouille.rs"
 rouille = "3.0"
 oxide-auth = { path = "../oxide-auth" }
 serde_urlencoded = "0.5.1"
+url = "1.7"
