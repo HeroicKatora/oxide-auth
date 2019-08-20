@@ -28,7 +28,7 @@ These server libraries are integrated:
 
 | Name | Feature | Notes |
 |-|-|-|
-| `actix` | `actix-frontend`, default | Includes integration into messages |
+| `actix` | `actix-frontend`, default | Still `0.7`, includes integration into messages |
 | `rocket` | `rocket-frontend`, nightly | - |
 | `rouille` | `rouille-frontend` | - |
 | `iron` | `iron-frontend` | - |
