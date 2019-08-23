@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use chrono::{Duration, Utc};
 
 use code_grant::error::{AccessTokenError, AccessTokenErrorType};
-use primitives::issuer::{RefreshedToken, Issuer};
+use primitives::issuer::{Issuer, RefreshedToken};
 use primitives::registrar::{Registrar, RegistrarError};
 
 /// Required content of a refresh request.
@@ -89,11 +89,9 @@ type Result<T> = std::result::Result<T, Error>;
 ///     3.2. If there was no authentication, assert token does not require authentication
 ///     3.3. Check the intrinsic validity (timestamp, scope)
 /// 4. Query the backend for a renewed (bearer) token
-pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
-    -> Result<BearerToken> 
-{
+pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
     if !request.valid() {
-        return Err(Error::invalid(AccessTokenErrorType::InvalidRequest))
+        return Err(Error::invalid(AccessTokenErrorType::InvalidRequest));
     }
 
     // REQUIRED, so not having it makes it an invalid request.
@@ -123,7 +121,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
                     RegistrarError::Unspecified => Error::unauthorized("basic"),
                 })?;
             Some(client)
-        },
+        }
         None => None,
     };
 
@@ -145,10 +143,10 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
                 // ... or was issued to another client (Section 5.2)
                 // importantly, the client authentication itself was okay, so we don't respond with
                 // Unauthorized but with BadRequest.
-                return Err(Error::invalid(AccessTokenErrorType::InvalidGrant))
+                return Err(Error::invalid(AccessTokenErrorType::InvalidGrant));
             }
-        },
-        
+        }
+
         // ... MUST require client authentication for confidential clients.
         //
         // We'll see if this was confidential by trying to auth with no passdata. If that fails,
@@ -160,7 +158,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
                 .map_err(|err| match err {
                     RegistrarError::PrimitiveError => Error::Primitive,
                     RegistrarError::Unspecified => Error::unauthorized("basic"),
-                })?;;
+                })?;
         }
     }
 
@@ -171,7 +169,11 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
 
     let scope = match request.scope() {
         // ... is invalid, unknown, malformed (Section 5.2)
-        Some(scope) => Some(scope.parse().map_err(|_| Error::invalid(AccessTokenErrorType::InvalidScope))?),
+        Some(scope) => Some(
+            scope
+                .parse()
+                .map_err(|_| Error::invalid(AccessTokenErrorType::InvalidScope))?,
+        ),
         None => None,
     };
 
@@ -180,10 +182,10 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
             // ... MUST NOT include any scope not originally granted.
             if !(&scope <= &grant.scope) {
                 // ... or exceeds the scope grant (Section 5.2)
-                return Err(Error::invalid(AccessTokenErrorType::InvalidScope))
+                return Err(Error::invalid(AccessTokenErrorType::InvalidScope));
             }
             scope
-        },
+        }
         // ... if omitted is treated as equal to the scope originally granted
         None => grant.scope.clone(),
     };
@@ -199,7 +201,10 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
         .refresh(&token, grant)
         .map_err(|()| Error::Primitive)?;
 
-    Ok(BearerToken { 0: token, 1: str_scope })
+    Ok(BearerToken {
+        0: token,
+        1: str_scope,
+    })
 }
 
 impl Error {
@@ -210,11 +215,13 @@ impl Error {
     }
 
     fn unauthorized(authtype: &str) -> Self {
-        Error::Unauthorized(ErrorDescription {
+        Error::Unauthorized(
+            ErrorDescription {
                 // ... authentication failed (Section 5.2)
                 error: AccessTokenError::new(AccessTokenErrorType::InvalidClient),
             },
-            authtype.to_string())
+            authtype.to_string(),
+        )
     }
 
     /// Get a handle to the description the client will receive.
@@ -240,7 +247,9 @@ impl ErrorDescription {
     ///
     /// The string may be the content of an `application/json` body for example.
     pub fn to_json(self) -> String {
-        let asmap = self.error.into_iter()
+        let asmap = self
+            .error
+            .into_iter()
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();
         serde_json::to_string(&asmap).unwrap()
@@ -256,7 +265,10 @@ impl BearerToken {
             ("access_token", self.0.token),
             ("token_type", "bearer".to_string()),
             ("expires_in", remaining.num_seconds().to_string()),
-            ("scope", self.1)].into_iter().collect();
+            ("scope", self.1),
+        ]
+        .into_iter()
+        .collect();
 
         if let Some(refresh) = self.0.refresh {
             kvmap.insert("refresh_token", refresh);
