@@ -8,6 +8,7 @@ stable_task:
     matrix:
       - CRATE: oxide-auth
       - CRATE: oxide-auth-actix
+      - CRATE: actix-example
       - CRATE: oxide-auth-iron
       - CRATE: oxide-auth-rouille
   build_script: cargo build -p "$CRATE" --examples
@@ -24,6 +25,7 @@ nightly_task:
     matrix:
       - CRATE: oxide-auth
       - CRATE: oxide-auth-actix
+      - CRATE: actix-example
       - CRATE: oxide-auth-iron
       - CRATE: oxide-auth-rouille
       - CRATE: oxide-auth-rocket

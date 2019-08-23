@@ -13,8 +13,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix = "0.7.9"
-actix-web = "0.7.17"
+actix = "0.8"
+actix-web = "1.0"
 futures = "0.1"
 oxide-auth = { version = "0.5.0-preview.0", path = "../oxide-auth" }
 serde_urlencoded = "0.5.1"
@@ -25,4 +25,3 @@ base64 = "0.9"
 chrono = "0.4"
 serde = "1.0"
 serde_json = "1.0"
-reqwest = "=0.9.5"

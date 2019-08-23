@@ -26,12 +26,12 @@ Frontends
 
 These server libraries are integrated:
 
-| Name | Feature | Notes |
+| Name | Crate | Notes |
 |-|-|-|
-| `actix` | `actix-frontend`, default | Still `0.7`, includes integration into messages |
-| `rocket` | `rocket-frontend`, nightly | - |
-| `rouille` | `rouille-frontend` | - |
-| `iron` | `iron-frontend` | - |
+| `actix` | oxide-auth-actix | - |
+| `rocket` | `oxide-auth-rocket`, nightly | - |
+| `rouille` | `oxide-auth-rouille` | - |
+| `iron` | `oxide-auth-iron` | - |
 
 Additional
 ----------
