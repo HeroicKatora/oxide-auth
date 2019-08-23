@@ -15,13 +15,22 @@ edition = "2018"
 
 autoexamples = false
 
+[workspace]
+members = [
+    "oxide-auth-actix",
+    "oxide-auth-core",
+    "oxide-auth-iron",
+    "oxide-auth-rocket",
+    "oxide-auth-rouille",
+]
+
 
 [dependencies]
-oxide-auth-core = { version = "0.1", path = "./oxide-auth-core" }
 oxide-auth-actix = { version = "0.1", path = "./oxide-auth-actix", optional = true }
+oxide-auth-core = { version = "0.1", path = "./oxide-auth-core" }
 oxide-auth-iron = { version = "0.1", path = "./oxide-auth-iron", optional = true }
-oxide-auth-rouille = { version = "0.1", path = "./oxide-auth-rouille", optional = true }
 oxide-auth-rocket = { version = "0.1", path = "./oxide-auth-rocket", optional = true }
+oxide-auth-rouille = { version = "0.1", path = "./oxide-auth-rouille", optional = true }
 
 # Gotham, not in used right now
 # oxide-auth-gotham = { version = "0.1", path = "./oxide-auth-gotham", optional = true }
