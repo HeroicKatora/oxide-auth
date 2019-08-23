@@ -5,7 +5,7 @@ test_stable_task:
     folder: $CARGO_HOME/registry
     fingerprint_script: cat Cargo.lock
   pre_script: cargo --version
-  build_script: cargo build --all-features
+  build_script: cargo build --no-default-features --features "oxide-auth-actix oxide-auth-iron oxide-auth-rouille"
   test_script: cargo test --all --exclude oxide-auth-rocket --exclude rocket-example
   before_cache_script: rm -rf $CARGO_HOME/registry/index
   
