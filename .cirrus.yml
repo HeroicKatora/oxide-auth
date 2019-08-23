@@ -9,11 +9,16 @@ test_task:
     fingerprint_script: cat Cargo.lock
   env:
     matrix:
-      - OA_FRONTEND: oxide-auth-actix
-      - OA_FRONTEND: oxide-auth-iron
-      - OA_FRONTEND: oxide-auth-rouille
-  build_script: cargo build --no-default-features --features "$OA_FRONTEND"
-  test_script: cargo test --no-default-features --features "$OA_FRONTEND"
+      - SUBCRATE: oxide-auth-core
+      - SUBCRATE: oxide-auth-actix
+      - SUBCRATE: oxide-auth-iron
+      - SUBCRATE: oxide-auth-rouille
+  build_script:
+    - cd "$SUBCRATE"
+    - cargo build
+  test_script:
+    - cd "$SUBCRATE"
+    - cargo test
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 nightly_task:
@@ -23,8 +28,12 @@ nightly_task:
     folder: $CARGO_HOME/registry
     fingerprint_script: cat Cargo.lock
   pre_script: cargo --version
-  build_script: cargo build --no-default-features --features "oxide-auth-rocket"
-  test_script: cargo test --no-default-features --features "oxide-auth-rocket"
+  build_script:
+    - cd oxide-auth-rocket
+    - cargo build
+  test_script:
+    - cd oxid-auth-rocket
+    - cargo test
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 release_task:
