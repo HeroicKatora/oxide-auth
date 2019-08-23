@@ -1,0 +1,13 @@
+[package]
+name = "rocket-example"
+version = "0.1.0"
+authors = ["asonix <asonix@asonix.dog>"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+oxide-auth = { version = "0.5", path = "../..", default-features = false, features = ["oxide-auth-rocket"] }
+reqwest = "0.9"
+rocket = "0.4"
+serde = "1.0"
+serde_json = "1.0"

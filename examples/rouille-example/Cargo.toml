@@ -1,0 +1,16 @@
+[package]
+name = "rouille-example"
+version = "0.1.0"
+authors = ["asonix <asonix@asonix.dog>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+oxide-auth = { version = "0.5", path = "../..", default-features = false, features = ["oxide-auth-rouille"] }
+reqwest = "0.9"
+rouille = "3.0"
+serde = "1.0"
+serde_json = "1.0"
+serde_urlencoded = "0.5.1"
+url = "1.7"

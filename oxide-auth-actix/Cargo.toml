@@ -1,0 +1,21 @@
+[package]
+name = "oxide-auth-actix"
+version = "0.1.0"
+authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
+repository = "https://github.com/HeroicKatora/oxide-auth.git"
+description = "A OAuth2 server library for actix featuring a set of configurable and pluggable backends."
+readme = "../Readme.md"
+keywords = ["oauth", "server", "oauth2"]
+categories = ["web-programming::http-server", "authentication"]
+license = "MIT"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix = { version = "0.7.9" }
+actix-web = { version = "0.7.17" }
+futures = { version = "0.1" }
+oxide-auth-core = { version = "0.1.0", path = "../oxide-auth-core" }
+serde_urlencoded = { version = "0.5.1" }
+url = "1.7"

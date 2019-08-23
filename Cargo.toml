@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth"
-version = "0.4.5"
+version = "0.5.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
@@ -11,72 +11,27 @@ keywords = ["oauth", "server", "oauth2"]
 categories = ["web-programming::http-server", "authentication"]
 license = "MIT"
 
+edition = "2018"
+
 autoexamples = false
 
 
 [dependencies]
-base64 = "0.9"
-chrono = "0.4.2"
-serde = "1.0"
-serde_derive = "1.0"
-serde_json = "1.0"
-ring = "0.13"
-rmp-serde = "^0.13"
-url = "1.7"
-
-actix = { version = "0.7.9", optional = true }
-actix-web = { version = "0.7.17", optional = true }
-mime = { version = "0.3.13", optional = true }
-futures = { version = "0.1", optional = true }
-iron = { version = "0.6", optional = true }
-rocket = { version = "0.4.2", optional = true }
-rouille = { version = "3.0", optional = true }
-router = { version = "0.6", optional = true }
-serde_urlencoded = { version = "0.5.1", optional = true }
-urlencoded = { version = "^0.6", optional = true }
+oxide-auth-core = { version = "0.1", path = "./oxide-auth-core" }
+oxide-auth-actix = { version = "0.1", path = "./oxide-auth-actix", optional = true }
+oxide-auth-iron = { version = "0.1", path = "./oxide-auth-iron", optional = true }
+oxide-auth-rouille = { version = "0.1", path = "./oxide-auth-rouille", optional = true }
+oxide-auth-rocket = { version = "0.1", path = "./oxide-auth-rocket", optional = true }
 
 # Gotham, not in used right now
-# gotham = { version = "^0.2", optional = true }
-# gotham_derive = { version = "^0.2", optional = true }
-# hyper = { version = "^0.11", optional = true }
+# oxide-auth-gotham = { version = "0.1", path = "./oxide-auth-gotham", optional = true }
 
 [features]
-default = ["actix-frontend"]
-actix-frontend = ["actix", "actix-web", "futures", "serde_urlencoded"]
-iron-frontend = ["iron", "router", "serde_urlencoded"]
-rouille-frontend = ["rouille", "serde_urlencoded"]
-rocket-frontend = ["rocket", "serde_urlencoded"]
-
-# These frontends are disabled for now:
-# gotham-frontend = ["gotham", "gotham_derive", "hyper", "mime", "futures", "serde_urlencoded"]
-
-[dev-dependencies]
-reqwest = "^0.9"
-
-[[example]]
-name = "actix"
-required-features = ["actix-frontend"]
-
-[[example]]
-name = "rouille"
-required-features = ["rouille-frontend"]
-
-[[example]]
-name = "rocket"
-required-features = ["rocket-frontend"]
+default = ["oxide-auth-actix"]
 
 # [[example]]
 # name = "authorization_gotham"
-# required-features = ["gotham-frontend"]
-
-[[example]]
-name = "iron"
-required-features = ["iron-frontend"]
+# required-features = ["oxide-auth-gotham"]
 
 [package.metadata.docs.rs]
-features = ["actix-frontend", "iron-frontend", "rocket-frontend", "rouille-frontend"]
-
-# Iron dependencies route-recognizer fails on nightly due to deprecation.
-[patch.crates-io.route-recognizer]
-git = "https://github.com/miller-time/route-recognizer.rs"
-rev = "d7bc06d2dc58a2c59d8f2cfbee2ab23b8188700d"
+features = ["oxide-auth-actix", "oxide-auth-iron", "oxide-auth-rocket", "oxide-auth-rouille"]

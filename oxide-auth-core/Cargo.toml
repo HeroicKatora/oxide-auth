@@ -1,0 +1,22 @@
+[package]
+name = "oxide-auth-core"
+version = "0.1.0"
+authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
+repository = "https://github.com/HeroicKatora/oxide-auth.git"
+description = "A OAuth2 server library featuring a set of configurable and pluggable backends."
+readme = "../Readme.md"
+keywords = ["oauth", "server", "oauth2"]
+categories = ["web-programming::http-server", "authentication"]
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+base64 = "0.9"
+chrono = "0.4.2"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+ring = "0.13"
+rmp-serde = "^0.13"
+url = "1.7"

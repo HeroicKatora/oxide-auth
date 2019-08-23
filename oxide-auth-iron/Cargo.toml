@@ -1,0 +1,19 @@
+[package]
+name = "oxide-auth-iron"
+version = "0.1.0"
+authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
+repository = "https://github.com/HeroicKatora/oxide-auth.git"
+description = "A OAuth2 server library for iron featuring a set of configurable and pluggable backends."
+readme = "../Readme.md"
+keywords = ["oauth", "server", "oauth2"]
+categories = ["web-programming::http-server", "authentication"]
+license = "MIT"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+iron = "0.6"
+oxide-auth-core = { version = "0.1.0", path = "../oxide-auth-core" }
+serde_urlencoded = "0.5.1"
+url = "1.7"

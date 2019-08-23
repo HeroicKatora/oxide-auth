@@ -39,8 +39,6 @@
 //! secure protected resources, utilizing the library provided http request types.  Some provide
 //! additional abstractions for an integrated feeling.
 //!
-//! A complete list can be found in the [`frontends`] module.
-//!
 //! You can also use this library with any HTTP frontend, see [`frontends::simple`].
 //!
 //! ## Custom Frontends
@@ -70,48 +68,17 @@
 //!
 #![warn(missing_docs)]
 
-extern crate oxide_auth_core;
+extern crate base64;
+extern crate chrono;
+extern crate ring;
+extern crate rmp_serde;
+extern crate serde;
+extern crate url;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 
-#[cfg(feature = "oxide-auth-actix")]
-extern crate oxide_auth_actix;
-
-#[cfg(feature = "oxide-auth-iron")]
-extern crate oxide_auth_iron;
-
-#[cfg(feature = "oxide-auth-rocket")]
-extern crate oxide_auth_rocket;
-
-#[cfg(feature = "oxide-auth-rouille")]
-extern crate oxide_auth_rouille;
-
-pub use oxide_auth_core::{code_grant, endpoint, primitives};
-
-pub mod frontends {
-    pub use oxide_auth_core::frontends::{dev, simple};
-
-    #[cfg(feature = "oxide-auth-actix")]
-    pub mod actix {
-        pub use oxide_auth_actix::{
-            access_token, authorization, message, refresh, request, resource, AsActor, OAuth,
-            OAuthFailure, OAuthFuture, OAuthRequest, OAuthResponse, OwnerConsent, PreGrant,
-            ResourceProtection,
-        };
-    }
-
-    #[cfg(feature = "oxide-auth-iron")]
-    pub mod iron {
-        pub use oxide_auth_iron::{Error, OAuthError, OAuthRequest, OAuthResponse};
-    }
-
-    #[cfg(feature = "oxide-auth-rocket")]
-    pub mod rocket {
-        pub use oxide_auth_rocket::{OAuthFailure, OAuthRequest, OAuthResponse, WebError};
-    }
-
-    #[cfg(feature = "oxide-auth-rouille")]
-    pub mod rouille {
-        pub use oxide_auth_rouille::{
-            FnSolicitor, GenericEndpoint, OAuthRequest, OAuthResponse, Vacant, WebError,
-        };
-    }
-}
+pub mod code_grant;
+pub mod endpoint;
+pub mod frontends;
+pub mod primitives;
