@@ -28,12 +28,12 @@
 //! [`Authorizer`]: ../../primitives/authorizer/trait.Authorizer.html
 //! [`Issuer`]: ../../primitives/issuer/trait.Issuer.html
 //! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
-mod authorization;
 mod accesstoken;
+mod authorization;
 mod error;
+mod query;
 mod refresh;
 mod resource;
-mod query;
 
 #[cfg(test)]
 mod tests;
@@ -46,22 +46,22 @@ pub use primitives::issuer::Issuer;
 pub use primitives::registrar::Registrar;
 pub use primitives::scope::Scope;
 
-use code_grant::resource::{Error as ResourceError};
-use code_grant::error::{AuthorizationError, AccessTokenError};
+use code_grant::error::{AccessTokenError, AuthorizationError};
+use code_grant::resource::Error as ResourceError;
 
 use url::Url;
 
 // Re-export the extension traits under prefixed names.
-pub use code_grant::authorization::Extension as AuthorizationExtension;
 pub use code_grant::accesstoken::Extension as AccessTokenExtension;
+pub use code_grant::authorization::Extension as AuthorizationExtension;
 
-pub use primitives::registrar::PreGrant;
-pub use self::authorization::*;
 pub use self::accesstoken::*;
+pub use self::authorization::*;
 pub use self::error::OAuthError;
+pub use self::query::*;
 pub use self::refresh::RefreshFlow;
 pub use self::resource::*;
-pub use self::query::*;
+pub use primitives::registrar::PreGrant;
 
 /// Answer from OwnerAuthorizer to indicate the owners choice.
 pub enum OwnerConsent<Response: WebResponse> {
@@ -113,7 +113,7 @@ pub enum ResponseStatus {
 ///
 /// Each variant contains some form of context information about the response. This can be used either
 /// purely informational or in some cases provides additional customization points. The addition of
-/// fields to some variant context can occur in any major release until `1.0`. It is discouraged to 
+/// fields to some variant context can occur in any major release until `1.0`. It is discouraged to
 /// exhaustively match the fields directly. Since some context could not permit cloning, the enum will
 /// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
 /// think the pros or cons should be evaluated differently.
@@ -176,7 +176,11 @@ enum InnerTemplate<'a> {
 pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
-    fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
+    fn check_consent(
+        &mut self,
+        &mut Request,
+        pre_grant: &PreGrant,
+    ) -> OwnerConsent<Request::Response>;
 }
 
 /// Determine the scopes applying to a request of a resource.
@@ -191,9 +195,9 @@ pub trait OwnerSolicitor<Request: WebRequest> {
 /// Here's a possible new implementation that allows you to update your scope list at runtime:
 ///
 /// ```
-/// # use oxide_auth::endpoint::Scopes;
-/// # use oxide_auth::endpoint::WebRequest;
-/// use oxide_auth::primitives::scope::Scope;
+/// # use oxide_auth_core::endpoint::Scopes;
+/// # use oxide_auth_core::endpoint::WebRequest;
+/// use oxide_auth_core::primitives::scope::Scope;
 /// use std::sync::{Arc, RwLock};
 ///
 /// struct MyScopes {
@@ -230,7 +234,7 @@ pub trait WebRequest {
     type Error;
 
     /// The corresponding type of Responses returned from this module.
-    type Response: WebResponse<Error=Self::Error>;
+    type Response: WebResponse<Error = Self::Error>;
 
     /// Retrieve a parsed version of the url query.
     ///
@@ -321,7 +325,7 @@ pub trait Endpoint<Request: WebRequest> {
     /// Returning `None` will implicate failing any flow that requires a registrar but does not
     /// have any effect on flows that do not require one.
     fn registrar(&self) -> Option<&dyn Registrar>;
-    
+
     /// An authorizer if this endpoint can access one.
     ///
     /// Returning `None` will implicate failing any flow that requires an authorizer but does not
@@ -350,8 +354,11 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// The endpoint can rely on this being called at most once for each flow, if it wants
     /// to preallocate the response or return a handle on an existing prototype.
-    fn response(&mut self, request: &mut Request, kind: Template) 
-        -> Result<Request::Response, Self::Error>;
+    fn response(
+        &mut self,
+        request: &mut Request,
+        kind: Template,
+    ) -> Result<Request::Response, Self::Error>;
 
     /// Wrap an error.
     fn error(&mut self, err: OAuthError) -> Self::Error;
@@ -372,8 +379,8 @@ impl<'a> Template<'a> {
     pub fn status(&self) -> ResponseStatus {
         match self.inner {
             InnerTemplate::Unauthorized { .. } => ResponseStatus::Unauthorized,
-            InnerTemplate::Redirect {.. } => ResponseStatus::Redirect,
-            InnerTemplate::BadRequest {.. } => ResponseStatus::BadRequest,
+            InnerTemplate::Redirect { .. } => ResponseStatus::Redirect,
+            InnerTemplate::BadRequest { .. } => ResponseStatus::BadRequest,
             InnerTemplate::Ok => ResponseStatus::Ok,
         }
     }
@@ -385,7 +392,7 @@ impl<'a> Template<'a> {
     /// explanatory information or a customized message.
     ///
     /// ```
-    /// # use oxide_auth::endpoint::Template;
+    /// # use oxide_auth_core::endpoint::Template;
     /// fn explain(mut template: Template) {
     ///     if let Some(error) = template.authorization_error() {
     ///         eprintln!("[authorization] An error occurred: {:?}", error.kind());
@@ -396,7 +403,10 @@ impl<'a> Template<'a> {
     /// ```
     pub fn authorization_error(&mut self) -> Option<&mut AuthorizationError> {
         match &mut self.inner {
-            InnerTemplate::Redirect { authorization_error, .. } => reborrow(authorization_error),
+            InnerTemplate::Redirect {
+                authorization_error,
+                ..
+            } => reborrow(authorization_error),
             _ => None,
         }
     }
@@ -408,7 +418,7 @@ impl<'a> Template<'a> {
     /// explanatory information or a customized message.
     ///
     /// ```
-    /// # use oxide_auth::endpoint::Template;
+    /// # use oxide_auth_core::endpoint::Template;
     /// fn explain(mut template: Template) {
     ///     if let Some(error) = template.access_token_error() {
     ///         eprintln!("[access_code] An error occurred: {:?}", error.kind());
@@ -419,8 +429,12 @@ impl<'a> Template<'a> {
     /// ```
     pub fn access_token_error(&mut self) -> Option<&mut AccessTokenError> {
         match &mut self.inner {
-            InnerTemplate::Unauthorized { access_token_error, .. } => reborrow(access_token_error),
-            InnerTemplate::BadRequest { access_token_error, .. } => reborrow(access_token_error),
+            InnerTemplate::Unauthorized {
+                access_token_error, ..
+            } => reborrow(access_token_error),
+            InnerTemplate::BadRequest {
+                access_token_error, ..
+            } => reborrow(access_token_error),
             _ => None,
         }
     }
@@ -460,7 +474,7 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     fn registrar(&self) -> Option<&dyn Registrar> {
         (**self).registrar()
     }
-    
+
     fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
         (**self).authorizer_mut()
     }
@@ -500,7 +514,7 @@ impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
     fn registrar(&self) -> Option<&dyn Registrar> {
         (**self).registrar()
     }
-    
+
     fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
         (**self).authorizer_mut()
     }
@@ -534,7 +548,7 @@ impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
     }
 }
 
-impl Extension for () { }
+impl Extension for () {}
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for &'a mut S {
     fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
@@ -583,4 +597,3 @@ impl<'a> From<InnerTemplate<'a>> for Template<'a> {
         Template { inner }
     }
 }
-

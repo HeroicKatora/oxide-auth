@@ -4,14 +4,14 @@
 //! renewed. There exist two fundamental implementation as well, one utilizing in memory hash maps
 //! while the other uses cryptographic signing.
 use std::collections::HashMap;
-use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 
 use chrono::{Duration, Utc};
 
-use super::Time;
+use super::generator::{Assertion, TagGrant, TaggedAssertion};
 use super::grant::Grant;
-use super::generator::{TagGrant, TaggedAssertion, Assertion};
+use super::Time;
 
 /// Issuers create bearer tokens.
 ///
@@ -74,7 +74,7 @@ pub struct RefreshedToken {
 /// The generator is itself trait based and can be chosen during construction. It is assumed to not
 /// be possible (or at least very unlikely during their overlapping lifetime) for two different
 /// grants to generate the same token in the grant tagger.
-pub struct TokenMap<G: TagGrant=Box<dyn TagGrant + Send + Sync + 'static>> {
+pub struct TokenMap<G: TagGrant = Box<dyn TagGrant + Send + Sync + 'static>> {
     duration: Option<Duration>,
     generator: G,
     usage: u64,
@@ -173,8 +173,8 @@ impl IssuedToken {
     /// offers some additional compatibility.
     ///
     /// ```
-    /// # use oxide_auth::primitives::grant::Grant;
-    /// use oxide_auth::primitives::issuer::{Issuer, IssuedToken};
+    /// # use oxide_auth_core::primitives::grant::Grant;
+    /// use oxide_auth_core::primitives::issuer::{Issuer, IssuedToken};
     ///
     /// struct MyIssuer;
     ///
@@ -242,7 +242,9 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
 
     fn refresh(&mut self, refresh: &str, mut grant: Grant) -> Result<RefreshedToken, ()> {
         // Remove the old token.
-        let (refresh_key, mut token) = self.refresh.remove_entry(refresh)
+        let (refresh_key, mut token) = self
+            .refresh
+            .remove_entry(refresh)
             // Should only be called on valid refresh tokens.
             .ok_or(())?
             .clone();
@@ -261,8 +263,9 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
 
         {
             // Should now be the only `Arc` pointing to this.
-            let mut_token = Arc::get_mut(&mut token).unwrap_or_else(
-                || unreachable!("Grant data was only shared with access and refresh"));
+            let mut_token = Arc::get_mut(&mut token).unwrap_or_else(|| {
+                unreachable!("Grant data was only shared with access and refresh")
+            });
             // Remove the old access token, insert the new.
             mut_token.access = new_key.clone();
             mut_token.grant = grant;
@@ -306,7 +309,7 @@ impl TokenSigner {
     /// Security notice: Never use a password alone to construct the signing key. Instead, generate
     /// a new key using a utility such as `openssl rand` that you then store away securely.
     pub fn new<S: Into<Assertion>>(secret: S) -> TokenSigner {
-        TokenSigner { 
+        TokenSigner {
             duration: None,
             signer: secret.into(),
             counter: AtomicUsize::new(0),
@@ -322,10 +325,10 @@ impl TokenSigner {
     /// key but more customization, adapt the implementation.
     ///
     /// ```
-    /// # use oxide_auth::primitives::issuer::TokenSigner;
+    /// # use oxide_auth_core::primitives::issuer::TokenSigner;
     /// TokenSigner::new(
     ///     ring::hmac::SigningKey::generate(
-    ///         &ring::digest::SHA256, 
+    ///         &ring::digest::SHA256,
     ///         &mut ring::rand::SystemRandom::new())
     ///     .unwrap());
     /// ```
@@ -374,10 +377,8 @@ impl TokenSigner {
         let first_ctr = self.next_counter() as u64;
         let second_ctr = self.next_counter() as u64;
 
-        let token = self.as_token()
-            .sign(first_ctr, grant)?;
-        let refresh = self.as_refresh()
-            .sign(second_ctr, grant)?;
+        let token = self.as_token().sign(first_ctr, grant)?;
+        let refresh = self.as_refresh().sign(second_ctr, grant)?;
 
         Ok(IssuedToken {
             token,
@@ -389,8 +390,7 @@ impl TokenSigner {
     fn unrefreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()> {
         let counter = self.next_counter() as u64;
 
-        let token = self.as_token()
-            .sign(counter, grant)?;
+        let token = self.as_token().sign(counter, grant)?;
 
         Ok(IssuedToken::without_refresh(token, grant.until))
     }
@@ -478,7 +478,7 @@ impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
 
 impl Issuer for TokenSigner {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
-        (&mut&*self).issue(grant)
+        (&mut &*self).issue(grant)
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
@@ -509,7 +509,7 @@ impl<'a> Issuer for &'a TokenSigner {
 
     fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
         if !self.have_refresh {
-            return Ok(None)
+            return Ok(None);
         }
 
         Ok(self.as_refresh().extract(token).ok())
@@ -520,9 +520,9 @@ impl<'a> Issuer for &'a TokenSigner {
 /// Tests for issuer implementations, including those provided here.
 pub mod tests {
     use super::*;
-    use primitives::grant::Extensions;
-    use primitives::generator::RandomGenerator;
     use chrono::{Duration, Utc};
+    use primitives::generator::RandomGenerator;
+    use primitives::grant::Extensions;
 
     fn grant_template() -> Grant {
         Grant {
@@ -545,9 +545,9 @@ pub mod tests {
     pub fn simple_test_suite(issuer: &mut dyn Issuer) {
         let request = grant_template();
 
-        let issued = issuer.issue(request.clone())
-            .expect("Issuing failed");
-        let from_token = issuer.recover_token(&issued.token)
+        let issued = issuer.issue(request.clone()).expect("Issuing failed");
+        let from_token = issuer
+            .recover_token(&issued.token)
             .expect("Issuer failed during recover")
             .expect("Issued token appears to be invalid");
 
@@ -556,8 +556,7 @@ pub mod tests {
         assert_eq!(from_token.owner_id, "Owner");
         assert!(Utc::now() < from_token.until);
 
-        let issued_2 = issuer.issue(request)
-            .expect("Issuing failed");
+        let issued_2 = issuer.issue(request).expect("Issuing failed");
         assert_ne!(issued.token, issued_2.token);
         assert_ne!(issued.token, issued_2.refresh);
         assert_ne!(issued.refresh, issued_2.refresh);

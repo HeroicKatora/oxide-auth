@@ -28,7 +28,7 @@
 //! that the web interface consists of the following types:
 //!
 //! ```
-//! use oxide_auth::frontends::dev::*;
+//! use oxide_auth_core::frontends::dev::*;
 //!
 //! struct ExampleRequest {
 //!     /// The query part of the retrieved uri, conveniently pre-parsed.
@@ -65,7 +65,7 @@
 //!
 //! ```
 //! # use std::collections::HashMap;
-//! use oxide_auth::frontends::dev::*;
+//! use oxide_auth_core::frontends::dev::*;
 //! # struct ExampleRequest {
 //! #    /// The query part of the retrieved uri, conveniently pre-parsed.
 //! #    query: NormalizedParameter,
@@ -93,7 +93,7 @@
 //! #    /// The body sent
 //! #    body: Option<String>,
 //! # }
-//! # extern crate oxide_auth;
+//! # extern crate oxide_auth_core;
 //! impl WebRequest for ExampleRequest {
 //!     // Declare the corresponding response type.
 //!     type Response = ExampleResponse;

@@ -1,19 +1,21 @@
 use std::collections::HashMap;
 
-use primitives::authorizer::{Authorizer, AuthMap};
-use primitives::generator::RandomGenerator;
-use primitives::issuer::{Issuer, TokenSigner};
-use primitives::registrar::{Client, ClientMap};
-use primitives::grant::{Extensions, Grant};
+use oxide_auth_core::primitives::authorizer::{AuthMap, Authorizer};
+use oxide_auth_core::primitives::generator::RandomGenerator;
+use oxide_auth_core::primitives::grant::{Extensions, Grant};
+use oxide_auth_core::primitives::issuer::{Issuer, TokenSigner};
+use oxide_auth_core::primitives::registrar::{Client, ClientMap};
 
-use endpoint::{OAuthError, OwnerConsent};
-use frontends::simple::endpoint::FnSolicitor;
-use frontends::simple::request::{Body, MapErr, NoError, Request, Response, Status};
+use oxide_auth_core::endpoint::{OAuthError, OwnerConsent};
+use oxide_auth_core::frontends::simple::endpoint::FnSolicitor;
+use oxide_auth_core::frontends::simple::request::{
+    Body, MapErr, NoError, Request, Response, Status,
+};
 
-use super::{AsActor, ResourceProtection, access_token, authorization, resource};
-use super::actix::{Actor, Addr, System, SystemRunner};
+use crate::{access_token, authorization, resource, AsActor, ResourceProtection};
+use actix::{Actor, Addr, System, SystemRunner};
 
-use chrono::{Utc, Duration};
+use chrono::{Duration, Utc};
 use serde_json;
 
 struct Setup {
@@ -86,10 +88,11 @@ fn future_authorization() {
         query: vec![
             ("response_type", "code"),
             ("client_id", defaults::EXAMPLE_CLIENT_ID),
-            ("redirect_uri", defaults::EXAMPLE_REDIRECT_URI)]
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
+            ("redirect_uri", defaults::EXAMPLE_REDIRECT_URI),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect(),
         urlbody: HashMap::new(),
         auth: None,
     };
@@ -99,12 +102,14 @@ fn future_authorization() {
     let result = setup.runner.block_on(authorization(
         setup.registrar.clone(),
         setup.authorizer.clone(),
-        FnSolicitor(|_req: &mut _, _: &_| { OwnerConsent::Authorized(defaults::EXAMPLE_OWNER_ID.to_string()) }),
+        FnSolicitor(|_req: &mut _, _: &_| {
+            OwnerConsent::Authorized(defaults::EXAMPLE_OWNER_ID.to_string())
+        }),
         MapErr::request(request, NoError::into::<OAuthError>),
-        MapErr::response(response, NoError::into::<OAuthError>)));
+        MapErr::response(response, NoError::into::<OAuthError>),
+    ));
 
-    let result = result
-        .expect("Should not be an oauth error");
+    let result = result.expect("Should not be an oauth error");
     let response = result.into_inner();
 
     assert_eq!(response.status, Status::Redirect);
@@ -123,12 +128,19 @@ fn future_access_token() {
         urlbody: vec![
             ("grant_type", "authorization_code"),
             ("code", &setup.valid_authorization),
-            ("redirect_uri", defaults::EXAMPLE_REDIRECT_URI)]
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
-        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}",
-            defaults::EXAMPLE_CLIENT_ID, defaults::EXAMPLE_PASSPHRASE))),
+            ("redirect_uri", defaults::EXAMPLE_REDIRECT_URI),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect(),
+        auth: Some(
+            "Basic ".to_string()
+                + &base64::encode(&format!(
+                    "{}:{}",
+                    defaults::EXAMPLE_CLIENT_ID,
+                    defaults::EXAMPLE_PASSPHRASE
+                )),
+        ),
     };
 
     let response = Response::default();
@@ -138,21 +150,27 @@ fn future_access_token() {
         setup.authorizer.clone(),
         setup.issuer.clone(),
         MapErr::request(request, NoError::into::<OAuthError>),
-        MapErr::response(response, NoError::into::<OAuthError>)));
+        MapErr::response(response, NoError::into::<OAuthError>),
+    ));
 
-    let result = result
-        .expect("Should not be an oauth error");
+    let result = result.expect("Should not be an oauth error");
     let response = result.into_inner();
 
     assert_eq!(response.status, Status::Ok);
 
-    let body = response.body.as_ref().map(Body::as_str)
+    let body = response
+        .body
+        .as_ref()
+        .map(Body::as_str)
         .expect("Should have a body");
     let response = serde_json::from_str::<HashMap<String, String>>(body)
         .expect("Should decode as valid json map");
 
     assert!(response.get("access_token").is_some());
-    assert_eq!(response.get("token_type").cloned(), Some("bearer".to_owned()));
+    assert_eq!(
+        response.get("token_type").cloned(),
+        Some("bearer".to_owned())
+    );
 }
 
 #[test]
@@ -171,11 +189,14 @@ fn future_resource() {
         setup.issuer.clone(),
         vec![defaults::EXAMPLE_SCOPE.parse().unwrap()],
         MapErr::request(request, NoError::into::<OAuthError>),
-        MapErr::response(response, NoError::into::<OAuthError>)));
+        MapErr::response(response, NoError::into::<OAuthError>),
+    ));
 
     let () = match result {
         Ok(_grant) => (),
-        Err(ResourceProtection::Respond(resp)) => panic!("Should not be a response: {:?}", resp.into_inner()),
+        Err(ResourceProtection::Respond(resp)) => {
+            panic!("Should not be a response: {:?}", resp.into_inner())
+        }
         Err(ResourceProtection::Error(err)) => panic!("Should not be an oauth error: {:?}", err),
     };
 }
