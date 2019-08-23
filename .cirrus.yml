@@ -32,7 +32,7 @@ nightly_task:
     - cd oxide-auth-rocket
     - cargo build
   test_script:
-    - cd oxid-auth-rocket
+    - cd oxide-auth-rocket
     - cargo test
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
