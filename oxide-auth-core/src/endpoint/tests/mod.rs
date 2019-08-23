@@ -1,7 +1,7 @@
 use endpoint::*;
 use primitives::generator::TagGrant;
-use primitives::registrar::PreGrant;
 use primitives::grant::Grant;
+use primitives::registrar::PreGrant;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -58,7 +58,7 @@ enum Status {
 }
 
 /// Models the necessary body contents.
-/// 
+///
 /// Real HTTP protocols should set a content type header for each of the body variants.
 #[derive(Clone, Debug)]
 enum Body {
@@ -72,7 +72,6 @@ enum Body {
 #[derive(Debug)]
 enum CraftedError {
     Crafted,
-    Err(OAuthError),
 }
 
 impl WebRequest for CraftedRequest {
@@ -80,11 +79,17 @@ impl WebRequest for CraftedRequest {
     type Error = CraftedError;
 
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
-        self.query.as_ref().map(|hm| Cow::Borrowed(hm as &dyn QueryParameter)).ok_or(CraftedError::Crafted)
+        self.query
+            .as_ref()
+            .map(|hm| Cow::Borrowed(hm as &dyn QueryParameter))
+            .ok_or(CraftedError::Crafted)
     }
 
     fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
-        self.urlbody.as_ref().map(|hm| Cow::Borrowed(hm as &dyn QueryParameter)).ok_or(CraftedError::Crafted)
+        self.urlbody
+            .as_ref()
+            .map(|hm| Cow::Borrowed(hm as &dyn QueryParameter))
+            .ok_or(CraftedError::Crafted)
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
@@ -151,33 +156,41 @@ struct Allow(String);
 struct Deny;
 
 impl OwnerSolicitor<CraftedRequest> for Allow {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
-        -> OwnerConsent<CraftedResponse> 
-    {
+    fn check_consent(
+        &mut self,
+        _: &mut CraftedRequest,
+        _: &PreGrant,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Authorized(self.0.clone())
     }
 }
 
 impl OwnerSolicitor<CraftedRequest> for Deny {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
-        -> OwnerConsent<CraftedResponse> 
-    {
+    fn check_consent(
+        &mut self,
+        _: &mut CraftedRequest,
+        _: &PreGrant,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Denied
     }
 }
 
 impl<'l> OwnerSolicitor<CraftedRequest> for &'l Allow {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
-        -> OwnerConsent<CraftedResponse> 
-    {
+    fn check_consent(
+        &mut self,
+        _: &mut CraftedRequest,
+        _: &PreGrant,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Authorized(self.0.clone())
     }
 }
 
 impl<'l> OwnerSolicitor<CraftedRequest> for &'l Deny {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
-        -> OwnerConsent<CraftedResponse> 
-    {
+    fn check_consent(
+        &mut self,
+        _: &mut CraftedRequest,
+        _: &PreGrant,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Denied
     }
 }
@@ -186,12 +199,15 @@ trait ToSingleValueQuery {
     fn to_single_value_query(self) -> HashMap<String, Vec<String>>;
 }
 
-impl<'r, I, K, V> ToSingleValueQuery for I where
-    I: Iterator<Item=&'r (K, V)>,
+impl<'r, I, K, V> ToSingleValueQuery for I
+where
+    I: Iterator<Item = &'r (K, V)>,
     K: AsRef<str> + 'r,
-    V: AsRef<str> + 'r {
+    V: AsRef<str> + 'r,
+{
     fn to_single_value_query(self) -> HashMap<String, Vec<String>> {
-        self.map(|&(ref k, ref v)| (k.as_ref().to_string(), vec![v.as_ref().to_string()])).collect()
+        self.map(|&(ref k, ref v)| (k.as_ref().to_string(), vec![v.as_ref().to_string()]))
+            .collect()
     }
 }
 
@@ -209,8 +225,8 @@ pub mod defaults {
     pub const EXAMPLE_SCOPE: &str = "example default";
 }
 
-mod authorization;
 mod access_token;
-mod resource;
-mod refresh;
+mod authorization;
 mod pkce;
+mod refresh;
+mod resource;
