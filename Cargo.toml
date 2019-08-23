@@ -22,6 +22,10 @@ members = [
     "oxide-auth-iron",
     "oxide-auth-rocket",
     "oxide-auth-rouille",
+    "examples/actix-example",
+    "examples/iron-example",
+    "examples/rocket-example",
+    "examples/rouille-example",
 ]
 
 
