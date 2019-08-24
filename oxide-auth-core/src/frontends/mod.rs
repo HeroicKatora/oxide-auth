@@ -5,18 +5,6 @@
 //! implementation to implementation. Composability and usability are the main concerns for
 //! frontends, full feature support is a secondary concern.
 //!
-//! Usage
-//! -----
-//!
-//! First you need to enable the correct feature flag. Note that for the convenience of viewing
-//! this documentation, the version on `docs.rs` has all features enabled. The following frontends
-//! require the following features:
-//!
-//! * `simple`: None, this can also be a basis for other implementations
-//! * `actix`: `actix-frontend`
-//! * `rouille`: `rouille-frontend`
-//! * `rocket`: `rocket-frontend`
-//!
 //! Guide
 //! ------
 //!

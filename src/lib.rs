@@ -102,9 +102,10 @@ pub mod frontends {
     //! require the following features:
     //!
     //! * `simple`: None, this can also be a basis for other implementations
-    //! * `actix`: `actix-frontend`
-    //! * `rouille`: `rouille-frontend`
-    //! * `rocket`: `rocket-frontend`
+    //! * `actix`: `oxide-auth-actix`
+    //! * `iron`: `oxide-auth-iron`
+    //! * `rocket`: `oxide-auth-rocket`
+    //! * `rouille`: `oxide-auth-rouille`
     //!
     //! Guide
     //! ------
