@@ -1,16 +1,18 @@
 [package]
 name = "oxide-auth-rocket"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
-
-description = "A OAuth2 server library, for actix, gotham or other libraries, featuring a set of configurable and pluggable backends."
-
+description = "A OAuth2 server library for rocket featuring a set of configurable and pluggable backends."
+readme = "../Readme.md"
 keywords = ["oauth", "server", "oauth2"]
 categories = ["web-programming::http-server", "authentication"]
 license = "MIT"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rocket = "0.3.2"
-oxide-auth = { path = "../oxide-auth" }
+rocket = "0.4.2"
+oxide-auth = { version = "0.5.0-preview.0", path = "../oxide-auth" }
 serde_urlencoded = "0.5.1"

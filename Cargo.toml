@@ -4,7 +4,7 @@ members = [
 	"oxide-auth-actix",
 	"oxide-auth-iron",
 	# Rocket requires nightly, it's not in the workspace.
-	# "oxide-auth-rocket",
+	"oxide-auth-rocket",
 	"oxide-auth-rouille",
 ]
 

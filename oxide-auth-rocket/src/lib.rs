@@ -1,4 +1,5 @@
 //! Adaptions and integration for rocket.
+extern crate oxide_auth;
 extern crate rocket;
 extern crate serde_urlencoded;
 
@@ -14,11 +15,11 @@ use self::rocket::request::FromRequest;
 use self::rocket::response::{self, Responder};
 use self::rocket::outcome::Outcome;
 
-use endpoint::{NormalizedParameter, WebRequest, WebResponse};
-use frontends::dev::*;
+use oxide_auth::endpoint::{NormalizedParameter, WebRequest, WebResponse};
+use oxide_auth::frontends::dev::*;
 
-pub use frontends::simple::endpoint::Generic;
-pub use frontends::simple::request::NoError;
+pub use oxide_auth::frontends::simple::endpoint::Generic;
+pub use oxide_auth::frontends::simple::request::NoError;
 pub use self::failure::OAuthFailure;
 
 /// Request guard that also buffers OAuth data internally.
@@ -109,7 +110,7 @@ impl<'r> OAuthRequest<'r> {
 
 impl<'r> WebRequest for OAuthRequest<'r> {
     type Error = WebError;
-    type Response = Response<'r>;
+    type Response = OAuthResponse<'r>;
 
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         match self.query.as_ref() {
@@ -131,49 +132,85 @@ impl<'r> WebRequest for OAuthRequest<'r> {
     }
 }
 
-impl<'r> WebResponse for Response<'r> {
-    type Error = WebError;
-
-    fn ok(&mut self) -> Result<(), Self::Error> {
-        self.set_status(Status::Ok);
-        Ok(())
-    }
-
-    fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
-        self.set_status(Status::Found);
-        self.set_header(header::Location(url.into_string()));
-        Ok(())
-    }
-
-    fn client_error(&mut self) -> Result<(), Self::Error> {
-        self.set_status(Status::BadRequest);
-        Ok(())
-    }
-
-    fn unauthorized(&mut self, kind: &str) -> Result<(), Self::Error> {
-        self.set_status(Status::Unauthorized);
-        self.set_raw_header("WWW-Authenticate", kind.to_owned());
-        Ok(())
-    }
-
-    fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
-        self.set_sized_body(Cursor::new(text.to_owned()));
-        self.set_header(ContentType::Plain);
-        Ok(())
-    }
-
-    fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
-        self.set_sized_body(Cursor::new(data.to_owned()));
-        self.set_header(ContentType::JSON);
-        Ok(())
-    }
-}
-
 impl<'a, 'r> FromRequest<'a, 'r> for OAuthRequest<'r> {
     type Error = NoError;
 
     fn from_request(request: &'a Request<'r>) -> Outcome<Self, (Status, Self::Error), ()> {
         Outcome::Success(Self::new(request))
+    }
+}
+
+/// Response type for Rocket OAuth requests
+///
+/// A simple wrapper type around a simple `rocket::Response<'r>` that implements `WebResponse`.
+#[derive(Debug)]
+pub struct OAuthResponse<'r>(pub Response<'r>);
+
+impl<'r> Default for OAuthResponse<'r> {
+    fn default() -> Self {
+        OAuthResponse(Default::default())
+    }
+}
+
+impl<'r> OAuthResponse<'r> {
+    /// Create a new `OAuthResponse<'r>`
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Create a new `OAuthResponse<'r>` from an existing `rocket::Response<'r>`
+    pub fn from_response(response: Response<'r>) -> Self {
+        OAuthResponse(response)
+    }
+}
+
+impl<'r> From<Response<'r>> for OAuthResponse<'r> {
+    fn from(r: Response<'r>) -> Self {
+        OAuthResponse::from_response(r)
+    }
+}
+
+impl<'r> WebResponse for OAuthResponse<'r> {
+    type Error = WebError;
+
+    fn ok(&mut self) -> Result<(), Self::Error> {
+        self.0.set_status(Status::Ok);
+        Ok(())
+    }
+
+    fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
+        self.0.set_status(Status::Found);
+        self.0.set_header(header::Location(url.into_string()));
+        Ok(())
+    }
+
+    fn client_error(&mut self) -> Result<(), Self::Error> {
+        self.0.set_status(Status::BadRequest);
+        Ok(())
+    }
+
+    fn unauthorized(&mut self, kind: &str) -> Result<(), Self::Error> {
+        self.0.set_status(Status::Unauthorized);
+        self.0.set_raw_header("WWW-Authenticate", kind.to_owned());
+        Ok(())
+    }
+
+    fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
+        self.0.set_sized_body(Cursor::new(text.to_owned()));
+        self.0.set_header(ContentType::Plain);
+        Ok(())
+    }
+
+    fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
+        self.0.set_sized_body(Cursor::new(data.to_owned()));
+        self.0.set_header(ContentType::JSON);
+        Ok(())
+    }
+}
+
+impl<'r> Responder<'r> for OAuthResponse<'r> {
+    fn respond_to(self, _: &Request) -> response::Result<'r> {
+        Ok(self.0)
     }
 }
 

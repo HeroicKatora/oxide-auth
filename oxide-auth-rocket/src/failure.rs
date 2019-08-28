@@ -1,5 +1,5 @@
 use super::WebError;
-use endpoint::OAuthError;
+use super::oxide_auth::endpoint::OAuthError;
 
 use super::rocket::Request;
 use super::rocket::http::Status;
