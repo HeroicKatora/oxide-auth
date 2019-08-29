@@ -1,7 +1,7 @@
 use oxide_auth::primitives::authorizer::Authorizer;
 use oxide_auth::primitives::grant::Grant;
 
-use super::super::actix::{Handler, Message};
+use actix::{Handler, Message};
 use super::super::AsActor;
 
 /// Command authorization of a grant.

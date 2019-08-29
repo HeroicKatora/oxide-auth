@@ -11,7 +11,7 @@ use oxide_auth::frontends::simple::endpoint::FnSolicitor;
 use oxide_auth::frontends::simple::request::{Body, MapErr, NoError, Request, Response, Status};
 
 use super::{AsActor, ResourceProtection, access_token, authorization, resource};
-use super::actix::{Actor, Addr, System, SystemRunner};
+use actix::{Actor, Addr, System, SystemRunner};
 
 use chrono::{Utc, Duration};
 

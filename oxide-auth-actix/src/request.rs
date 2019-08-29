@@ -8,14 +8,14 @@ use std::borrow::Cow;
 use oxide_auth::endpoint::{OAuthError, NormalizedParameter, PreGrant, QueryParameter, WebRequest, WebResponse};
 use oxide_auth::frontends::simple::request::{Body, Response, Status};
 
-use super::actix_web::{HttpMessage, HttpRequest, HttpResponse};
-use super::actix_web::dev::UrlEncoded;
-use super::actix_web::http::header::{self, HeaderValue};
-use super::futures::{Async, Future, Poll};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse};
+use actix_web::dev::UrlEncoded;
+use actix_web::http::header::{self, HeaderValue};
+use futures::{Async, Future, Poll};
 use super::message::{AuthorizationCode, AccessToken, Resource};
 
 use url::Url;
-use super::serde_urlencoded;
+use serde_urlencoded;
 
 
 /// A future for all OAuth related data.

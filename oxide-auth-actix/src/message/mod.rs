@@ -7,7 +7,7 @@ mod authorizer;
 mod issuer;
 mod registrar;
 
-use super::actix::prelude::Message;
+use actix::prelude::Message;
 
 use super::ResourceProtection;
 use super::request::{OAuthRequest as ResolvedRequest};

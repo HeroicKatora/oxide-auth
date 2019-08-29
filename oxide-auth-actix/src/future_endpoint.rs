@@ -12,9 +12,9 @@ use oxide_auth::frontends::simple::endpoint::{Error as SimpleError, Generic, Vac
 
 use super::message as m;
 
-use super::actix::{Addr, MailboxError, Message, Recipient};
-use super::actix::dev::RecipientRequest;
-use super::futures::{Async, Future, Poll};
+use actix::{Addr, MailboxError, Message, Recipient};
+use actix::dev::RecipientRequest;
+use futures::{Async, Future, Poll};
 use super::AsActor;
 
 /// Run an authorization code request asynchonously using actor primitives.

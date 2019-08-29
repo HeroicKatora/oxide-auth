@@ -2,11 +2,7 @@
 //!
 //! Use the provided methods to use code grant methods in an asynchronous fashion, or use an
 //! `AsActor<_>` to create an actor implementing endpoint functionality via messages.
-extern crate actix;
-extern crate actix_web;
-extern crate futures;
-extern crate oxide_auth;
-extern crate serde_urlencoded;
+#![warn(missing_docs)]
 
 mod future_endpoint;
 mod endpoint;
@@ -18,8 +14,8 @@ mod tests;
 use std::fmt;
 use std::error;
 
-use self::actix_web::{HttpRequest, HttpResponse};
-use self::actix_web::ResponseError;
+use actix_web::{HttpRequest, HttpResponse};
+use actix_web::ResponseError;
 
 // pub use self::endpoint::CodeGrantEndpoint;
 pub use oxide_auth::endpoint::{PreGrant, OAuthError, OwnerConsent, OwnerSolicitor};

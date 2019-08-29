@@ -1,6 +1,6 @@
 use oxide_auth::primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
 use oxide_auth::primitives::scope::Scope;
-use super::super::actix::{Handler, Message};
+use actix::{Handler, Message};
 use super::super::AsActor;
 
 
