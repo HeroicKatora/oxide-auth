@@ -1,5 +1,5 @@
-use primitives::authorizer::Authorizer;
-use primitives::grant::Grant;
+use oxide_auth::primitives::authorizer::Authorizer;
+use oxide_auth::primitives::grant::Grant;
 
 use super::super::actix::{Handler, Message};
 use super::super::AsActor;

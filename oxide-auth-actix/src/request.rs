@@ -5,8 +5,8 @@
 //! future yielding the specific message to be sent to the endpoint.
 use std::borrow::Cow;
 
-use endpoint::{OAuthError, NormalizedParameter, PreGrant, QueryParameter, WebRequest, WebResponse};
-use frontends::simple::request::{Body, Response, Status};
+use oxide_auth::endpoint::{OAuthError, NormalizedParameter, PreGrant, QueryParameter, WebRequest, WebResponse};
+use oxide_auth::frontends::simple::request::{Body, Response, Status};
 
 use super::actix_web::{HttpMessage, HttpRequest, HttpResponse};
 use super::actix_web::dev::UrlEncoded;
@@ -16,6 +16,7 @@ use super::message::{AuthorizationCode, AccessToken, Resource};
 
 use url::Url;
 use super::serde_urlencoded;
+
 
 /// A future for all OAuth related data.
 pub struct OAuthFuture {

@@ -1,8 +1,8 @@
-use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
-use primitives::scope::Scope;
-
+use oxide_auth::primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
+use oxide_auth::primitives::scope::Scope;
 use super::super::actix::{Handler, Message};
 use super::super::AsActor;
+
 
 /// Request a bound redirect.
 #[derive(Clone, Debug)]

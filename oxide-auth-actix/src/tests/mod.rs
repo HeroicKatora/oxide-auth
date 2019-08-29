@@ -1,19 +1,20 @@
 use std::collections::HashMap;
 
-use primitives::authorizer::{Authorizer, AuthMap};
-use primitives::generator::RandomGenerator;
-use primitives::issuer::{Issuer, TokenSigner};
-use primitives::registrar::{Client, ClientMap};
-use primitives::grant::{Extensions, Grant};
+use oxide_auth::primitives::authorizer::{Authorizer, AuthMap};
+use oxide_auth::primitives::generator::RandomGenerator;
+use oxide_auth::primitives::issuer::{Issuer, TokenSigner};
+use oxide_auth::primitives::registrar::{Client, ClientMap};
+use oxide_auth::primitives::grant::{Extensions, Grant};
 
-use endpoint::{OAuthError, OwnerConsent};
-use frontends::simple::endpoint::FnSolicitor;
-use frontends::simple::request::{Body, MapErr, NoError, Request, Response, Status};
+use oxide_auth::endpoint::{OAuthError, OwnerConsent};
+use oxide_auth::frontends::simple::endpoint::FnSolicitor;
+use oxide_auth::frontends::simple::request::{Body, MapErr, NoError, Request, Response, Status};
 
 use super::{AsActor, ResourceProtection, access_token, authorization, resource};
 use super::actix::{Actor, Addr, System, SystemRunner};
 
 use chrono::{Utc, Duration};
+
 use serde_json;
 
 struct Setup {

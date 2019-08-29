@@ -1,14 +1,14 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 
-use primitives::authorizer::Authorizer;
-use primitives::issuer::{Issuer, IssuedToken, RefreshedToken};
-use primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
-use primitives::scope::Scope;
-use primitives::grant::Grant;
-use endpoint::{AccessTokenFlow, AuthorizationFlow, RefreshFlow, ResourceFlow};
-use endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest, WebResponse};
-use frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
+use oxide_auth::primitives::authorizer::Authorizer;
+use oxide_auth::primitives::issuer::{Issuer, IssuedToken, RefreshedToken};
+use oxide_auth::primitives::registrar::{BoundClient, ClientUrl, Registrar, RegistrarError, PreGrant};
+use oxide_auth::primitives::scope::Scope;
+use oxide_auth::primitives::grant::Grant;
+use oxide_auth::endpoint::{AccessTokenFlow, AuthorizationFlow, RefreshFlow, ResourceFlow};
+use oxide_auth::endpoint::{OwnerSolicitor, OwnerConsent, OAuthError, Scopes, WebRequest, WebResponse};
+use oxide_auth::frontends::simple::endpoint::{Error as SimpleError, Generic, Vacant};
 
 use super::message as m;
 
