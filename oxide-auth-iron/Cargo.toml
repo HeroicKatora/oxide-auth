@@ -17,3 +17,9 @@ iron = "0.6"
 oxide-auth = { version = "0.5.0-preview.0", path = "../oxide-auth" }
 serde_urlencoded = "0.5.1"
 url = "1.7"
+
+[dev-dependencies]
+reqwest = "0.9"
+router = "0.6.0"
+serde = "1.0"
+serde_json = "1.0"
