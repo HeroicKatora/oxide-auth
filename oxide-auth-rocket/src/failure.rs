@@ -1,9 +1,9 @@
 use super::WebError;
-use super::oxide_auth::endpoint::OAuthError;
+use oxide_auth::endpoint::OAuthError;
 
-use super::rocket::Request;
-use super::rocket::http::Status;
-use super::rocket::response::{Responder, Result};
+use rocket::Request;
+use rocket::http::Status;
+use rocket::response::{Responder, Result};
 use self::OAuthError::*;
 use self::Kind::*;
 

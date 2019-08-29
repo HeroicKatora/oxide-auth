@@ -87,10 +87,11 @@ here</a> to begin the authorization process.
     match protect {
         Ok(_grant) => Ok("Hello, world"),
         Err(Ok(response)) => {
-            let error = OAuthResponse(Response::build_from(response.0)
+            let error: OAuthResponse = Response::build_from(response.into())
                 .header(ContentType::HTML)
                 .sized_body(io::Cursor::new(DENY_TEXT))
-                .finalize());
+                .finalize()
+                .into();
             Err(Ok(error))
         },
         Err(Err(err)) => Err(Err(err.pack::<OAuthFailure>())),
@@ -148,11 +149,12 @@ impl MyState {
 }
 
 fn consent_form<'r>(_: &mut OAuthRequest<'r>, grant: &PreGrant) -> OwnerConsent<OAuthResponse<'r>> {
-    OwnerConsent::InProgress(OAuthResponse(Response::build()
+    OwnerConsent::InProgress(Response::build()
         .status(http::Status::Ok)
         .header(http::ContentType::HTML)
         .sized_body(io::Cursor::new(support::consent_page_html("/authorize", grant)))
-        .finalize()))
+        .finalize()
+        .into())
 }
 
 fn consent_decision<'r>(allowed: bool, _: &PreGrant) -> OwnerConsent<OAuthResponse<'r>> {
