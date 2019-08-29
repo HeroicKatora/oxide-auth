@@ -37,49 +37,51 @@ fn main_router() -> impl Handler + 'static {
         let response = state.endpoint()
             .with_solicitor(FnSolicitor(consent_form))
             .to_authorization()
-            .execute(OAuthRequest(request))
+            .execute(request.into())
             .map_err(|e| {
                 let e: OAuthError = e.into();
-                e.0
+                e.into()
             })?;
-        Ok(response.0)
+        Ok(response.into())
     }, "authorization_get");
     router.post("/authorize", move |request: &mut Request| {
         let state = auth_post_state.clone();
         let response = state.endpoint()
             .with_solicitor(FnSolicitor(consent_decision))
             .to_authorization()
-            .execute(OAuthRequest(request))
+            .execute(request.into())
             .map_err(|e| {
                 let e: OAuthError = e.into();
-                e.0
+                e.into()
             })?;
-        Ok(response.0)
+        Ok(response.into())
     }, "authorization_post");
     router.post("/token", move |request: &mut Request| {
         let state = token_state.clone();
         let response = state.endpoint()
             .to_access_token()
-            .execute(OAuthRequest(request))
+            .execute(request.into())
             .map_err(|e| {
                 let e: OAuthError = e.into();
-                e.0
+                e.into()
             })?;
-        Ok(response.0)
+        Ok(response.into())
     }, "token");
     router.get("/", move |request: &mut Request| {
+        let oauth_request: OAuthRequest = request.into();
+
         let state = get_state.clone();
         let protect = state.endpoint()
             .with_scopes(vec!["default-scope".parse().unwrap()])
             .to_resource()
-            .execute(OAuthRequest(request));
+            .execute(oauth_request);
 
         let _grant = match protect {
             Ok(grant) => grant,
             Err(Ok(mut response)) => {
-                response.0.headers.set(ContentType::html());
-                response.0.body = Some(Box::new(EndpointState::DENY_TEXT));
-                return Ok(response.0)
+                response.set_header(ContentType::html());
+                response.set_body(EndpointState::DENY_TEXT);
+                return Ok(response.into());
             },
             Err(Err(error)) => {
                 let error: OAuthError = error.into();
@@ -149,15 +151,17 @@ here</a> to begin the authorization process.
 }
 
 fn consent_form(_: &mut OAuthRequest, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
-    let mut response = OAuthResponse(Response::with(Status::Ok));
-    response.0.headers.set(ContentType::html());
-    response.0.body = Some(Box::new(support::consent_page_html("/authorize", grant)));
+    let mut response = OAuthResponse::new();
+    response.set_status(Status::Ok);
+    response.set_header(ContentType::html());
+    response.set_body(&support::consent_page_html("/authorize", grant));
     OwnerConsent::InProgress(response)
 }
 
 fn consent_decision(request: &mut OAuthRequest, _: &PreGrant) -> OwnerConsent<OAuthResponse> {
     // Authenticate the request better in a real app!
-    let allowed = request.0.url.as_ref()
+    let allowed = request
+        .url()
         .query_pairs()
         .any(|(key, _)| key == "allow");
     if allowed { 
