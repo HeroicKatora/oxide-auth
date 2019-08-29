@@ -2,6 +2,8 @@
 //!
 //! Following the simplistic and minimal style of rouille, this module defines only the
 //! implementations for `WebRequest` and `WebResponse` and re-exports the available flows.
+#![warn(missing_docs)]
+
 use core::ops::Deref;
 use std::borrow::Cow;
 
