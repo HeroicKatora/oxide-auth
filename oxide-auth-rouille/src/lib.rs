@@ -2,6 +2,8 @@
 //!
 //! Following the simplistic and minimal style of rouille, this module defines only the
 //! implementations for `WebRequest` and `WebResponse` and re-exports the available flows.
+#![warn(missing_docs)]
+
 use core::ops::Deref;
 use std::borrow::Cow;
 
@@ -25,22 +27,26 @@ pub enum WebError {
 }
 
 #[derive(Debug)]
+/// The Request type used by Oxide Auth to extract required information
 pub struct Request<'a> {
     inner: &'a rouille::Request,
 }
 
 #[derive(Debug)]
+/// The type Oxide Auth provides in response to a request.
 pub struct Response {
     inner: rouille::Response,
 }
 
 impl<'a> Request<'a> {
+    /// Create a new Request from a `rouille::Request`
     pub fn new(inner: &'a rouille::Request) -> Self {
         Request { inner }
     }
 }
 
 impl Response {
+    /// Produce a `rouille::Response` from a `Response`
     pub fn into_inner(self) -> rouille::Response {
         self.inner
     }

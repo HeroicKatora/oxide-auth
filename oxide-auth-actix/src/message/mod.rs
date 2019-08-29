@@ -7,16 +7,17 @@ mod authorizer;
 mod issuer;
 mod registrar;
 
-use super::actix::prelude::Message;
+use actix::prelude::Message;
 
 use super::ResourceProtection;
 use super::request::{OAuthRequest as ResolvedRequest};
-use primitives::grant::Grant;
-use endpoint::WebRequest;
+use oxide_auth::primitives::grant::Grant;
+use oxide_auth::endpoint::WebRequest;
 
 pub use self::authorizer::{Authorize, Extract};
 pub use self::issuer::{Issue, RecoverToken, RecoverRefresh, Refresh};
 pub use self::registrar::{BoundRedirect, Check, Negotiate};
+
 
 /// A request for an authorization code from an endpoint actor.
 ///
@@ -28,10 +29,10 @@ pub use self::registrar::{BoundRedirect, Check, Negotiate};
 /// # extern crate actix;
 /// # extern crate actix_web;
 /// # extern crate futures;
-/// # extern crate oxide_auth;
-/// use oxide_auth::frontends::actix::{OAuth, OAuthError, OAuthResponse};
-/// use oxide_auth::frontends::actix::message::AuthorizationCode;
-/// # use oxide_auth::frontends::actix::request::OAuthRequest;
+/// # extern crate oxide_auth_actix;
+/// use oxide_auth_actix::{OAuth, OAuthError, OAuthResponse};
+/// use oxide_auth_actix::message::AuthorizationCode;
+/// # use oxide_auth_actix::request::OAuthRequest;
 /// # use actix::Recipient;
 /// # use actix_web::HttpRequest;
 /// # use futures::Future;
@@ -61,10 +62,10 @@ pub struct AuthorizationCode<W: WebRequest=ResolvedRequest>(pub W);
 /// # extern crate actix;
 /// # extern crate actix_web;
 /// # extern crate futures;
-/// # extern crate oxide_auth;
-/// use oxide_auth::frontends::actix::{OAuth, OAuthError, OAuthResponse};
-/// use oxide_auth::frontends::actix::message::AccessToken;
-/// # use oxide_auth::frontends::actix::request::OAuthRequest;
+/// # extern crate oxide_auth_actix;
+/// use oxide_auth_actix::{OAuth, OAuthError, OAuthResponse};
+/// use oxide_auth_actix::message::AccessToken;
+/// # use oxide_auth_actix::request::OAuthRequest;
 /// # use actix::Recipient;
 /// # use actix_web::HttpRequest;
 /// # use futures::Future;
@@ -84,7 +85,6 @@ pub struct AuthorizationCode<W: WebRequest=ResolvedRequest>(pub W);
 /// ```
 pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub W);
 
-
 /// A request for a resource, utilizing a bearer token.
 ///
 /// ## Example
@@ -95,10 +95,10 @@ pub struct AccessToken<W: WebRequest=ResolvedRequest>(pub W);
 /// # extern crate actix;
 /// # extern crate actix_web;
 /// # extern crate futures;
-/// # extern crate oxide_auth;
-/// use oxide_auth::frontends::actix::{Grant, OAuth, OAuthError, OAuthResponse, ResourceProtection};
-/// use oxide_auth::frontends::actix::message::Resource;
-/// # use oxide_auth::frontends::actix::request::OAuthRequest;
+/// # extern crate oxide_auth_actix;
+/// use oxide_auth_actix::{Grant, OAuth, OAuthError, OAuthResponse, ResourceProtection};
+/// use oxide_auth_actix::message::Resource;
+/// # use oxide_auth_actix::request::OAuthRequest;
 /// # use actix::Recipient;
 /// # use actix_web::HttpRequest;
 /// # use futures::Future;

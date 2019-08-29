@@ -1,38 +1,38 @@
 //! Adaptions and integration for rocket.
-extern crate rocket;
-extern crate serde_urlencoded;
+#![warn(missing_docs)]
 
 mod failure;
 
 use std::io::Cursor;
 use std::marker::PhantomData;
 
-use self::rocket::{Data, Request, Response};
-use self::rocket::http::{ContentType, Status};
-use self::rocket::http::hyper::header;
-use self::rocket::request::FromRequest;
-use self::rocket::response::{self, Responder};
-use self::rocket::outcome::Outcome;
+use rocket::{Data, Request, Response};
+use rocket::http::{ContentType, Status};
+use rocket::http::hyper::header;
+use rocket::request::FromRequest;
+use rocket::response::{self, Responder};
+use rocket::outcome::Outcome;
 
-use endpoint::{NormalizedParameter, WebRequest, WebResponse};
-use frontends::dev::*;
+use oxide_auth::endpoint::{NormalizedParameter, WebRequest, WebResponse};
+use oxide_auth::frontends::dev::*;
 
-pub use frontends::simple::endpoint::Generic;
-pub use frontends::simple::request::NoError;
+pub use oxide_auth::frontends::simple::endpoint::Generic;
+pub use oxide_auth::frontends::simple::request::NoError;
 pub use self::failure::OAuthFailure;
 
 /// Request guard that also buffers OAuth data internally.
-///
-/// `WebRequest` etc. is implemented for the basic `rocket::Request<'r>` as well. Both have the
-/// same error and result types but of course we can not simply implement the former as a request
-/// guard with special semantics. Therefore, we wrap in here and at the same time buffer all the
-/// computed state such as parameter checking and normalization.
 pub struct OAuthRequest<'r> {
     auth: Option<String>,
     query: Result<NormalizedParameter, WebError>,
     body: Result<Option<NormalizedParameter>, WebError>,
     lifetime: PhantomData<&'r ()>,
 }
+
+/// Response type for Rocket OAuth requests
+///
+/// A simple wrapper type around a simple `rocket::Response<'r>` that implements `WebResponse`.
+#[derive(Debug)]
+pub struct OAuthResponse<'r>(Response<'r>);
 
 /// Request error at the http layer.
 ///
@@ -107,9 +107,21 @@ impl<'r> OAuthRequest<'r> {
     }
 }
 
+impl<'r> OAuthResponse<'r> {
+    /// Create a new `OAuthResponse<'r>`
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Create a new `OAuthResponse<'r>` from an existing `rocket::Response<'r>`
+    pub fn from_response(response: Response<'r>) -> Self {
+        OAuthResponse(response)
+    }
+}
+
 impl<'r> WebRequest for OAuthRequest<'r> {
     type Error = WebError;
-    type Response = Response<'r>;
+    type Response = OAuthResponse<'r>;
 
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         match self.query.as_ref() {
@@ -131,40 +143,40 @@ impl<'r> WebRequest for OAuthRequest<'r> {
     }
 }
 
-impl<'r> WebResponse for Response<'r> {
+impl<'r> WebResponse for OAuthResponse<'r> {
     type Error = WebError;
 
     fn ok(&mut self) -> Result<(), Self::Error> {
-        self.set_status(Status::Ok);
+        self.0.set_status(Status::Ok);
         Ok(())
     }
 
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
-        self.set_status(Status::Found);
-        self.set_header(header::Location(url.into_string()));
+        self.0.set_status(Status::Found);
+        self.0.set_header(header::Location(url.into_string()));
         Ok(())
     }
 
     fn client_error(&mut self) -> Result<(), Self::Error> {
-        self.set_status(Status::BadRequest);
+        self.0.set_status(Status::BadRequest);
         Ok(())
     }
 
     fn unauthorized(&mut self, kind: &str) -> Result<(), Self::Error> {
-        self.set_status(Status::Unauthorized);
-        self.set_raw_header("WWW-Authenticate", kind.to_owned());
+        self.0.set_status(Status::Unauthorized);
+        self.0.set_raw_header("WWW-Authenticate", kind.to_owned());
         Ok(())
     }
 
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
-        self.set_sized_body(Cursor::new(text.to_owned()));
-        self.set_header(ContentType::Plain);
+        self.0.set_sized_body(Cursor::new(text.to_owned()));
+        self.0.set_header(ContentType::Plain);
         Ok(())
     }
 
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
-        self.set_sized_body(Cursor::new(data.to_owned()));
-        self.set_header(ContentType::JSON);
+        self.0.set_sized_body(Cursor::new(data.to_owned()));
+        self.0.set_header(ContentType::JSON);
         Ok(())
     }
 }
@@ -177,6 +189,12 @@ impl<'a, 'r> FromRequest<'a, 'r> for OAuthRequest<'r> {
     }
 }
 
+impl<'r> Responder<'r> for OAuthResponse<'r> {
+    fn respond_to(self, _: &Request) -> response::Result<'r> {
+        Ok(self.0)
+    }
+}
+
 impl<'r> Responder<'r> for WebError {
     fn respond_to(self, _: &Request) -> response::Result<'r> {
         match self {
@@ -184,5 +202,23 @@ impl<'r> Responder<'r> for WebError {
             WebError::NotAForm => Err(Status::BadRequest),
             WebError::BodyNeeded => Err(Status::InternalServerError),
         }
+    }
+}
+
+impl<'r> Default for OAuthResponse<'r> {
+    fn default() -> Self {
+        OAuthResponse(Default::default())
+    }
+}
+
+impl<'r> From<Response<'r>> for OAuthResponse<'r> {
+    fn from(r: Response<'r>) -> Self {
+        OAuthResponse::from_response(r)
+    }
+}
+
+impl<'r> Into<Response<'r>> for OAuthResponse<'r> {
+    fn into(self) -> Response<'r> {
+        self.0
     }
 }

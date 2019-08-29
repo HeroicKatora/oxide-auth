@@ -1,5 +1,6 @@
 extern crate iron;
 extern crate oxide_auth;
+extern crate oxide_auth_iron;
 extern crate router;
 
 use std::sync::{Arc, Mutex};
@@ -13,8 +14,9 @@ use iron::middleware::Handler;
 use oxide_auth::endpoint::{OwnerConsent};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
+use oxide_auth_iron::{OAuthRequest, OAuthResponse, OAuthError};
 
-#[path = "support/iron.rs"]
+#[path = "../../examples/support/iron.rs"]
 mod support;
 
 struct EndpointState {
@@ -35,39 +37,56 @@ fn main_router() -> impl Handler + 'static {
         let response = state.endpoint()
             .with_solicitor(FnSolicitor(consent_form))
             .to_authorization()
-            .execute(request)?;
-        Ok(response)
+            .execute(request.into())
+            .map_err(|e| {
+                let e: OAuthError = e.into();
+                e.into()
+            })?;
+        Ok(response.into())
     }, "authorization_get");
     router.post("/authorize", move |request: &mut Request| {
         let state = auth_post_state.clone();
         let response = state.endpoint()
             .with_solicitor(FnSolicitor(consent_decision))
             .to_authorization()
-            .execute(request)?;
-        Ok(response)
+            .execute(request.into())
+            .map_err(|e| {
+                let e: OAuthError = e.into();
+                e.into()
+            })?;
+        Ok(response.into())
     }, "authorization_post");
     router.post("/token", move |request: &mut Request| {
         let state = token_state.clone();
         let response = state.endpoint()
             .to_access_token()
-            .execute(request)?;
-        Ok(response)
+            .execute(request.into())
+            .map_err(|e| {
+                let e: OAuthError = e.into();
+                e.into()
+            })?;
+        Ok(response.into())
     }, "token");
     router.get("/", move |request: &mut Request| {
+        let oauth_request: OAuthRequest = request.into();
+
         let state = get_state.clone();
         let protect = state.endpoint()
             .with_scopes(vec!["default-scope".parse().unwrap()])
             .to_resource()
-            .execute(request);
+            .execute(oauth_request);
 
         let _grant = match protect {
             Ok(grant) => grant,
             Err(Ok(mut response)) => {
-                response.headers.set(ContentType::html());
-                response.body = Some(Box::new(EndpointState::DENY_TEXT));
-                return Ok(response)
+                response.set_header(ContentType::html());
+                response.set_body(EndpointState::DENY_TEXT);
+                return Ok(response.into());
             },
-            Err(Err(error)) => return Err(error.into()),
+            Err(Err(error)) => {
+                let error: OAuthError = error.into();
+                return Err(error.into())
+            },
         };
 
         Ok(Response::with((Status::Ok, "Hello, world!")))
@@ -116,7 +135,7 @@ here</a> to begin the authorization process.
     }
 
     /// In larger app, you'd likey wrap it in your own Endpoint instead of `Generic`.
-    pub fn endpoint(&self) -> Generic<impl Registrar + '_, impl Authorizer + '_, impl Issuer + '_, Vacant, Vacant, fn() -> Response> {
+    pub fn endpoint(&self) -> Generic<impl Registrar + '_, impl Authorizer + '_, impl Issuer + '_, Vacant, Vacant, fn() -> OAuthResponse> {
         Generic {
             registrar: self.registrar.lock().unwrap(),
             authorizer: self.authorizer.lock().unwrap(),
@@ -126,21 +145,23 @@ here</a> to begin the authorization process.
             // Scope configured later.
             scopes: Vacant,
             // `iron::Response` is not `Default`, so we choose a constructor.
-            response: Response::new,
+            response: OAuthResponse::new,
         }
     }
 }
 
-fn consent_form(_: &mut &mut Request, grant: &PreGrant) -> OwnerConsent<Response> {
-    let mut response = Response::with(Status::Ok);
-    response.headers.set(ContentType::html());
-    response.body = Some(Box::new(support::consent_page_html("/authorize", grant)));
+fn consent_form(_: &mut OAuthRequest, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+    let mut response = OAuthResponse::new();
+    response.set_status(Status::Ok);
+    response.set_header(ContentType::html());
+    response.set_body(&support::consent_page_html("/authorize", grant));
     OwnerConsent::InProgress(response)
 }
 
-fn consent_decision(request: &mut &mut Request, _: &PreGrant) -> OwnerConsent<Response> {
+fn consent_decision(request: &mut OAuthRequest, _: &PreGrant) -> OwnerConsent<OAuthResponse> {
     // Authenticate the request better in a real app!
-    let allowed = request.url.as_ref()
+    let allowed = request
+        .url()
         .query_pairs()
         .any(|(key, _)| key == "allow");
     if allowed { 

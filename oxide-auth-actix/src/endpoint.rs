@@ -1,9 +1,9 @@
 //! Provides a configurable actor with the functionality of a code grant frontend.
-use endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow};
-use endpoint::{Endpoint, WebRequest};
-use primitives::grant::Grant;
+use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, ResourceFlow};
+use oxide_auth::endpoint::{Endpoint, WebRequest};
+use oxide_auth::primitives::grant::Grant;
 
-use super::actix::{Actor, Context, Handler};
+use actix::{Actor, Context, Handler};
 use super::message::{AccessToken, AuthorizationCode, Resource};
 use super::{AsActor, ResourceProtection};
 
