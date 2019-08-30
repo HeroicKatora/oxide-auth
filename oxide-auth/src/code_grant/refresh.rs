@@ -160,7 +160,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
                 .map_err(|err| match err {
                     RegistrarError::PrimitiveError => Error::Primitive,
                     RegistrarError::Unspecified => Error::unauthorized("basic"),
-                })?;;
+                })?;
         }
     }
 
