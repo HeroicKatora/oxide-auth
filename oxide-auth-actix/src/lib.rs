@@ -4,6 +4,7 @@
 //! `AsActor<_>` to create an actor implementing endpoint functionality via messages.
 #![warn(missing_docs)]
 
+use actix::MailboxError;
 use actix_web::{
     dev::{HttpResponseBuilder, Payload},
     error::BlockingError,
@@ -74,6 +75,9 @@ pub enum WebError {
 
     /// Processing part of the request was canceled
     Canceled,
+
+    /// An actor's mailbox was full
+    Mailbox,
 }
 
 impl OAuthRequest {
@@ -269,6 +273,15 @@ where
     }
 }
 
+impl From<MailboxError> for WebError {
+    fn from(e: MailboxError) -> Self {
+        match e {
+            MailboxError::Closed => WebError::Mailbox,
+            MailboxError::Timeout => WebError::Canceled,
+        }
+    }
+}
+
 impl From<OAuthError> for WebError {
     fn from(e: OAuthError) -> Self {
         WebError::Endpoint(e)
@@ -287,6 +300,7 @@ impl fmt::Display for WebError {
             WebError::Body => write!(f, "No body present"),
             WebError::Authorization => write!(f, "Request has invalid Authorization headers"),
             WebError::Canceled => write!(f, "Operation canceled"),
+            WebError::Mailbox => write!(f, "An actor's mailbox was full"),
         }
     }
 }
@@ -303,6 +317,7 @@ impl error::Error for WebError {
             WebError::Body => "No body present",
             WebError::Authorization => "Request has invalid Authorization headers",
             WebError::Canceled => "Operation canceled",
+            WebError::Mailbox => "An actor's mailbox was full",
         }
     }
 
@@ -316,7 +331,8 @@ impl error::Error for WebError {
             | WebError::Authorization
             | WebError::Query
             | WebError::Body
-            | WebError::Canceled => None,
+            | WebError::Canceled
+            | WebError::Mailbox => None,
         }
     }
 }
