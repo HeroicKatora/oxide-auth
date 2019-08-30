@@ -1,24 +1,13 @@
-use actix::{dev::MessageResponse, Actor, Context, Handler, Message};
-use futures::future::IntoFuture;
+use actix::{Actor, Context, Handler};
 use oxide_auth::{
-    frontends::simple::endpoint::{Generic, Vacant},
+    endpoint::{Endpoint, OAuthError, OwnerSolicitor, Scopes, Template},
     primitives::prelude::{
-        AuthMap, Authorizer, Client, ClientMap, Issuer, RandomGenerator, Registrar, TokenMap,
+        AuthMap, Authorizer, Client, ClientMap, Issuer, RandomGenerator, Registrar, Scope, TokenMap,
     },
 };
+use oxide_auth_actix::{OAuthRequest, OAuthResponse, OxideMessage, OxideOperation, WebError};
 
-pub trait OxideOperation: Sized + 'static {
-    type Item;
-    type Error: std::fmt::Debug;
-    type Future: IntoFuture<Item = Self::Item, Error = Self::Error>
-        + MessageResponse<State, OxideMessage<Self>>;
-
-    fn run(self, state: &mut State) -> Self::Future;
-
-    fn wrap(self) -> OxideMessage<Self> {
-        OxideMessage(self)
-    }
-}
+use crate::AllowedSolicitor;
 
 pub struct State {
     pub registrar: ClientMap,
@@ -26,15 +15,12 @@ pub struct State {
     pub issuer: TokenMap<RandomGenerator>,
 }
 
-pub struct OxideMessage<T>(T)
-where
-    T: OxideOperation;
-
-impl<T> Message for OxideMessage<T>
-where
-    T: OxideOperation + 'static,
-{
-    type Result = Result<T::Item, T::Error>;
+pub struct StateEndpoint<'a> {
+    registrar: &'a mut ClientMap,
+    authorizer: &'a mut AuthMap<RandomGenerator>,
+    issuer: &'a mut TokenMap<RandomGenerator>,
+    solicitor: AllowedSolicitor,
+    scopes: Vec<Scope>,
 }
 
 impl State {
@@ -59,20 +45,50 @@ impl State {
         }
     }
 
-    pub fn endpoint<'a>(
-        &'a mut self,
-    ) -> Generic<impl Registrar + 'a, impl Authorizer + 'a, impl Issuer + 'a> {
-        Generic {
+    pub fn endpoint<'a>(&'a mut self) -> StateEndpoint {
+        StateEndpoint {
             registrar: &mut self.registrar,
             authorizer: &mut self.authorizer,
             issuer: &mut self.issuer,
-            // Solicitor configured later.
-            solicitor: Vacant,
-            // Scope configured later.
-            scopes: Vacant,
-            // `rocket::Response` is `Default`, so we don't need more configuration.
-            response: Vacant,
+            solicitor: AllowedSolicitor,
+            scopes: vec!["default-scope".parse().unwrap()],
         }
+    }
+}
+
+impl<'a> Endpoint<OAuthRequest> for StateEndpoint<'a> {
+    type Error = WebError;
+
+    fn registrar(&self) -> Option<&dyn Registrar> {
+        Some(&self.registrar)
+    }
+
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
+        Some(&mut self.authorizer)
+    }
+
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
+        Some(&mut self.issuer)
+    }
+
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<OAuthRequest>> {
+        Some(&mut self.solicitor)
+    }
+
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<OAuthRequest>> {
+        Some(&mut self.scopes)
+    }
+
+    fn response(&mut self, _: &mut OAuthRequest, _: Template) -> Result<OAuthResponse, WebError> {
+        Ok(OAuthResponse::ok())
+    }
+
+    fn error(&mut self, err: OAuthError) -> WebError {
+        err.into()
+    }
+
+    fn web_error(&mut self, err: WebError) -> WebError {
+        err
     }
 }
 
@@ -83,10 +99,12 @@ impl Actor for State {
 impl<T> Handler<OxideMessage<T>> for State
 where
     T: OxideOperation + 'static,
+    T::Item: 'static,
+    T::Error: 'static,
 {
-    type Result = T::Future;
+    type Result = Result<T::Item, T::Error>;
 
-    fn handle(&mut self, OxideMessage(op): OxideMessage<T>, _: &mut Self::Context) -> T::Future {
-        op.run(self)
+    fn handle(&mut self, msg: OxideMessage<T>, _: &mut Self::Context) -> Self::Result {
+        msg.into_inner().run(self.endpoint())
     }
 }

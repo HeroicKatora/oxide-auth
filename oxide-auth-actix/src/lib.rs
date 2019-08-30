@@ -4,7 +4,7 @@
 //! `AsActor<_>` to create an actor implementing endpoint functionality via messages.
 #![warn(missing_docs)]
 
-use actix::MailboxError;
+use actix::{MailboxError, Message};
 use actix_web::{
     dev::{HttpResponseBuilder, Payload},
     error::BlockingError,
@@ -21,7 +21,7 @@ use actix_web::{
 };
 use futures::Future;
 use oxide_auth::{
-    endpoint::{NormalizedParameter, OAuthError, WebRequest, WebResponse},
+    endpoint::{Endpoint, NormalizedParameter, OAuthError, WebRequest, WebResponse},
     frontends::{
         dev::{Cow, QueryParameter},
         simple::endpoint::Error,
@@ -29,6 +29,36 @@ use oxide_auth::{
 };
 use std::{error, fmt};
 use url::Url;
+
+mod operations;
+
+pub use operations::{Authorize, Refresh, Resource, Token};
+
+/// Describes an operation that can be performed in the presence of an `Endpoint`
+///
+/// This trait can be implemented by any type, but is very useful in Actor scenarios, where an
+/// Actor can provide an endpoint to an operation sent as a message.
+pub trait OxideOperation: Sized + 'static {
+    /// The success-type produced by an OxideOperation
+    type Item: 'static;
+
+    /// The error type produced by an OxideOperation
+    type Error: fmt::Debug + 'static;
+
+    /// Performs the oxide operation with the provided endpoint
+    fn run<E>(self, endpoint: E) -> Result<Self::Item, Self::Error>
+    where
+        E: Endpoint<OAuthRequest>,
+        WebError: From<E::Error>;
+
+    /// Turn an OxideOperation into a Message to send to an actor
+    fn wrap(self) -> OxideMessage<Self> {
+        OxideMessage(self)
+    }
+}
+
+/// A message type to easily send `OxideOperation`s to an actor
+pub struct OxideMessage<T>(T);
 
 #[derive(Clone, Debug)]
 /// Type implementing `WebRequest` as well as `FromRequest` for use in route handlers
@@ -111,6 +141,21 @@ impl OAuthRequest {
             Ok(OAuthRequest { auth, query, body })
         })
     }
+
+    /// Fetch the authorization header from the request
+    pub fn authorization_header(&self) -> Option<&str> {
+        self.auth.as_ref().map(|s| s.as_str())
+    }
+
+    /// Fetch the query for this request
+    pub fn query(&self) -> Option<&NormalizedParameter> {
+        self.query.as_ref()
+    }
+
+    /// Fetch the body of the request
+    pub fn body(&self) -> Option<&NormalizedParameter> {
+        self.body.as_ref()
+    }
 }
 
 impl OAuthResponse {
@@ -134,6 +179,13 @@ impl OAuthResponse {
     pub fn body(mut self, body: &str) -> Self {
         self.body = Some(body.to_owned());
         self
+    }
+}
+
+impl<T> OxideMessage<T> {
+    /// Produce an OxideOperation from a wrapping OxideMessage
+    pub fn into_inner(self) -> T {
+        self.0
     }
 }
 
@@ -200,6 +252,15 @@ impl WebResponse for OAuthResponse {
             .insert(CONTENT_TYPE, HttpTryFrom::try_from("application/json")?);
         Ok(())
     }
+}
+
+impl<T> Message for OxideMessage<T>
+where
+    T: OxideOperation + 'static,
+    T::Item: 'static,
+    T::Error: 'static,
+{
+    type Result = Result<T::Item, T::Error>;
 }
 
 impl FromRequest for OAuthRequest {

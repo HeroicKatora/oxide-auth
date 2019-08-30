@@ -1,18 +1,17 @@
-mod operations;
+mod allowed_solicitor;
 mod state;
 mod support;
 
-use self::{
-    operations::{GetAuthorize, GetResource, PostAuthorize, PostRefresh, PostToken},
-    state::{OxideOperation, State},
-};
+use self::{allowed_solicitor::AllowedSolicitor, state::State};
 
 use std::thread;
 
 use actix::{Actor, Addr};
-use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
+use actix_web::{middleware::Logger, web, App, HttpServer};
 use futures::{future, Future};
-use oxide_auth_actix::{OAuthRequest, OAuthResponse, WebError};
+use oxide_auth_actix::{
+    Authorize, OAuthRequest, OAuthResponse, OxideOperation, Refresh, Resource, Token, WebError,
+};
 
 static DENY_TEXT: &str = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
@@ -42,32 +41,30 @@ pub fn main() {
                 web::resource("/authorize")
                     .route(web::get().to_async(
                         |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                            state.send(GetAuthorize(req).wrap()).map_err(WebError::from)
+                            state.send(Authorize(req).wrap()).map_err(WebError::from)
                         },
                     ))
                     .route(web::post().to_async(
-                        |(r, req, state): (HttpRequest, OAuthRequest, web::Data<Addr<State>>)| {
-                            state
-                                .send(PostAuthorize(req, r.query_string().contains("allow")).wrap())
-                                .map_err(WebError::from)
+                        |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
+                            state.send(Authorize(req).wrap()).map_err(WebError::from)
                         },
                     )),
             )
             .service(web::resource("/token").route(web::post().to_async(
                 |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                    state.send(PostToken(req).wrap()).map_err(WebError::from)
+                    state.send(Token(req).wrap()).map_err(WebError::from)
                 },
             )))
             .service(web::resource("/refresh").route(web::post().to_async(
                 |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                    state.send(PostRefresh(req).wrap()).map_err(WebError::from)
+                    state.send(Refresh(req).wrap()).map_err(WebError::from)
                 },
             )))
             .route(
                 "/",
                 web::get().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
                     state
-                        .send(GetResource(req).wrap())
+                        .send(Resource(req).wrap())
                         .map_err(WebError::from)
                         .and_then(|res| match res {
                             Ok(_grant) => Ok(OAuthResponse::ok()
