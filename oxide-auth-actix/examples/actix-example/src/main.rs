@@ -12,7 +12,6 @@ use std::thread;
 use actix::{Actor, Addr};
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
 use futures::{future, Future};
-use oxide_auth::primitives::prelude::*;
 use oxide_auth_actix::{OAuthRequest, OAuthResponse, WebError};
 
 static DENY_TEXT: &str = "<html>
@@ -22,23 +21,15 @@ here</a> to begin the authorization process.
 </html>
 ";
 
-/// Example of a main function of a rouille server supporting oauth.
+/// Example of a main function of an actix-web server supporting oauth.
 pub fn main() {
     std::env::set_var(
         "RUST_LOG",
         "actix_example=info,actix_web=info,actix_http=info,actix_service=info",
     );
     env_logger::init();
-    let mut sys = actix::System::new("HttpServerClient");
 
-    let mut clients = ClientMap::new();
-    // Register a dummy client instance
-    let client = Client::public(
-        "LocalClient",                                     // Client id
-        "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
-        "default".parse().unwrap(),
-    ); // Allowed client scope
-    clients.register_client(client);
+    let mut sys = actix::System::new("HttpServerClient");
 
     let state = State::preconfigured().start();
 
