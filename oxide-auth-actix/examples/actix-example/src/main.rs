@@ -1,17 +1,22 @@
-mod allowed_solicitor;
-mod state;
 mod support;
 
-use self::{allowed_solicitor::AllowedSolicitor, state::State};
-
-use std::thread;
-
-use actix::{Actor, Addr};
+use actix::{Actor, Addr, Context, Handler};
 use actix_web::{middleware::Logger, web, App, HttpServer};
 use futures::{future, Future};
-use oxide_auth_actix::{
-    Authorize, OAuthRequest, OAuthResponse, OxideOperation, Refresh, Resource, Token, WebError,
+use oxide_auth::{
+    endpoint::{
+        Endpoint, OAuthError, OwnerConsent, OwnerSolicitor, PreGrant, QueryParameter, Scopes,
+        Template,
+    },
+    primitives::prelude::{
+        AuthMap, Authorizer, Client, ClientMap, Issuer, RandomGenerator, Registrar, Scope, TokenMap,
+    },
 };
+use oxide_auth_actix::{
+    Authorize, OAuthRequest, OAuthResponse, OxideMessage, OxideOperation, Refresh, Resource, Token,
+    WebError,
+};
+use std::thread;
 
 static DENY_TEXT: &str = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
@@ -19,6 +24,16 @@ This page should be accessed via an oauth token from the client in the example. 
 here</a> to begin the authorization process.
 </html>
 ";
+
+struct State {
+    registrar: ClientMap,
+    authorizer: AuthMap<RandomGenerator>,
+    issuer: TokenMap<RandomGenerator>,
+    solicitor: AllowedSolicitor,
+    scopes: Vec<Scope>,
+}
+
+struct AllowedSolicitor;
 
 /// Example of a main function of an actix-web server supporting oauth.
 pub fn main() {
@@ -90,4 +105,121 @@ pub fn main() {
 
     // Run the rest of the system.
     let _ = sys.run();
+}
+
+impl State {
+    pub fn preconfigured() -> Self {
+        State {
+            // A registrar with one pre-registered client
+            registrar: vec![Client::public(
+                "LocalClient",
+                "http://localhost:8021/endpoint".parse().unwrap(),
+                "default-scope".parse().unwrap(),
+            )]
+            .into_iter()
+            .collect(),
+            // Authorization tokens are 16 byte random keys to a memory hash map.
+            authorizer: AuthMap::new(RandomGenerator::new(16)),
+            // Bearer tokens are also random generated but 256-bit tokens, since they live longer
+            // and this example is somewhat paranoid.
+            //
+            // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can
+            // be read and parsed by anyone, but not maliciously created. However, they can not be
+            // revoked and thus don't offer even longer lived refresh tokens.
+            issuer: TokenMap::new(RandomGenerator::new(16)),
+
+            // A custom solicitor which bases it's progress, allow, or deny on the query parameters
+            // from the request
+            solicitor: AllowedSolicitor,
+
+            // A single scope that will guard resources for this endpoint
+            scopes: vec!["default-scope".parse().unwrap()],
+        }
+    }
+}
+
+impl Endpoint<OAuthRequest> for State {
+    type Error = WebError;
+
+    fn registrar(&self) -> Option<&dyn Registrar> {
+        Some(&self.registrar)
+    }
+
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
+        Some(&mut self.authorizer)
+    }
+
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
+        Some(&mut self.issuer)
+    }
+
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<OAuthRequest>> {
+        Some(&mut self.solicitor)
+    }
+
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<OAuthRequest>> {
+        Some(&mut self.scopes)
+    }
+
+    fn response(&mut self, _: &mut OAuthRequest, _: Template) -> Result<OAuthResponse, WebError> {
+        Ok(OAuthResponse::ok())
+    }
+
+    fn error(&mut self, err: OAuthError) -> WebError {
+        err.into()
+    }
+
+    fn web_error(&mut self, err: WebError) -> WebError {
+        err
+    }
+}
+
+impl Actor for State {
+    type Context = Context<Self>;
+}
+
+impl<T> Handler<OxideMessage<T>> for State
+where
+    T: OxideOperation + 'static,
+    T::Item: 'static,
+    T::Error: 'static,
+{
+    type Result = Result<T::Item, T::Error>;
+
+    fn handle(&mut self, msg: OxideMessage<T>, _: &mut Self::Context) -> Self::Result {
+        msg.into_inner().run(self)
+    }
+}
+
+impl OwnerSolicitor<OAuthRequest> for AllowedSolicitor {
+    fn check_consent(
+        &mut self,
+        req: &mut OAuthRequest,
+        grant: &PreGrant,
+    ) -> OwnerConsent<OAuthResponse> {
+        // No real user authentication is done here, in production you SHOULD use session keys or equivalent
+        if let Some(query) = req.query() {
+            if let Some(v) = query.unique_value("allow") {
+                if v == "true" {
+                    OwnerConsent::Authorized("dummy user".to_string())
+                } else {
+                    OwnerConsent::Denied
+                }
+            } else if query.unique_value("deny").is_some() {
+                OwnerConsent::Denied
+            } else {
+                progress(grant)
+            }
+        } else {
+            progress(grant)
+        }
+    }
+}
+
+// This will display a page to the user asking for his permission to proceed. The submitted form
+// will then trigger the other authorization handler which actually completes the flow.
+fn progress(grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+    OwnerConsent::InProgress(OAuthResponse::ok().content_type("text/html").unwrap().body(
+        &crate::support::consent_page_html("/authorize".into(), &grant),
+    ))
 }
