@@ -55,7 +55,8 @@ pub fn main() {
             .service(
                 web::resource("/authorize")
                     .route(web::get().to_async(
-                        |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
+                        |(mut req, state): (OAuthRequest, web::Data<Addr<State>>)| {
+                            auth_in_progress(&mut req);
                             state.send(Authorize(req).wrap()).map_err(WebError::from)
                         },
                     ))
@@ -222,4 +223,17 @@ fn progress(grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
     OwnerConsent::InProgress(OAuthResponse::ok().content_type("text/html").unwrap().body(
         &crate::support::consent_page_html("/authorize".into(), &grant),
     ))
+}
+
+// Poison the "allow" and "deny" query parameters to avoid auto-authing on page load
+fn auth_in_progress(req: &mut OAuthRequest) {
+    req.query_mut().map(|q| {
+        if q.unique_value("allow").is_some() {
+            q.insert_or_poison("allow".into(), "".into());
+        }
+
+        if q.unique_value("deny").is_some() {
+            q.insert_or_poison("deny".into(), "".into());
+        }
+    });
 }

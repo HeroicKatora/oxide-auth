@@ -152,6 +152,11 @@ impl OAuthRequest {
         self.query.as_ref()
     }
 
+    /// Fetch the query mutably
+    pub fn query_mut(&mut self) -> Option<&mut NormalizedParameter> {
+        self.query.as_mut()
+    }
+
     /// Fetch the body of the request
     pub fn body(&self) -> Option<&NormalizedParameter> {
         self.body.as_ref()
