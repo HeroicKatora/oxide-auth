@@ -10,15 +10,9 @@ use oxide_auth_actix::{OAuthRequest, OAuthResponse, OxideMessage, OxideOperation
 use crate::AllowedSolicitor;
 
 pub struct State {
-    pub registrar: ClientMap,
-    pub authorizer: AuthMap<RandomGenerator>,
-    pub issuer: TokenMap<RandomGenerator>,
-}
-
-pub struct StateEndpoint<'a> {
-    registrar: &'a mut ClientMap,
-    authorizer: &'a mut AuthMap<RandomGenerator>,
-    issuer: &'a mut TokenMap<RandomGenerator>,
+    registrar: ClientMap,
+    authorizer: AuthMap<RandomGenerator>,
+    issuer: TokenMap<RandomGenerator>,
     solicitor: AllowedSolicitor,
     scopes: Vec<Scope>,
 }
@@ -42,21 +36,18 @@ impl State {
             // be read and parsed by anyone, but not maliciously created. However, they can not be
             // revoked and thus don't offer even longer lived refresh tokens.
             issuer: TokenMap::new(RandomGenerator::new(16)),
-        }
-    }
 
-    pub fn endpoint<'a>(&'a mut self) -> StateEndpoint {
-        StateEndpoint {
-            registrar: &mut self.registrar,
-            authorizer: &mut self.authorizer,
-            issuer: &mut self.issuer,
+            // A custom solicitor which bases it's progress, allow, or deny on the query parameters
+            // from the request
             solicitor: AllowedSolicitor,
+
+            // A single scope that will guard resources for this endpoint
             scopes: vec!["default-scope".parse().unwrap()],
         }
     }
 }
 
-impl<'a> Endpoint<OAuthRequest> for StateEndpoint<'a> {
+impl Endpoint<OAuthRequest> for State {
     type Error = WebError;
 
     fn registrar(&self) -> Option<&dyn Registrar> {
@@ -105,6 +96,6 @@ where
     type Result = Result<T::Item, T::Error>;
 
     fn handle(&mut self, msg: OxideMessage<T>, _: &mut Self::Context) -> Self::Result {
-        msg.into_inner().run(self.endpoint())
+        msg.into_inner().run(self)
     }
 }
