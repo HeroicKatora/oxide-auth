@@ -66,16 +66,18 @@ pub fn main() {
                         },
                     )),
             )
-            .service(web::resource("/token").route(web::post().to_async(
-                |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
+            .route(
+                "/token",
+                web::post().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
                     state.send(Token(req).wrap()).map_err(WebError::from)
-                },
-            )))
-            .service(web::resource("/refresh").route(web::post().to_async(
-                |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
+                }),
+            )
+            .route(
+                "/refresh",
+                web::post().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
                     state.send(Refresh(req).wrap()).map_err(WebError::from)
-                },
-            )))
+                }),
+            )
             .route(
                 "/",
                 web::get().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
