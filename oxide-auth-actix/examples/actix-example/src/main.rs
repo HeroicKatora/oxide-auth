@@ -13,8 +13,8 @@ use oxide_auth::{
     },
 };
 use oxide_auth_actix::{
-    Authorize, OAuthRequest, OAuthResponse, OxideMessage, OxideOperation, Refresh, Resource, Token,
-    WebError,
+    Authorize, OAuthRequest, OAuthResource, OAuthResponse, OxideMessage, OxideOperation, Refresh,
+    Resource, Token, WebError,
 };
 use std::thread;
 
@@ -80,9 +80,9 @@ pub fn main() {
             )
             .route(
                 "/",
-                web::get().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
+                web::get().to_async(|(req, state): (OAuthResource, web::Data<Addr<State>>)| {
                     state
-                        .send(Resource(req).wrap())
+                        .send(Resource(req.into_request()).wrap())
                         .map_err(WebError::from)
                         .and_then(|res| match res {
                             Ok(_grant) => Ok(OAuthResponse::ok()

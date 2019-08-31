@@ -62,10 +62,21 @@ pub struct OxideMessage<T>(T);
 
 #[derive(Clone, Debug)]
 /// Type implementing `WebRequest` as well as `FromRequest` for use in route handlers
+///
+/// This type consumes the body of the HttpRequest upon extraction, so be careful not to use it in
+/// places you also expect an application payload
 pub struct OAuthRequest {
     auth: Option<String>,
     query: Option<NormalizedParameter>,
     body: Option<NormalizedParameter>,
+}
+
+/// Type implementing `WebRequest` as well as `FromRequest` for use in guarding resources
+///
+/// This is useful over [OAuthRequest] since [OAuthResource] doesn't consume the body of the
+/// request upon extraction
+pub struct OAuthResource {
+    auth: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -160,6 +171,31 @@ impl OAuthRequest {
     /// Fetch the body of the request
     pub fn body(&self) -> Option<&NormalizedParameter> {
         self.body.as_ref()
+    }
+}
+
+impl OAuthResource {
+    /// Create a new OAuthResource from an HttpRequest
+    pub fn new(req: &HttpRequest) -> Result<Self, WebError> {
+        let mut all_auth = req.headers().get_all(AUTHORIZATION);
+        let optional = all_auth.next();
+
+        let auth = if let Some(_) = all_auth.next() {
+            return Err(WebError::Authorization);
+        } else {
+            optional.and_then(|hv| hv.to_str().ok().map(str::to_owned))
+        };
+
+        Ok(OAuthResource { auth })
+    }
+
+    /// Turn this OAuthResource into an OAuthRequest for processing
+    pub fn into_request(self) -> OAuthRequest {
+        OAuthRequest {
+            query: None,
+            body: None,
+            auth: self.auth,
+        }
     }
 }
 
@@ -278,6 +314,16 @@ impl FromRequest for OAuthRequest {
     }
 }
 
+impl FromRequest for OAuthResource {
+    type Error = WebError;
+    type Future = Result<Self, Self::Error>;
+    type Config = ();
+
+    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
+        Self::new(req)
+    }
+}
+
 impl Responder for OAuthResponse {
     type Error = WebError;
     type Future = Result<HttpResponse, Self::Error>;
@@ -293,6 +339,12 @@ impl Responder for OAuthResponse {
         } else {
             Ok(builder.finish())
         }
+    }
+}
+
+impl From<OAuthResource> for OAuthRequest {
+    fn from(o: OAuthResource) -> Self {
+        o.into_request()
     }
 }
 
