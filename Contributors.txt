@@ -3,3 +3,4 @@
 # Format: Foo Bar <optional mail address> (comment e.g. company affiliation)
 HeroicKatora <andreas.molzer@gmx.de> (initial author)
 ParisLiakos (Paris Liakos, gotham frontend)
+asonix <asonix@asonix.dog> (actix 1.0 update)
