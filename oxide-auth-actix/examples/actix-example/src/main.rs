@@ -218,17 +218,13 @@ impl Actor for State {
     type Context = Context<Self>;
 }
 
-impl<Operation> Handler<OAuthMessage<Operation, Extras>> for State
+impl<Op> Handler<OAuthMessage<Op, Extras>> for State
 where
-    Operation: OAuthOperation,
+    Op: OAuthOperation,
 {
-    type Result = Result<Operation::Item, Operation::Error>;
+    type Result = Result<Op::Item, Op::Error>;
 
-    fn handle(
-        &mut self,
-        msg: OAuthMessage<Operation, Extras>,
-        _: &mut Self::Context,
-    ) -> Self::Result {
+    fn handle(&mut self, msg: OAuthMessage<Op, Extras>, _: &mut Self::Context) -> Self::Result {
         let (op, ex) = msg.into_inner();
 
         if let Some(solicitor) = ex {
