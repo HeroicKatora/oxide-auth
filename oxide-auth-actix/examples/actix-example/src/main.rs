@@ -220,7 +220,7 @@ impl Actor for State {
 
 impl<Operation> Handler<OAuthMessage<Operation, Extras>> for State
 where
-    Operation: OAuthOperation + 'static,
+    Operation: OAuthOperation,
 {
     type Result = Result<Operation::Item, Operation::Error>;
 
