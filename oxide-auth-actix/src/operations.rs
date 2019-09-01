@@ -1,4 +1,4 @@
-use crate::{OAuthRequest, OAuthResponse, OxideOperation, WebError};
+use crate::{OAuthRequest, OAuthResponse, OAuthOperation, WebError};
 use oxide_auth::{
     endpoint::{AccessTokenFlow, AuthorizationFlow, Endpoint, RefreshFlow, ResourceFlow},
     primitives::grant::Grant,
@@ -7,7 +7,7 @@ use oxide_auth::{
 /// Authorization-related operations
 pub struct Authorize(pub OAuthRequest);
 
-impl OxideOperation for Authorize {
+impl OAuthOperation for Authorize {
     type Item = OAuthResponse;
     type Error = WebError;
 
@@ -25,7 +25,7 @@ impl OxideOperation for Authorize {
 /// Token-related operations
 pub struct Token(pub OAuthRequest);
 
-impl OxideOperation for Token {
+impl OAuthOperation for Token {
     type Item = OAuthResponse;
     type Error = WebError;
 
@@ -43,7 +43,7 @@ impl OxideOperation for Token {
 /// Refresh-related operations
 pub struct Refresh(pub OAuthRequest);
 
-impl OxideOperation for Refresh {
+impl OAuthOperation for Refresh {
     type Item = OAuthResponse;
     type Error = WebError;
 
@@ -61,7 +61,7 @@ impl OxideOperation for Refresh {
 /// Resource-related operations
 pub struct Resource(pub OAuthRequest);
 
-impl OxideOperation for Resource {
+impl OAuthOperation for Resource {
     type Item = Grant;
     type Error = Result<OAuthResponse, WebError>;
 

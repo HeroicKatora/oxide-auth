@@ -38,11 +38,11 @@ pub use operations::{Authorize, Refresh, Resource, Token};
 ///
 /// This trait can be implemented by any type, but is very useful in Actor scenarios, where an
 /// Actor can provide an endpoint to an operation sent as a message.
-pub trait OxideOperation: Sized + 'static {
-    /// The success-type produced by an OxideOperation
+pub trait OAuthOperation: Sized + 'static {
+    /// The success-type produced by an OAuthOperation
     type Item: 'static;
 
-    /// The error type produced by an OxideOperation
+    /// The error type produced by an OAuthOperation
     type Error: fmt::Debug + 'static;
 
     /// Performs the oxide operation with the provided endpoint
@@ -51,14 +51,14 @@ pub trait OxideOperation: Sized + 'static {
         E: Endpoint<OAuthRequest>,
         WebError: From<E::Error>;
 
-    /// Turn an OxideOperation into a Message to send to an actor
-    fn wrap(self) -> OxideMessage<Self> {
-        OxideMessage(self)
+    /// Turn an OAuthOperation into a Message to send to an actor
+    fn wrap<Extras>(self, extras: Extras) -> OAuthMessage<Self, Extras> {
+        OAuthMessage(self, extras)
     }
 }
 
-/// A message type to easily send `OxideOperation`s to an actor
-pub struct OxideMessage<T>(T);
+/// A message type to easily send `OAuthOperation`s to an actor
+pub struct OAuthMessage<Operation, Extras>(Operation, Extras);
 
 #[derive(Clone, Debug)]
 /// Type implementing `WebRequest` as well as `FromRequest` for use in route handlers
@@ -223,10 +223,10 @@ impl OAuthResponse {
     }
 }
 
-impl<T> OxideMessage<T> {
-    /// Produce an OxideOperation from a wrapping OxideMessage
-    pub fn into_inner(self) -> T {
-        self.0
+impl<Operation, Extras> OAuthMessage<Operation, Extras> {
+    /// Produce an OAuthOperation from a wrapping OAuthMessage
+    pub fn into_inner(self) -> (Operation, Extras) {
+        (self.0, self.1)
     }
 }
 
@@ -295,13 +295,11 @@ impl WebResponse for OAuthResponse {
     }
 }
 
-impl<T> Message for OxideMessage<T>
+impl<Operation, Extras> Message for OAuthMessage<Operation, Extras>
 where
-    T: OxideOperation + 'static,
-    T::Item: 'static,
-    T::Error: 'static,
+    Operation: OAuthOperation + 'static,
 {
-    type Result = Result<T::Item, T::Error>;
+    type Result = Result<Operation::Item, Operation::Error>;
 }
 
 impl FromRequest for OAuthRequest {
