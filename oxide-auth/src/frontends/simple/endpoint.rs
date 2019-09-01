@@ -17,6 +17,8 @@ use endpoint::{Endpoint, OAuthError, PreGrant, Template, Scopes};
 use endpoint::{OwnerConsent, OwnerSolicitor};
 use endpoint::WebRequest;
 
+use std::marker::PhantomData;
+
 /// Errors either caused by the underlying web types or the library.
 #[derive(Debug)]
 pub enum Error<W: WebRequest> {
@@ -113,6 +115,17 @@ pub struct Generic<R, A, I, S=Vacant, C=Vacant, L=Vacant> {
     /// Creates responses, or `Vacant` if `Default::default` is applicable.
     pub response: L,
 }
+
+/// A simple wrapper around an Endpoint to change it's error type into anything `Into`-able.
+pub struct ErrorInto<E, Error>(E, PhantomData<Error>);
+
+impl<E, Error> ErrorInto<E, Error> {
+    /// Create a new ErrorInto wrapping the supplied endpoint.
+    pub fn new(endpoint: E) -> Self {
+        ErrorInto(endpoint, PhantomData)
+    }
+}
+
 
 /// Marker struct if some primitive is not provided.
 ///
@@ -456,6 +469,47 @@ impl<W: WebRequest> Error<W> {
             Error::Web(err) => err.into(),
             Error::OAuth(oauth) => oauth.into(),
         }
+    }
+}
+
+impl<E, Error, W> Endpoint<W> for ErrorInto<E, Error>
+where
+    E: Endpoint<W>,
+    E::Error: Into<Error>,
+    W: WebRequest,
+{
+    type Error = Error;
+
+    fn registrar(&self) -> Option<&dyn Registrar> {
+        self.0.registrar()
+    }
+
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
+        self.0.authorizer_mut()
+    }
+
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
+        self.0.issuer_mut()
+    }
+
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<W>> {
+        self.0.owner_solicitor()
+    }
+
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<W>> {
+        self.0.scopes()
+    }
+
+    fn response(&mut self, request: &mut W, kind: Template) -> Result<W::Response, Self::Error> {
+        self.0.response(request, kind).map_err(Into::into)
+    }
+
+    fn error(&mut self, err: OAuthError) -> Self::Error {
+        self.0.error(err).into()
+    }
+
+    fn web_error(&mut self, err: W::Error) -> Self::Error {
+        self.0.web_error(err).into()
     }
 }
 
