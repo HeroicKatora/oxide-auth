@@ -38,6 +38,59 @@ pub use operations::{Authorize, Refresh, Resource, Token};
 ///
 /// This trait can be implemented by any type, but is very useful in Actor scenarios, where an
 /// Actor can provide an endpoint to an operation sent as a message.
+///
+/// Here's how any Endpoint type can be turned into an Actor that responds to OAuthMessages:
+/// ```rust,ignore
+/// use actix::{Actor, Context, Handler};
+/// use oxide_auth::endpoint::Endpoint;
+/// use oxide_auth_actix::OAuthOperation;
+///
+/// pub struct MyEndpoint {
+///     // Define your endpoint...
+/// }
+///
+/// impl Endpoint<OAuthRequest> for MyEndpoint {
+///     // Implement your endpoint...
+/// }
+///
+/// // Implement Actor
+/// impl Actor for MyEndpoint {
+///     type Context = Context<Self>;
+/// }
+///
+/// // Handle incoming OAuthMessages
+/// impl<Op, Ext> Handler<OAuthMessage<Op, Ext>> for MyEndpoint
+/// where
+///     Op: OAuthOperation,
+/// {
+///     type Result = Result<Op::Item, Op::Error>;
+///
+///     fn handle(&mut self, msg: OAuthMessage<Op, Ext>, _: &mut Self::Context) -> Self::Result {
+///         let (op, _) = msg.into_inner();
+///
+///         op.run(self)
+///     }
+/// }
+/// ```
+///
+/// By additionally specifying a type for Extras, more advanced patterns can be used
+/// ```rust,ignore
+/// type Ext = Option<MyCustomSolicitor>;
+///
+/// // Handle incoming OAuthMessages
+/// impl<Op> Handler<OAuthMessage<Op, Ext>> for MyEndpoint
+/// where
+///     Op: OAuthOperation,
+/// {
+///     type Result = Result<Op::Item, Op::Error>;
+///
+///     fn handle(&mut self, msg: OAuthMessage<Op, Ext>, _: &mut Self::Context) -> Self::Result {
+///         let (op, ext) = msg.into_inner();
+///
+///         op.run(self.with_my_custom_solicitor(ext))
+///     }
+/// }
+/// ```
 pub trait OAuthOperation: Sized + 'static {
     /// The success-type produced by an OAuthOperation
     type Item: 'static;
