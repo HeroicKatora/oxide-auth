@@ -9,10 +9,7 @@ use actix_web::{
     dev::{HttpResponseBuilder, Payload},
     error::BlockingError,
     http::{
-        header::{
-            HeaderMap, InvalidHeaderValue, InvalidHeaderValueBytes, AUTHORIZATION, CONTENT_TYPE,
-            LOCATION, WWW_AUTHENTICATE,
-        },
+        header::{self, HeaderMap, InvalidHeaderValue, InvalidHeaderValueBytes},
         HttpTryFrom, StatusCode,
     },
     web::Form,
@@ -192,7 +189,7 @@ impl OAuthRequest {
                 .ok()
                 .map(|q: Query<NormalizedParameter>| q.into_inner());
 
-            let mut all_auth = req.headers().get_all(AUTHORIZATION);
+            let mut all_auth = req.headers().get_all(header::AUTHORIZATION);
             let optional = all_auth.next();
 
             let auth = if let Some(_) = all_auth.next() {
@@ -229,7 +226,7 @@ impl OAuthRequest {
 impl OAuthResource {
     /// Create a new OAuthResource from an HttpRequest
     pub fn new(req: &HttpRequest) -> Result<Self, WebError> {
-        let mut all_auth = req.headers().get_all(AUTHORIZATION);
+        let mut all_auth = req.headers().get_all(header::AUTHORIZATION);
         let optional = all_auth.next();
 
         let auth = if let Some(_) = all_auth.next() {
@@ -264,7 +261,7 @@ impl OAuthResponse {
     /// Set the `ContentType` header on a response
     pub fn content_type(mut self, content_type: &str) -> Result<Self, WebError> {
         self.headers
-            .insert(CONTENT_TYPE, HttpTryFrom::try_from(content_type)?);
+            .insert(header::CONTENT_TYPE, HttpTryFrom::try_from(content_type)?);
         Ok(self)
     }
 
@@ -316,7 +313,7 @@ impl WebResponse for OAuthResponse {
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.status = StatusCode::FOUND;
         self.headers
-            .insert(LOCATION, HttpTryFrom::try_from(url.into_string())?);
+            .insert(header::LOCATION, HttpTryFrom::try_from(url.into_string())?);
         Ok(())
     }
 
@@ -328,21 +325,23 @@ impl WebResponse for OAuthResponse {
     fn unauthorized(&mut self, kind: &str) -> Result<(), Self::Error> {
         self.status = StatusCode::UNAUTHORIZED;
         self.headers
-            .insert(WWW_AUTHENTICATE, HttpTryFrom::try_from(kind)?);
+            .insert(header::WWW_AUTHENTICATE, HttpTryFrom::try_from(kind)?);
         Ok(())
     }
 
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
         self.body = Some(text.to_owned());
         self.headers
-            .insert(CONTENT_TYPE, HttpTryFrom::try_from("text/plain")?);
+            .insert(header::CONTENT_TYPE, HttpTryFrom::try_from("text/plain")?);
         Ok(())
     }
 
     fn body_json(&mut self, json: &str) -> Result<(), Self::Error> {
         self.body = Some(json.to_owned());
-        self.headers
-            .insert(CONTENT_TYPE, HttpTryFrom::try_from("application/json")?);
+        self.headers.insert(
+            header::CONTENT_TYPE,
+            HttpTryFrom::try_from("application/json")?,
+        );
         Ok(())
     }
 }
