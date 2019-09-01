@@ -59,6 +59,9 @@ pub fn main() {
                 web::resource("/authorize")
                     .route(web::get().to_async(
                         |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
+                            // GET requests should not mutate server state and are extremely
+                            // vulnerable accidental repetition as well as Cross-Site Request
+                            // Forgery (CSRF).
                             state
                                 .send(Authorize(req).wrap(Extras::AuthGet))
                                 .map_err(WebError::from)
