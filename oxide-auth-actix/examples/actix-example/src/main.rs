@@ -4,11 +4,9 @@ use actix::{Actor, Addr, Context, Handler};
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
 use futures::{future, Future};
 use oxide_auth::{
-    endpoint::{Endpoint, OAuthError, OwnerConsent, OwnerSolicitor, PreGrant, Scopes, Template},
-    frontends::simple::endpoint::{EndpointErrorMapper, FnSolicitor, Generic},
-    primitives::prelude::{
-        AuthMap, Authorizer, Client, ClientMap, Issuer, RandomGenerator, Registrar, Scope, TokenMap,
-    },
+    endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
+    frontends::simple::endpoint::{FnSolicitor, Generic, MapErr, Vacant},
+    primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
 };
 use oxide_auth_actix::{
     Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResource, OAuthResponse, Refresh,
@@ -24,13 +22,21 @@ here</a> to begin the authorization process.
 ";
 
 struct State {
-    registrar: ClientMap,
-    authorizer: AuthMap<RandomGenerator>,
-    issuer: TokenMap<RandomGenerator>,
-    scopes: Vec<Scope>,
+    endpoint: Generic<
+        ClientMap,
+        AuthMap<RandomGenerator>,
+        TokenMap<RandomGenerator>,
+        Vacant,
+        Vec<Scope>,
+        fn() -> OAuthResponse,
+    >,
 }
 
-type Extras = Option<Box<dyn OwnerSolicitor<OAuthRequest> + Send + 'static>>;
+enum Extras {
+    AuthGet,
+    AuthPost(String),
+    Nothing,
+}
 
 /// Example of a main function of an actix-web server supporting oauth.
 pub fn main() {
@@ -54,38 +60,18 @@ pub fn main() {
                     .route(web::get().to_async(
                         |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
                             state
-                                .send(Authorize(req).wrap(Some(Box::new(FnSolicitor(
-                                    move |_req: &mut OAuthRequest, pre_grant: &PreGrant| {
-                                        // This will display a page to the user asking for his permission to proceed. The submitted form
-                                        // will then trigger the other authorization handler which actually completes the flow.
-                                        OwnerConsent::InProgress(
-                                            OAuthResponse::ok()
-                                                .content_type("text/html")
-                                                .unwrap()
-                                                .body(&crate::support::consent_page_html(
-                                                    "/authorize".into(),
-                                                    pre_grant,
-                                                )),
-                                        )
-                                    },
-                                )))))
+                                .send(Authorize(req).wrap(Extras::AuthGet))
                                 .map_err(WebError::from)
                         },
                     ))
                     .route(web::post().to_async(
                         |(r, req, state): (HttpRequest, OAuthRequest, web::Data<Addr<State>>)| {
                             // Some authentication should be performed here in production cases
-                            let query_string = r.query_string().to_owned();
                             state
-                                .send(Authorize(req).wrap(Some(Box::new(FnSolicitor(
-                                    move |_: &mut OAuthRequest, _pre_grant: &PreGrant| {
-                                        if query_string.contains("allow") {
-                                            OwnerConsent::Authorized("dummy user".to_owned())
-                                        } else {
-                                            OwnerConsent::Denied
-                                        }
-                                    },
-                                )))))
+                                .send(
+                                    Authorize(req)
+                                        .wrap(Extras::AuthPost(r.query_string().to_owned())),
+                                )
                                 .map_err(WebError::from)
                         },
                     )),
@@ -93,20 +79,24 @@ pub fn main() {
             .route(
                 "/token",
                 web::post().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                    state.send(Token(req).wrap(None)).map_err(WebError::from)
+                    state
+                        .send(Token(req).wrap(Extras::Nothing))
+                        .map_err(WebError::from)
                 }),
             )
             .route(
                 "/refresh",
                 web::post().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                    state.send(Refresh(req).wrap(None)).map_err(WebError::from)
+                    state
+                        .send(Refresh(req).wrap(Extras::Nothing))
+                        .map_err(WebError::from)
                 }),
             )
             .route(
                 "/",
                 web::get().to_async(|(req, state): (OAuthResource, web::Data<Addr<State>>)| {
                     state
-                        .send(Resource(req.into_request()).wrap(None))
+                        .send(Resource(req.into_request()).wrap(Extras::Nothing))
                         .map_err(WebError::from)
                         .and_then(|res| match res {
                             Ok(_grant) => Ok(OAuthResponse::ok()
@@ -137,26 +127,32 @@ pub fn main() {
 impl State {
     pub fn preconfigured() -> Self {
         State {
-            // A registrar with one pre-registered client
-            registrar: vec![Client::public(
-                "LocalClient",
-                "http://localhost:8021/endpoint".parse().unwrap(),
-                "default-scope".parse().unwrap(),
-            )]
-            .into_iter()
-            .collect(),
-            // Authorization tokens are 16 byte random keys to a memory hash map.
-            authorizer: AuthMap::new(RandomGenerator::new(16)),
-            // Bearer tokens are also random generated but 256-bit tokens, since they live longer
-            // and this example is somewhat paranoid.
-            //
-            // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can
-            // be read and parsed by anyone, but not maliciously created. However, they can not be
-            // revoked and thus don't offer even longer lived refresh tokens.
-            issuer: TokenMap::new(RandomGenerator::new(16)),
+            endpoint: Generic {
+                // A registrar with one pre-registered client
+                registrar: vec![Client::public(
+                    "LocalClient",
+                    "http://localhost:8021/endpoint".parse().unwrap(),
+                    "default-scope".parse().unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+                // Authorization tokens are 16 byte random keys to a memory hash map.
+                authorizer: AuthMap::new(RandomGenerator::new(16)),
+                // Bearer tokens are also random generated but 256-bit tokens, since they live longer
+                // and this example is somewhat paranoid.
+                //
+                // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can
+                // be read and parsed by anyone, but not maliciously created. However, they can not be
+                // revoked and thus don't offer even longer lived refresh tokens.
+                issuer: TokenMap::new(RandomGenerator::new(16)),
 
-            // A single scope that will guard resources for this endpoint
-            scopes: vec!["default-scope".parse().unwrap()],
+                solicitor: Vacant,
+
+                // A single scope that will guard resources for this endpoint
+                scopes: vec!["default-scope".parse().unwrap()],
+
+                response: OAuthResponse::ok,
+            },
         }
     }
 
@@ -167,50 +163,14 @@ impl State {
     where
         S: OwnerSolicitor<OAuthRequest> + 'static,
     {
-        EndpointErrorMapper::new(Generic {
-            authorizer: &mut self.authorizer,
-            registrar: &mut self.registrar,
-            issuer: &mut self.issuer,
+        MapErr::new(Generic {
+            authorizer: &mut self.endpoint.authorizer,
+            registrar: &mut self.endpoint.registrar,
+            issuer: &mut self.endpoint.issuer,
             solicitor,
-            scopes: self.scopes.clone(),
+            scopes: &mut self.endpoint.scopes,
             response: OAuthResponse::ok,
         })
-    }
-}
-
-impl Endpoint<OAuthRequest> for State {
-    type Error = WebError;
-
-    fn registrar(&self) -> Option<&dyn Registrar> {
-        Some(&self.registrar)
-    }
-
-    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
-        Some(&mut self.authorizer)
-    }
-
-    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
-        Some(&mut self.issuer)
-    }
-
-    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<OAuthRequest>> {
-        None
-    }
-
-    fn scopes(&mut self) -> Option<&mut dyn Scopes<OAuthRequest>> {
-        Some(&mut self.scopes)
-    }
-
-    fn response(&mut self, _: &mut OAuthRequest, _: Template) -> Result<OAuthResponse, WebError> {
-        Ok(OAuthResponse::ok())
-    }
-
-    fn error(&mut self, err: OAuthError) -> WebError {
-        err.into()
-    }
-
-    fn web_error(&mut self, err: WebError) -> WebError {
-        err
     }
 }
 
@@ -227,10 +187,32 @@ where
     fn handle(&mut self, msg: OAuthMessage<Op, Extras>, _: &mut Self::Context) -> Self::Result {
         let (op, ex) = msg.into_inner();
 
-        if let Some(solicitor) = ex {
-            op.run(self.with_solicitor(solicitor))
-        } else {
-            op.run(self)
+        match ex {
+            Extras::AuthGet => {
+                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, pre_grant: &PreGrant| {
+                    // This will display a page to the user asking for his permission to proceed. The submitted form
+                    // will then trigger the other authorization handler which actually completes the flow.
+                    OwnerConsent::InProgress(
+                        OAuthResponse::ok().content_type("text/html").unwrap().body(
+                            &crate::support::consent_page_html("/authorize".into(), pre_grant),
+                        ),
+                    )
+                });
+
+                op.run(self.with_solicitor(solicitor))
+            }
+            Extras::AuthPost(query_string) => {
+                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, _: &PreGrant| {
+                    if query_string.contains("allow") {
+                        OwnerConsent::Authorized("dummy user".to_owned())
+                    } else {
+                        OwnerConsent::Denied
+                    }
+                });
+
+                op.run(self.with_solicitor(solicitor))
+            }
+            _ => op.run(&mut self.endpoint),
         }
     }
 }
