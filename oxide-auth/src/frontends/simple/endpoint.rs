@@ -117,12 +117,12 @@ pub struct Generic<R, A, I, S=Vacant, C=Vacant, L=Vacant> {
 }
 
 /// A simple wrapper around an Endpoint to change it's error type into anything `Into`-able.
-pub struct MapErr<E, Error>(E, PhantomData<Error>);
+pub struct ErrorInto<E, Error>(E, PhantomData<Error>);
 
-impl<E, Error> MapErr<E, Error> {
-    /// Create a new MapErr wrapping the supplied endpoint.
+impl<E, Error> ErrorInto<E, Error> {
+    /// Create a new ErrorInto wrapping the supplied endpoint.
     pub fn new(endpoint: E) -> Self {
-        MapErr(endpoint, PhantomData)
+        ErrorInto(endpoint, PhantomData)
     }
 }
 
@@ -472,7 +472,7 @@ impl<W: WebRequest> Error<W> {
     }
 }
 
-impl<E, Error, W> Endpoint<W> for MapErr<E, Error>
+impl<E, Error, W> Endpoint<W> for ErrorInto<E, Error>
 where
     E: Endpoint<W>,
     E::Error: Into<Error>,

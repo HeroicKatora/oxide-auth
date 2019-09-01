@@ -5,7 +5,7 @@ use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
 use futures::{future, Future};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
-    frontends::simple::endpoint::{FnSolicitor, Generic, MapErr, Vacant},
+    frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
     primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
 };
 use oxide_auth_actix::{
@@ -163,7 +163,7 @@ impl State {
     where
         S: OwnerSolicitor<OAuthRequest> + 'static,
     {
-        MapErr::new(Generic {
+        ErrorInto::new(Generic {
             authorizer: &mut self.endpoint.authorizer,
             registrar: &mut self.endpoint.registrar,
             issuer: &mut self.endpoint.issuer,
