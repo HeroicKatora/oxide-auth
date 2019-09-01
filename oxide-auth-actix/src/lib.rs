@@ -21,13 +21,12 @@ use actix_web::{
 };
 use futures::Future;
 use oxide_auth::{
-    endpoint::{Endpoint, NormalizedParameter, OAuthError, WebRequest, WebResponse},
-    frontends::{
-        dev::{Cow, QueryParameter},
-        simple::endpoint::Error,
+    endpoint::{
+        Endpoint, NormalizedParameter, OAuthError, QueryParameter, WebRequest, WebResponse,
     },
+    frontends::simple::endpoint::Error,
 };
-use std::{error, fmt};
+use std::{borrow::Cow, error, fmt};
 use url::Url;
 
 mod operations;
