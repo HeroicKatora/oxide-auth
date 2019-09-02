@@ -10,6 +10,7 @@ use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::{Extend, FromIterator};
+use std::num::NonZeroU32;
 use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::rc::Rc;
 
@@ -283,7 +284,7 @@ pub trait PasswordPolicy: Send + Sync {
 pub struct Pbkdf2 {
     /// A prebuilt random, or constructing one as needed.
     random: Option<SystemRandom>,
-    iterations: u32,
+    iterations: NonZeroU32,
 }
 
 impl Default for Pbkdf2 {
@@ -319,7 +320,7 @@ impl Pbkdf2 {
     /// This function will panic when the `strength` is larger or equal to `32`.
     pub fn set_relative_strength(&mut self, strength: u8) {
         assert!(strength < 32, "Strength value out of range (0-31): {}", strength);
-        self.iterations = 1u32 << strength;
+        self.iterations = NonZeroU32::new(1u32 << strength).unwrap();
     }
 
     fn salt(&self, user_identifier: &[u8]) -> Vec<u8> {
@@ -344,7 +345,7 @@ impl Pbkdf2 {
 // could get rid of the `Option`.
 static PBKDF2_DEFAULTS: &Pbkdf2 = &Pbkdf2 {
     random: None,
-    iterations: (1 << 16),
+    iterations: unsafe { NonZeroU32::new_unchecked(1 << 16) },
 };
 
 impl PasswordPolicy for Pbkdf2 {
@@ -353,7 +354,7 @@ impl PasswordPolicy for Pbkdf2 {
         output.append(&mut self.salt(client_id.as_bytes()));
         {
             let (output, salt) = output.split_at_mut(64);
-            pbkdf2::derive(&digest::SHA256, self.iterations, salt, passphrase,
+            pbkdf2::derive(&digest::SHA256, self.iterations.into(), salt, passphrase,
                 output);
         }
         output
@@ -367,7 +368,7 @@ impl PasswordPolicy for Pbkdf2 {
         }
 
         let (verifier, salt) = stored.split_at(64);
-        pbkdf2::verify(&digest::SHA256, self.iterations, salt, passphrase, verifier)
+        pbkdf2::verify(&digest::SHA256, self.iterations.into(), salt, passphrase, verifier)
     }
 }
 
