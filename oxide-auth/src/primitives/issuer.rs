@@ -24,9 +24,7 @@ pub trait Issuer {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()>;
 
     /// Refresh a token.
-    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
-        Err(())
-    }
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()>;
 
     /// Get the values corresponding to a bearer token
     fn recover_token<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
@@ -481,6 +479,10 @@ impl Issuer for TokenSigner {
         (&mut&*self).issue(grant)
     }
 
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
+        Err(())
+    }
+
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (&&*self).recover_token(token)
     }
@@ -501,6 +503,10 @@ impl<'a> Issuer for &'a TokenSigner {
         } else {
             self.unrefreshable_token(&grant)
         }
+    }
+
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
+        Err(())
     }
 
     fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
