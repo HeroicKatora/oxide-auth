@@ -116,7 +116,7 @@ pub mod tests {
     use super::*;
     use chrono::Utc;
     use primitives::grant::Extensions;
-    use primitives::generator::{Assertion, RandomGenerator};
+    use primitives::generator::{Assertion, AssertionKind, RandomGenerator};
 
     /// Tests some invariants that should be upheld by all authorizers.
     ///
@@ -160,12 +160,10 @@ pub mod tests {
 
     #[test]
     fn signing_test_suite() {
-        use ring::hmac::SigningKey;
-        use ring::digest::SHA256;
-
-        let assertion_token_instance = Assertion::new(
-            SigningKey::new(&SHA256, b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s="));
-        let mut storage = AuthMap::new(assertion_token_instance);
+        let assertion = Assertion::new(
+            AssertionKind::HmacSha256, 
+            b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s=");
+        let mut storage = AuthMap::new(assertion);
         simple_test_suite(&mut storage);
     }
 

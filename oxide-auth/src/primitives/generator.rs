@@ -83,6 +83,17 @@ pub struct Assertion {
     secret: SigningKey,
 }
 
+/// The cryptographic suite ensuring integrity of tokens.
+pub enum AssertionKind {
+    /// Uses [HMAC (RFC 2104)][HMAC] with [SHA-256 (FIPS 180-4)][SHA256] hash.
+    ///
+    /// [HMAC]: https://tools.ietf.org/html/rfc2104
+    /// [SHA256]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf
+    HmacSha256,
+    #[doc(hidden)]
+    __NonExhaustive,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SerdeAssertionGrant {
     /// Identifies the owner of the resource.
@@ -115,14 +126,23 @@ struct AssertGrant(Vec<u8>, Vec<u8>);
 pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
 impl Assertion {
-    /// Construct an assertion from one of the possible secrets.
+    /// Construct an assertion from a custom secret.
     ///
-    /// Conversion is done via the `Into` trait so that new secrets can be added in a backwards
-    /// compatible way while outdated secrets can be removed with as few breakage as possible. This
-    /// will hopefully allow us to partially transition to an upgraded version of `ring` at some
-    /// point in the nearer future.
-    pub fn new<S: Into<Self>>(secret: S) -> Self {
-        secret.into()
+    /// If the key material mismatches the key length required by the selected hash algorithm then
+    /// padding or shortening of the supplied key material may be applied in the form dictated by
+    /// the signature type. See the respective standards.
+    ///
+    /// If future suites are added where this is not possible, his function may panic when supplied
+    /// with an incorrect key length.
+    pub fn new(kind: AssertionKind, key: &[u8]) -> Self {
+        let key = match kind {
+            AssertionKind::HmacSha256 => SigningKey::new(&SHA256, key),
+            AssertionKind::__NonExhaustive => unreachable!(),
+        };
+
+        Assertion {
+            secret: key,
+        }
     }
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
@@ -134,7 +154,9 @@ impl Assertion {
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
     pub fn ephemeral() -> Self {
-        SigningKey::generate(&SHA256, &SystemRandom::new()).unwrap().into()
+        Assertion {
+            secret: SigningKey::generate(&SHA256, &SystemRandom::new()).unwrap(),
+        }
     }
 
     /// Get a reference to generator for the given tag.
@@ -196,15 +218,6 @@ impl<'a> TaggedAssertion<'a> {
                 Err(())
             }
         })
-    }
-}
-
-impl From<SigningKey> for Assertion {
-    /// Convert to an `Assertion` from a secret signing key.
-    fn from(secret: SigningKey) -> Self {
-        Assertion {
-            secret,
-        }
     }
 }
 
@@ -360,15 +373,13 @@ impl SerdeAssertionGrant {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ring::digest::SHA256;
-    use ring::hmac::SigningKey;
 
     #[test]
     #[allow(dead_code, unused)]
     fn assert_send_sync_static() {
         fn uses<T: Send + Sync + 'static>(arg: T) { }
         let _ = uses(RandomGenerator::new(16));
-        let fake_key = SigningKey::new(&SHA256, &[0u8; 16]);
-        let _ = uses(Assertion::new(fake_key));
+        let fake_key = [0u8; 16];
+        let _ = uses(Assertion::new(AssertionKind::HmacSha256, &fake_key));
     }
 }

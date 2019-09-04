@@ -305,10 +305,10 @@ impl TokenSigner {
     ///
     /// Security notice: Never use a password alone to construct the signing key. Instead, generate
     /// a new key using a utility such as `openssl rand` that you then store away securely.
-    pub fn new<S: Into<Assertion>>(secret: S) -> TokenSigner {
+    pub fn new(secret: Assertion) -> TokenSigner {
         TokenSigner { 
             duration: None,
-            signer: secret.into(),
+            signer: secret,
             counter: AtomicUsize::new(0),
             have_refresh: false,
         }
@@ -318,17 +318,7 @@ impl TokenSigner {
     ///
     /// Useful for rapid prototyping where tokens need not be stored in a persistent database and
     /// can be invalidated at any time. This interface is provided with simplicity in mind, using
-    /// the default system random generator (`ring::rand::SystemRandom`). If you want an ephemeral
-    /// key but more customization, adapt the implementation.
-    ///
-    /// ```
-    /// # use oxide_auth::primitives::issuer::TokenSigner;
-    /// TokenSigner::new(
-    ///     ring::hmac::SigningKey::generate(
-    ///         &ring::digest::SHA256, 
-    ///         &mut ring::rand::SystemRandom::new())
-    ///     .unwrap());
-    /// ```
+    /// the default system random generator (`ring::rand::SystemRandom`).
     pub fn ephemeral() -> TokenSigner {
         TokenSigner::new(Assertion::ephemeral())
     }
