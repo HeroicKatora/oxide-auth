@@ -68,7 +68,6 @@ enum Body {
 #[derive(Debug)]
 enum CraftedError {
     Crafted,
-    Err(OAuthError),
 }
 
 impl WebRequest for CraftedRequest {
