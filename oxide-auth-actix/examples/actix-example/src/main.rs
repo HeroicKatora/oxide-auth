@@ -6,8 +6,9 @@ use futures::{future, Future};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
-    primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
+    primitives::prelude::{AuthMap, Client, ClientMap, Scope, TokenMap},
 };
+use oxide_auth_ring::{generator::RandomGenerator, registrar::Pbkdf2};
 use oxide_auth_actix::{
     Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResource, OAuthResponse, Refresh,
     Resource, Token, WebError,
@@ -129,16 +130,18 @@ pub fn main() {
 
 impl State {
     pub fn preconfigured() -> Self {
+        let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
+        registrar.extend(vec![Client::public(
+            "LocalClient",
+            "http://localhost:8021/endpoint".parse().unwrap(),
+            "default-scope".parse().unwrap(),
+        )]);
+
         State {
             endpoint: Generic {
                 // A registrar with one pre-registered client
-                registrar: vec![Client::public(
-                    "LocalClient",
-                    "http://localhost:8021/endpoint".parse().unwrap(),
-                    "default-scope".parse().unwrap(),
-                )]
-                .into_iter()
-                .collect(),
+                registrar,
                 // Authorization tokens are 16 byte random keys to a memory hash map.
                 authorizer: AuthMap::new(RandomGenerator::new(16)),
                 // Bearer tokens are also random generated but 256-bit tokens, since they live longer

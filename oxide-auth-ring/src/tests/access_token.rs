@@ -1,19 +1,22 @@
-use primitives::authorizer::{AuthMap, Authorizer};
-use primitives::issuer::TokenMap;
-use primitives::grant::{Grant, Extensions};
-use primitives::registrar::{Client, ClientMap};
-
-use frontends::simple::endpoint::access_token_flow;
-
-use std::collections::HashMap;
+use oxide_auth::{
+    primitives::{
+        authorizer::{AuthMap, Authorizer},
+        issuer::TokenMap,
+        grant::{Grant, Extensions},
+        registrar::{Client, ClientMap}
+    },
+    frontends::simple::endpoint::access_token_flow,
+};
 
 use base64;
 use chrono::{Utc, Duration};
 use serde_json;
+use std::collections::HashMap;
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery};
 use super::defaults::*;
 
+use crate::registrar::Pbkdf2;
 
 struct AccessTokenSetup {
     registrar: ClientMap,
@@ -26,6 +29,7 @@ struct AccessTokenSetup {
 impl AccessTokenSetup {
     fn private_client() -> Self {
         let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
@@ -44,7 +48,7 @@ impl AccessTokenSetup {
         };
 
         let authtoken = authorizer.authorize(authrequest).unwrap();
-        registrar.register_client(client);
+        registrar.register_client(client).unwrap();
 
         let basic_authorization = base64::encode(&format!("{}:{}",
             EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
@@ -60,6 +64,7 @@ impl AccessTokenSetup {
 
     fn public_client() -> Self {
         let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
@@ -77,7 +82,7 @@ impl AccessTokenSetup {
         };
 
         let authtoken = authorizer.authorize(authrequest).unwrap();
-        registrar.register_client(client);
+        registrar.register_client(client).unwrap();
 
         let basic_authorization = base64::encode(&format!("{}:{}",
             EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
@@ -180,7 +185,7 @@ fn access_valid_private() {
 // apply and would be counter intuitive as such information is not preserved in `url`.
 #[test]
 fn access_equivalent_url() {
-    use primitives::authorizer::Authorizer;
+    use oxide_auth::primitives::authorizer::Authorizer;
 
     const CLIENT_ID: &str = "ConfusingClient";
     const REDIRECT_URL: &str = "https://client.example";
@@ -192,7 +197,7 @@ fn access_equivalent_url() {
         REDIRECT_URL.parse().unwrap(),
         EXAMPLE_SCOPE.parse().unwrap());
 
-    setup.registrar.register_client(confusing_client);
+    setup.registrar.register_client(confusing_client).unwrap();
 
     let authrequest = Grant {
         client_id: CLIENT_ID.to_string(),

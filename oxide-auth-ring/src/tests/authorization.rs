@@ -1,16 +1,19 @@
 use std::collections::HashMap;
 
-use primitives::authorizer::AuthMap;
-use primitives::registrar::{Client, ClientMap};
-
-use endpoint::{OwnerSolicitor};
-
-use frontends::simple::endpoint::authorization_flow;
+use oxide_auth::{
+    primitives::{
+        authorizer::AuthMap,
+        registrar::{Client, ClientMap}
+    },
+    endpoint::{OwnerSolicitor},
+    frontends::simple::endpoint::authorization_flow,
+};
 
 use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::{Allow, Deny};
 use super::defaults::*;
 
+use crate::registrar::Pbkdf2;
 
 struct AuthorizationSetup {
     registrar: ClientMap,
@@ -20,13 +23,14 @@ struct AuthorizationSetup {
 impl AuthorizationSetup {
     fn new() -> AuthorizationSetup {
         let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
         let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
-        registrar.register_client(client);
+        registrar.register_client(client).unwrap();
         AuthorizationSetup {
             registrar,
             authorizer,

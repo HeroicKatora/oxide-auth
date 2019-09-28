@@ -1,16 +1,23 @@
 use std::collections::HashMap;
 
-use primitives::authorizer::AuthMap;
-use primitives::issuer::TokenMap;
-use primitives::generator::RandomGenerator;
-use primitives::registrar::{Client, ClientMap};
+use oxide_auth::{
+    primitives::{
+        authorizer::AuthMap,
+        issuer::TokenMap,
+        registrar::{Client, ClientMap},
+    },
+    endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint},
+    frontends::simple::{
+        extensions::{AddonList, Extended},
+        endpoint::{Generic, Error, Vacant}
+    },
+};
 
-use endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
-use frontends::simple::extensions::{AddonList, Extended, Pkce};
-use frontends::simple::endpoint::{Generic, Error, Vacant};
 
 use super::{Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::defaults::*;
+
+use crate::{generator::RandomGenerator, pkce::Pkce, registrar::Pbkdf2};
 
 use serde_json;
 
@@ -30,7 +37,8 @@ impl PkceSetup {
             EXAMPLE_SCOPE.parse().unwrap());
 
         let mut registrar = ClientMap::new();
-        registrar.register_client(client);
+        registrar.set_password_policy(Pbkdf2::default());
+        registrar.register_client(client).unwrap();
 
         let token = "ExampleAuthorizationToken".to_string();
         let authorizer = AuthMap::new(TestGenerator(token.clone()));

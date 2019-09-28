@@ -30,6 +30,5 @@
 pub mod accesstoken;
 pub mod authorization;
 pub mod error;
-pub mod extensions;
 pub mod refresh;
 pub mod resource;

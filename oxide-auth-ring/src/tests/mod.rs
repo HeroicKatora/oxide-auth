@@ -1,10 +1,6 @@
-use endpoint::*;
-use primitives::generator::TagGrant;
-use primitives::registrar::PreGrant;
-use primitives::grant::Grant;
+use oxide_auth::{endpoint::*, primitives::{generator::TagGrant, registrar::PreGrant, grant::Grant}};
 
-use std::borrow::Cow;
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use url::Url;
 

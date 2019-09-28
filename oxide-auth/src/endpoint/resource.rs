@@ -135,7 +135,7 @@ impl<'a, E: Endpoint<R> + 'a, R: WebRequest + 'a> ResourceEndpoint for Scoped<'a
         self.endpoint.scopes().unwrap().scopes(self.request)
     }
 
-    fn issuer(&mut self) -> &dyn Issuer {
+    fn issuer(&mut self) -> &mut dyn Issuer {
         self.endpoint.issuer_mut().unwrap()
     }
 }

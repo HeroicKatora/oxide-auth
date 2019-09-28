@@ -101,7 +101,7 @@ pub trait Endpoint {
     fn scopes(&mut self) -> &[Scope];
 
     /// Issuer which provides the tokens used for authorization by the client.
-    fn issuer(&mut self) -> &dyn Issuer;
+    fn issuer(&mut self) -> &mut dyn Issuer;
 }
 
 /// The result will indicate whether the resource access should be allowed or not.

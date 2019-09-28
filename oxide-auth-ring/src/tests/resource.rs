@@ -1,14 +1,17 @@
-use primitives::issuer::TokenMap;
-use primitives::generator::RandomGenerator;
-use primitives::grant::{Grant, Extensions};
-use primitives::scope::Scope;
+use oxide_auth::{
+    primitives::{
+        issuer::TokenMap,
+        grant::{Grant, Extensions},
+        scope::Scope
+    },
+    frontends::simple::endpoint::resource_flow,
+};
 
-use frontends::simple::endpoint::resource_flow;
+use super::{CraftedRequest, defaults::*};
 
 use chrono::{Utc, Duration};
 
-use super::CraftedRequest;
-use super::defaults::*;
+use crate::generator::RandomGenerator;
 
 struct ResourceSetup {
     issuer: TokenMap<RandomGenerator>,
@@ -20,7 +23,7 @@ struct ResourceSetup {
 
 impl ResourceSetup {
     fn new() -> ResourceSetup {
-        use primitives::issuer::Issuer;
+        use oxide_auth::primitives::issuer::Issuer;
 
         // Ensure that valid tokens are 16 bytes long, so we can craft an invalid one
         let mut issuer = TokenMap::new(RandomGenerator::new(16));

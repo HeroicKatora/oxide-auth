@@ -1,10 +1,14 @@
 use std::borrow::Cow;
 
-use primitives::grant::{GrantExtension, Value};
+use oxide_auth::{
+    primitives::grant::{GrantExtension, Value},
+    frontends::simple::extensions::{
+        AuthorizationAddon, AuthorizationRequest, AccessTokenAddon, AccessTokenRequest, AddonResult
+    },
+};
 
 use base64;
-use ring::digest::{SHA256, digest};
-use ring::constant_time::verify_slices_are_equal;
+use ring::{digest::{SHA256, digest}, constant_time::verify_slices_are_equal};
 
 /// Proof Key for Code Exchange by OAuth Public Clients
 ///
@@ -120,6 +124,32 @@ impl Pkce {
 impl GrantExtension for Pkce {
     fn identifier(&self) -> &'static str {
         "pkce"
+    }
+}
+
+impl AuthorizationAddon for Pkce {
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
+        let method = request.extension("code_challenge_method");
+        let challenge = request.extension("code_challenge");
+
+        let encoded = match self.challenge(method, challenge) {
+            Err(()) => return AddonResult::Err,
+            Ok(None) => return AddonResult::Ok,
+            Ok(Some(encoded)) => encoded,
+        };
+
+        AddonResult::Data(encoded)
+    }
+}
+
+impl AccessTokenAddon for Pkce {
+    fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
+        let verifier = request.extension("code_verifier");
+
+        match self.verify(data, verifier) {
+            Ok(_) => AddonResult::Ok,
+            Err(_) => AddonResult::Err,
+        }
     }
 }
 
