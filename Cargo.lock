@@ -1415,6 +1415,7 @@ name = "oxide-auth-rouille"
 version = "0.0.0"
 dependencies = [
  "oxide-auth 0.5.0-preview.0",
+ "oxide-auth-ring 0.5.0-preview.0",
  "reqwest 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rouille 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.83 (registry+https://github.com/rust-lang/crates.io-index)",
