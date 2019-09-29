@@ -10,11 +10,12 @@
 //!
 //! ```
 //! # extern crate oxide_auth;
+//! # extern crate oxide_auth_ring;
 //! # use oxide_auth::frontends::simple::endpoint::Vacant;
+//! use oxide_auth_ring::generator::RandomGenerator;
 //! use oxide_auth::frontends::simple::endpoint::Generic;
 //! use oxide_auth::primitives::{
 //!     authorizer::AuthMap,
-//!     generator::RandomGenerator,
 //!     issuer::TokenMap,
 //!     registrar::ClientMap,
 //! };

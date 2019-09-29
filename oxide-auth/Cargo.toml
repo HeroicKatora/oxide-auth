@@ -27,6 +27,7 @@ url = "1.7"
 
 [dev-dependencies]
 reqwest = "^0.9"
+oxide-auth-ring = { version = "0.5.0-preview.0", path = "../oxide-auth-ring" }
 
 [package.metadata.docs.rs]
 features = []
