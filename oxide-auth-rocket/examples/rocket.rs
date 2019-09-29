@@ -15,6 +15,7 @@ use oxide_auth::endpoint::{OwnerConsent, PreGrant};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_rocket::{OAuthResponse, OAuthRequest, OAuthFailure};
+use oxide_auth_ring::{generator::RandomGenerator, registrar::Pbkdf2};
 
 use rocket::{Data, State, Response, http};
 use rocket::http::ContentType;
@@ -115,12 +116,16 @@ fn main() {
 
 impl MyState {
     pub fn preconfigured() -> Self {
+        let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
+        registrar.register_client(
+            Client::public("LocalClient",
+                "http://localhost:8000/clientside/endpoint".parse().unwrap(),
+                "default-scope".parse().unwrap())
+        ).unwrap();
+
         MyState {
-            registrar: Mutex::new(vec![
-                Client::public("LocalClient",
-                    "http://localhost:8000/clientside/endpoint".parse().unwrap(),
-                    "default-scope".parse().unwrap())
-            ].into_iter().collect()),
+            registrar: Mutex::new(registrar),
             // Authorization tokens are 16 byte random keys to a memory hash map.
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
             // Bearer tokens are also random generated but 256-bit tokens, since they live longer
