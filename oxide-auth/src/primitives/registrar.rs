@@ -181,7 +181,7 @@ impl fmt::Debug for ClientType {
     }
 }
 
-impl From<Unspecified> for RegistrarError {
+impl RegistrarError {
     fn from(err: Unspecified) -> Self {
         match err { Unspecified => RegistrarError::Unspecified }
     }
@@ -243,12 +243,12 @@ impl<'a> RegisteredClient<'a> {
     /// Try to authenticate with the client and passphrase. This check will success if either the
     /// client is public and no passphrase was provided or if the client is confidential and the
     /// passphrase matches.
-    pub fn check_authentication(&self, passphrase: Option<&[u8]>) -> Result<(), Unspecified> {
+    pub fn check_authentication(&self, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         match (passphrase, &self.client.encoded_client) {
             (None, &ClientType::Public) => Ok(()),
             (Some(provided), &ClientType::Confidential{ passdata: ref stored })
                 => self.policy.check(&self.client.client_id, provided, stored),
-            _ => Err(Unspecified)
+            _ => Err(RegistrarError::Unspecified)
         }
     }
 }
@@ -273,7 +273,7 @@ pub trait PasswordPolicy: Send + Sync {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8>;
 
     /// Check if the stored data corresponds to that of the client id and passphrase.
-    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), Unspecified>;
+    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), RegistrarError>;
 }
 
 /// Store passwords using `Pbkdf2` to derive the stored value.
@@ -361,14 +361,15 @@ impl PasswordPolicy for Pbkdf2 {
     }
 
     fn check(&self, _client_id: &str /* Was interned */, passphrase: &[u8], stored: &[u8])
-        -> Result<(), Unspecified>
+        -> Result<(), RegistrarError>
     {
         if stored.len() < 64 {
-            return Err(Unspecified)
+            return Err(RegistrarError::PrimitiveError)
         }
 
         let (verifier, salt) = stored.split_at(64);
         pbkdf2::verify(&digest::SHA256, self.iterations.into(), salt, passphrase, verifier)
+            .map_err(RegistrarError::from)
     }
 }
 
@@ -549,7 +550,7 @@ impl Registrar for ClientMap {
         let password_policy = Self::current_policy(&self.password_policy);
 
         self.clients.get(client_id)
-            .ok_or(Unspecified)
+            .ok_or(RegistrarError::Unspecified)
             .and_then(|client| RegisteredClient::new(client, password_policy)
                 .check_authentication(passphrase))?;
 
