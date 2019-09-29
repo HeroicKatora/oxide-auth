@@ -10,5 +10,5 @@ members = ["."]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-oxide-auth = { path = "../../oxide-auth" }
+oxide-auth-ring = { path = "../../oxide-auth-ring" }
 ring = "0.14"
