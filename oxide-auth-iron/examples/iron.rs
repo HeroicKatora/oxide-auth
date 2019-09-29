@@ -15,6 +15,7 @@ use oxide_auth::endpoint::{OwnerConsent};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_iron::{OAuthRequest, OAuthResponse, OAuthError};
+use oxide_auth_ring::{generator::RandomGenerator, issuer::TokenSigner, registrar::Pbkdf2};
 
 #[path = "../../examples/support/iron.rs"]
 mod support;
@@ -123,12 +124,15 @@ here</a> to begin the authorization process.
 ";
 
     fn preconfigured() -> Self {
+        let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
+        registrar.register_client(
+            Client::public("LocalClient",
+                "http://localhost:8021/endpoint".parse().unwrap(),
+                "default-scope".parse().unwrap())
+        ).unwrap();
         EndpointState {
-            registrar: Mutex::new(vec![
-                Client::public("LocalClient",
-                    "http://localhost:8021/endpoint".parse().unwrap(),
-                    "default-scope".parse().unwrap())
-            ].into_iter().collect()),
+            registrar: Mutex::new(registrar),
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
             issuer: Mutex::new(TokenSigner::ephemeral()),
         }
