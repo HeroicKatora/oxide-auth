@@ -179,3 +179,9 @@ impl<'a> TagGrant for &'a Assertion {
         self.counted_signature(counter, grant)
     }
 }
+
+impl Default for Assertion {
+    fn default() -> Self {
+        Self::ephemeral()
+    }
+}
