@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate rouille;
+extern crate oxide_auth_ring;
 
 #[path = "../../examples/support/rouille.rs"]
 mod support;
@@ -11,6 +12,7 @@ use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, Pre
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_rouille::{Request, Response as OAuthResponse};
 use oxide_auth_rouille::{FnSolicitor, GenericEndpoint};
+use oxide_auth_ring::{generator::RandomGenerator, registrar::Pbkdf2};
 use rouille::{Response, ResponseBody, Server};
 
 /// Example of a main function of a rouille server supporting oauth.
@@ -18,11 +20,12 @@ pub fn main() {
     // Stores clients in a simple in-memory hash map.
     let registrar = {
         let mut clients = ClientMap::new();
+        clients.set_password_policy(Pbkdf2::default());
         // Register a dummy client instance
         let client = Client::public("LocalClient", // Client id
             "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
             "default".parse().unwrap()); // Allowed client scope
-        clients.register_client(client);
+        clients.register_client(client).unwrap();
         clients
     };
 
