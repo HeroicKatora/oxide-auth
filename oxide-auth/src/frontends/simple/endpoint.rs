@@ -64,15 +64,16 @@ pub enum Error<W: WebRequest> {
 ///
 /// ```
 /// # extern crate oxide_auth;
+/// # extern crate oxide_auth_ring;
 /// # use oxide_auth::frontends::simple::endpoint::Vacant;
 /// # use oxide_auth::frontends::simple::endpoint::Generic;
 /// use oxide_auth::endpoint::{AccessTokenFlow, Endpoint, WebRequest};
 /// use oxide_auth::primitives::{
 ///     authorizer::AuthMap,
-///     generator::RandomGenerator,
 ///     issuer::TokenMap,
 ///     registrar::ClientMap,
 /// };
+/// use oxide_auth_ring::generator::RandomGenerator;
 ///
 /// fn access_token_endpoint<R: WebRequest>() -> AccessTokenFlow<impl Endpoint<R>, R> 
 ///     where R::Response: Default,

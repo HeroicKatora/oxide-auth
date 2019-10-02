@@ -1,7 +1,14 @@
-use endpoint::*;
-use primitives::generator::TagGrant;
-use primitives::registrar::PreGrant;
-use primitives::grant::Grant;
+extern crate oxide_auth;
+extern crate oxide_auth_ring;
+extern crate base64;
+extern crate chrono;
+extern crate serde_json;
+extern crate url;
+
+use oxide_auth::endpoint::*;
+use oxide_auth::primitives::generator::TagGrant;
+use oxide_auth::primitives::registrar::PreGrant;
+use oxide_auth::primitives::grant::Grant;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -10,7 +17,7 @@ use url::Url;
 
 /// Open and simple implementation of `WebRequest`.
 #[derive(Clone, Debug, Default)]
-struct CraftedRequest {
+pub struct CraftedRequest {
     /// The key-value pairs in the url query component.
     pub query: Option<HashMap<String, Vec<String>>>,
 
@@ -23,7 +30,7 @@ struct CraftedRequest {
 
 /// Open and simple implementation of `WebResponse`.
 #[derive(Debug, Default)]
-struct CraftedResponse {
+pub struct CraftedResponse {
     /// HTTP status code.
     pub status: Status,
 
@@ -43,7 +50,7 @@ struct CraftedResponse {
 
 /// An enum containing the necessary HTTP status codes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-enum Status {
+pub enum Status {
     /// Http status code 200.
     Ok,
 
@@ -61,7 +68,7 @@ enum Status {
 /// 
 /// Real HTTP protocols should set a content type header for each of the body variants.
 #[derive(Clone, Debug)]
-enum Body {
+pub enum Body {
     /// A pure text body.
     Text(String),
 
@@ -70,7 +77,7 @@ enum Body {
 }
 
 #[derive(Debug)]
-enum CraftedError {
+pub enum CraftedError {
     Crafted,
     Err(OAuthError),
 }
@@ -139,7 +146,7 @@ impl WebResponse for CraftedResponse {
     }
 }
 
-struct TestGenerator(String);
+pub struct TestGenerator(pub String);
 
 impl TagGrant for TestGenerator {
     fn tag(&mut self, _: u64, _grant: &Grant) -> Result<String, ()> {
@@ -147,8 +154,8 @@ impl TagGrant for TestGenerator {
     }
 }
 
-struct Allow(String);
-struct Deny;
+pub struct Allow(pub String);
+pub struct Deny;
 
 impl OwnerSolicitor<CraftedRequest> for Allow {
     fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant)
@@ -182,7 +189,7 @@ impl<'l> OwnerSolicitor<CraftedRequest> for &'l Deny {
     }
 }
 
-trait ToSingleValueQuery {
+pub trait ToSingleValueQuery {
     fn to_single_value_query(self) -> HashMap<String, Vec<String>>;
 }
 
@@ -208,9 +215,3 @@ pub mod defaults {
     pub const EXAMPLE_REDIRECT_URI: &str = "https://client.example/endpoint";
     pub const EXAMPLE_SCOPE: &str = "example default";
 }
-
-mod authorization;
-mod access_token;
-mod resource;
-mod refresh;
-mod pkce;

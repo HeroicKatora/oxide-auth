@@ -1,15 +1,25 @@
+extern crate oxide_auth;
+extern crate oxide_auth_ring;
+extern crate base64;
+extern crate chrono;
+extern crate serde_json;
+extern crate url;
+
 use std::collections::HashMap;
 
-use primitives::authorizer::AuthMap;
-use primitives::registrar::{Client, ClientMap};
+use oxide_auth::primitives::authorizer::AuthMap;
+use oxide_auth::primitives::registrar::{Client, ClientMap};
+use oxide_auth::endpoint::{OwnerSolicitor};
+use oxide_auth::frontends::simple::endpoint::authorization_flow;
+use oxide_auth_ring::registrar::Pbkdf2;
 
-use endpoint::{OwnerSolicitor};
+#[path = "./mod.rs"]
+#[allow(dead_code)]
+mod helpers;
 
-use frontends::simple::endpoint::authorization_flow;
-
-use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
-use super::{Allow, Deny};
-use super::defaults::*;
+use helpers::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
+use helpers::{Allow, Deny};
+use helpers::defaults::*;
 
 
 struct AuthorizationSetup {
@@ -20,13 +30,14 @@ struct AuthorizationSetup {
 impl AuthorizationSetup {
     fn new() -> AuthorizationSetup {
         let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
         let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
-        registrar.register_client(client);
+        registrar.register_client(client).unwrap();
         AuthorizationSetup {
             registrar,
             authorizer,

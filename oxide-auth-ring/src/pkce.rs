@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
-use primitives::grant::{GrantExtension, Value};
+use oxide_auth::primitives::grant::{GrantExtension, Value};
+use oxide_auth::frontends::simple::extensions::{AuthorizationAddon, AuthorizationRequest, AccessTokenAddon, AccessTokenRequest, AddonResult};
 
 use base64;
 use ring::digest::{SHA256, digest};
@@ -174,6 +175,32 @@ impl Method {
                 verify_slices_are_equal(encoded.as_bytes(), b64digest.as_bytes())
                     .map_err(|_| ())
             }
+        }
+    }
+}
+
+impl AuthorizationAddon for Pkce {
+    fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
+        let method = request.extension("code_challenge_method");
+        let challenge = request.extension("code_challenge");
+
+        let encoded = match self.challenge(method, challenge) {
+            Err(()) => return AddonResult::Err,
+            Ok(None) => return AddonResult::Ok,
+            Ok(Some(encoded)) => encoded,
+        };
+
+        AddonResult::Data(encoded)
+    }
+}
+
+impl AccessTokenAddon for Pkce {
+    fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
+        let verifier = request.extension("code_verifier");
+
+        match self.verify(data, verifier) {
+            Ok(_) => AddonResult::Ok,
+            Err(_) => AddonResult::Err,
         }
     }
 }

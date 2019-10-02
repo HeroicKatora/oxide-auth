@@ -5,7 +5,6 @@ pub use code_grant::authorization::Request as AuthorizationRequest;
 pub use code_grant::accesstoken::Request as AccessTokenRequest;
 
 mod extended;
-mod pkce;
 mod list;
 
 use std::borrow::{Cow, ToOwned};
@@ -13,7 +12,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 pub use self::extended::Extended;
-pub use self::pkce::Pkce;
 pub use self::list::AddonList;
 use primitives::grant::{GrantExtension, Value};
 

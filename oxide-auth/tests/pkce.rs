@@ -1,18 +1,27 @@
+extern crate oxide_auth;
+extern crate oxide_auth_ring;
+extern crate base64;
+extern crate chrono;
+extern crate serde_json;
+extern crate url;
+
 use std::collections::HashMap;
 
-use primitives::authorizer::AuthMap;
-use primitives::issuer::TokenMap;
-use primitives::generator::RandomGenerator;
-use primitives::registrar::{Client, ClientMap};
+use oxide_auth::primitives::authorizer::AuthMap;
+use oxide_auth::primitives::issuer::TokenMap;
+use oxide_auth::primitives::registrar::{Client, ClientMap};
 
-use endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
-use frontends::simple::extensions::{AddonList, Extended, Pkce};
-use frontends::simple::endpoint::{Generic, Error, Vacant};
+use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
+use oxide_auth::frontends::simple::extensions::{AddonList, Extended};
+use oxide_auth::frontends::simple::endpoint::{Generic, Error, Vacant};
+use oxide_auth_ring::{generator::RandomGenerator, pkce::Pkce, registrar::Pbkdf2};
 
-use super::{Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
-use super::defaults::*;
+#[path = "./mod.rs"]
+#[allow(dead_code)]
+mod helpers;
 
-use serde_json;
+use helpers::{Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
+use helpers::defaults::*;
 
 struct PkceSetup {
     registrar: ClientMap,
@@ -30,7 +39,8 @@ impl PkceSetup {
             EXAMPLE_SCOPE.parse().unwrap());
 
         let mut registrar = ClientMap::new();
-        registrar.register_client(client);
+        registrar.set_password_policy(Pbkdf2::default());
+        registrar.register_client(client).unwrap();
 
         let token = "ExampleAuthorizationToken".to_string();
         let authorizer = AuthMap::new(TestGenerator(token.clone()));

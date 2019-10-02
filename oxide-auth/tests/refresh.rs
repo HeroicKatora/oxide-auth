@@ -1,17 +1,26 @@
-use primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap};
-use primitives::generator::RandomGenerator;
-use primitives::grant::{Grant, Extensions};
-use primitives::registrar::{Client, ClientMap};
+extern crate oxide_auth;
+extern crate oxide_auth_ring;
+extern crate base64;
+extern crate chrono;
+extern crate serde_json;
+extern crate url;
+
+use oxide_auth::primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap};
+use oxide_auth::primitives::grant::{Grant, Extensions};
+use oxide_auth::primitives::registrar::{Client, ClientMap};
+use oxide_auth::frontends::simple::endpoint::{refresh_flow, resource_flow};
+use oxide_auth_ring::{generator::RandomGenerator, registrar::Pbkdf2};
 
 use std::collections::HashMap;
 
-use base64;
 use chrono::{Utc, Duration};
-use serde_json;
 
-use super::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
-use super::defaults::*;
-use frontends::simple::endpoint::{refresh_flow, resource_flow};
+#[path = "./mod.rs"]
+#[allow(dead_code)]
+mod helpers;
+
+use helpers::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
+use helpers::defaults::*;
 
 struct RefreshTokenSetup {
     registrar: ClientMap,
@@ -23,6 +32,7 @@ struct RefreshTokenSetup {
 impl RefreshTokenSetup {
     fn private_client() -> Self {
         let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
@@ -39,7 +49,7 @@ impl RefreshTokenSetup {
             extensions: Extensions::new(),
         };
 
-        registrar.register_client(client);
+        registrar.register_client(client).unwrap();
         let issued = issuer.issue(grant).unwrap();
         assert!(!issued.refresh.is_empty());
 
@@ -57,6 +67,7 @@ impl RefreshTokenSetup {
 
     fn public_client() -> Self {
         let mut registrar = ClientMap::new();
+        registrar.set_password_policy(Pbkdf2::default());
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::public(EXAMPLE_CLIENT_ID,
@@ -72,7 +83,7 @@ impl RefreshTokenSetup {
             extensions: Extensions::new(),
         };
 
-        registrar.register_client(client);
+        registrar.register_client(client).unwrap();
         let issued = issuer.issue(grant).unwrap();
         assert!(!issued.refresh.is_empty());
 
@@ -233,7 +244,7 @@ fn public_private_invalid_grant() {
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
-    setup.registrar.register_client(client);
+    setup.registrar.register_client(client).unwrap();
 
     let basic_authorization = base64::encode(&format!("{}:{}",
         "PrivateClient", EXAMPLE_PASSPHRASE));

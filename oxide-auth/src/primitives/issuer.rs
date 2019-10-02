@@ -11,7 +11,7 @@ use chrono::{Duration, Utc};
 
 use super::Time;
 use super::grant::Grant;
-use super::generator::{TagGrant, TaggedAssertion, Assertion};
+use super::generator::TagGrant;
 
 /// Issuers create bearer tokens.
 ///
@@ -33,6 +33,31 @@ pub trait Issuer {
 
     /// Get the values corresponding to a refresh token
     fn recover_refresh<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
+}
+
+pub trait Tagged<'a>: TagGrant {
+    /// The Signer produced by this Tagged type
+    type Signer: Signer + 'a;
+
+    /// Get a reference to generator for the given tag.
+    fn tag(&'a self, tag: &'a str) -> Self::Signer;
+}
+
+pub trait Signer {
+    /// Sign the grant for this usage.
+    ///
+    /// This commits to a token that can be used–according to the usage tag–while the endpoint can
+    /// trust in it belonging to the encoded grant. `counter` must be unique for each call to this
+    /// function, similar to an IV to prevent accidentally producing the same token for the same
+    /// grant (which may have multiple tokens). Note that the `tag` will be recovered and checked
+    /// while the IV will not.
+    fn sign(&self, counter: u64, grant: &Grant) -> Result<String, ()>;
+
+    /// Inverse operation of generate, retrieve the underlying token.
+    ///
+    /// Result in an Err if either the signature is invalid or if the tag does not match the
+    /// expected usage tag given to this assertion.
+    fn extract(&self, token: &str) -> Result<Grant, ()>;
 }
 
 /// Token parameters returned to a client.
@@ -292,20 +317,23 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
 ///
 /// Although this token instance allows preservation of memory it also implies that tokens, once
 /// issued, are impossible to revoke.
-pub struct TokenSigner {
+pub struct TokenSigner<T> {
     duration: Option<Duration>,
-    signer: Assertion,
+    signer: T,
     // FIXME: make this an AtomicU64 once stable.
     counter: AtomicUsize,
     have_refresh: bool,
 }
 
-impl TokenSigner {
+impl<T> TokenSigner<T>
+where
+    T: TagGrant,
+{
     /// Construct a signing instance from a private signing key.
     ///
     /// Security notice: Never use a password alone to construct the signing key. Instead, generate
     /// a new key using a utility such as `openssl rand` that you then store away securely.
-    pub fn new(secret: Assertion) -> TokenSigner {
+    pub fn new(secret: T) -> TokenSigner<T> {
         TokenSigner { 
             duration: None,
             signer: secret,
@@ -319,8 +347,11 @@ impl TokenSigner {
     /// Useful for rapid prototyping where tokens need not be stored in a persistent database and
     /// can be invalidated at any time. This interface is provided with simplicity in mind, using
     /// the default system random generator (`ring::rand::SystemRandom`).
-    pub fn ephemeral() -> TokenSigner {
-        TokenSigner::new(Assertion::ephemeral())
+    pub fn ephemeral() -> TokenSigner<T>
+    where
+        T: Default,
+    {
+        TokenSigner::new(Default::default())
     }
 
     /// Set the validity of all issued grants to the specified duration.
@@ -360,7 +391,10 @@ impl TokenSigner {
         self.counter.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn refreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()> {
+    fn refreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()>
+    where
+        for <'a> T: Tagged<'a>,
+    {
         let first_ctr = self.next_counter() as u64;
         let second_ctr = self.next_counter() as u64;
 
@@ -376,7 +410,10 @@ impl TokenSigner {
         })
     }
 
-    fn unrefreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()> {
+    fn unrefreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()>
+    where
+        for <'a> T: Tagged<'a>,
+    {
         let counter = self.next_counter() as u64;
 
         let token = self.as_token()
@@ -385,11 +422,17 @@ impl TokenSigner {
         Ok(IssuedToken::without_refresh(token, grant.until))
     }
 
-    fn as_token(&self) -> TaggedAssertion {
+    fn as_token(&self) -> <T as Tagged>::Signer
+    where
+        for <'a> T: Tagged<'a>,
+    {
         self.signer.tag("token")
     }
 
-    fn as_refresh(&self) -> TaggedAssertion {
+    fn as_refresh(&self) -> <T as Tagged>::Signer
+    where
+        for <'a> T: Tagged<'a>,
+    {
         self.signer.tag("refresh")
     }
 }
@@ -466,7 +509,10 @@ impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
     }
 }
 
-impl Issuer for TokenSigner {
+impl<T> Issuer for TokenSigner<T>
+where
+    for <'a> T: TagGrant + Tagged<'a>,
+{
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (&mut&*self).issue(grant)
     }
@@ -480,7 +526,10 @@ impl Issuer for TokenSigner {
     }
 }
 
-impl<'a> Issuer for &'a TokenSigner {
+impl<'a, T> Issuer for &'a TokenSigner<T>
+where
+    for <'b> T: TagGrant + Tagged<'b>,
+{
     fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
         if let Some(duration) = &self.duration {
             grant.until = Utc::now() + *duration;
@@ -503,100 +552,5 @@ impl<'a> Issuer for &'a TokenSigner {
         }
 
         Ok(self.as_refresh().extract(token).ok())
-    }
-}
-
-#[cfg(test)]
-/// Tests for issuer implementations, including those provided here.
-pub mod tests {
-    use super::*;
-    use primitives::grant::Extensions;
-    use primitives::generator::RandomGenerator;
-    use chrono::{Duration, Utc};
-
-    fn grant_template() -> Grant {
-        Grant {
-            client_id: "Client".to_string(),
-            owner_id: "Owner".to_string(),
-            redirect_uri: "https://example.com".parse().unwrap(),
-            scope: "default".parse().unwrap(),
-            until: Utc::now() + Duration::hours(1),
-            extensions: Extensions::new(),
-        }
-    }
-
-    /// Tests the simplest invariants that should be upheld by all authorizers.
-    ///
-    /// This create a token, without any extensions, an lets the issuer generate a issued token.
-    /// The uri is `https://example.com` and the token lasts for an hour except if overwritten.
-    /// Generation of a valid refresh token is not tested against.
-    ///
-    /// Custom implementations may want to import and use this in their own tests.
-    pub fn simple_test_suite(issuer: &mut dyn Issuer) {
-        let request = grant_template();
-
-        let issued = issuer.issue(request.clone())
-            .expect("Issuing failed");
-        let from_token = issuer.recover_token(&issued.token)
-            .expect("Issuer failed during recover")
-            .expect("Issued token appears to be invalid");
-
-        assert_ne!(issued.token, issued.refresh);
-        assert_eq!(from_token.client_id, "Client");
-        assert_eq!(from_token.owner_id, "Owner");
-        assert!(Utc::now() < from_token.until);
-
-        let issued_2 = issuer.issue(request)
-            .expect("Issuing failed");
-        assert_ne!(issued.token, issued_2.token);
-        assert_ne!(issued.token, issued_2.refresh);
-        assert_ne!(issued.refresh, issued_2.refresh);
-        assert_ne!(issued.refresh, issued_2.token);
-    }
-
-    #[test]
-    fn signer_test_suite() {
-        let mut signer = TokenSigner::ephemeral();
-        // Refresh tokens must be unique if generated. If they are not even generated, they are
-        // obviously not unique.
-        signer.generate_refresh_tokens(true);
-        simple_test_suite(&mut signer);
-    }
-
-    #[test]
-    fn signer_no_default_refresh() {
-        let mut signer = TokenSigner::ephemeral();
-        let issued = signer.issue(grant_template());
-
-        let token = issued.expect("Issuing without refresh token failed");
-        assert!(!token.refreshable());
-    }
-
-    #[test]
-    fn random_test_suite() {
-        let mut token_map = TokenMap::new(RandomGenerator::new(16));
-        simple_test_suite(&mut token_map);
-    }
-
-    #[test]
-    fn random_has_refresh() {
-        let mut token_map = TokenMap::new(RandomGenerator::new(16));
-        let issued = token_map.issue(grant_template());
-
-        let token = issued.expect("Issuing without refresh token failed");
-        assert!(token.refreshable());
-    }
-
-    #[test]
-    #[should_panic]
-    fn bad_generator() {
-        struct BadGenerator;
-        impl TagGrant for BadGenerator {
-            fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
-                Ok("YOLO.HowBadCanItBeToRepeatTokens?".into())
-            }
-        }
-        let mut token_map = TokenMap::new(BadGenerator);
-        simple_test_suite(&mut token_map);
     }
 }

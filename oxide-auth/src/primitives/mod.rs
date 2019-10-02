@@ -10,14 +10,15 @@
 //!
 //! ```
 //! # extern crate oxide_auth;
+//! # extern crate oxide_auth_ring;
 //! # use oxide_auth::frontends::simple::endpoint::Vacant;
 //! use oxide_auth::frontends::simple::endpoint::Generic;
 //! use oxide_auth::primitives::{
 //!     authorizer::AuthMap,
-//!     generator::RandomGenerator,
 //!     issuer::TokenMap,
 //!     registrar::ClientMap,
 //! };
+//! use oxide_auth_ring::generator::RandomGenerator;
 //!
 //! Generic {
 //!     authorizer: AuthMap::new(RandomGenerator::new(16)),
@@ -49,7 +50,7 @@ type Time = DateTime<Utc>;
 pub mod prelude {
     pub use super::authorizer::{Authorizer, AuthMap};
     pub use super::issuer::{IssuedToken, Issuer, TokenMap, TokenSigner};
-    pub use super::generator::{Assertion, TagGrant, RandomGenerator};
+    pub use super::generator::TagGrant;
     pub use super::registrar::{Registrar, Client, ClientUrl, ClientMap, PreGrant};
     pub use super::scope::Scope;
 }

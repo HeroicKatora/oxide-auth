@@ -73,12 +73,14 @@
 extern crate base64;
 extern crate chrono;
 extern crate url;
-extern crate ring;
 extern crate rmp_serde;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+
+#[cfg(test)]
+extern crate oxide_auth_ring;
 
 pub mod code_grant;
 pub mod endpoint;

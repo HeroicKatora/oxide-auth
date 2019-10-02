@@ -35,9 +35,6 @@ mod refresh;
 mod resource;
 mod query;
 
-#[cfg(test)]
-mod tests;
-
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
