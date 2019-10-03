@@ -125,13 +125,12 @@ here</a> to begin the authorization process.
 ";
 
     fn preconfigured() -> Self {
-        let mut registrar = ClientMap::new();
-        registrar.set_password_policy(Pbkdf2::default());
+        let mut registrar = ClientMap::new(Pbkdf2::default());
         registrar.register_client(
             Client::public("LocalClient",
                 "http://localhost:8021/endpoint".parse().unwrap(),
                 "default-scope".parse().unwrap())
-        ).unwrap();
+        );
 
         EndpointState {
             registrar: Mutex::new(registrar),

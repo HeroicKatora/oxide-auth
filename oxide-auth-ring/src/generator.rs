@@ -1,16 +1,22 @@
 use oxide_auth::primitives::{
-    grant::Grant,
-    generator::{SerdeAssertionGrant, TagGrant},
-    issuer::{Tagged, Signer},
+    grant::{Value, Grant, Extensions},
+    generator::TagGrant,
+    issuer::Signer,
+    scope::Scope,
 };
 
 use ring::digest::SHA256;
 use ring::rand::{SystemRandom, SecureRandom};
 use ring::hmac::SigningKey;
 
+use std:: collections::HashMap;
+
 use base64::{encode, decode};
 use rmp_serde;
 use serde_derive::{Deserialize, Serialize};
+use url::Url;
+
+type Time = chrono::DateTime<chrono::Utc>;
 
 /// Generates tokens from random bytes.
 ///
@@ -26,16 +32,9 @@ pub struct RandomGenerator {
 /// Tokens produced by the generator include a serialized version of the grant followed by an HMAC
 /// signature.  Since data is not encrypted, this token generator will ERROR if any private
 /// extension is present in the grant.
-///
-/// The actual generator is given by a `TaggedAssertion` from `Assertion::tag` which enables
-/// signing the same grant for different uses, i.e. separating authorization from bearer grants and
-/// refresh tokens.
 pub struct Assertion {
     secret: SigningKey,
 }
-
-/// Binds a tag to the data. The signature will be unique for data as well as the tag.
-pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
 /// The cryptographic suite ensuring integrity of tokens.
 pub enum AssertionKind {
@@ -50,6 +49,31 @@ pub enum AssertionKind {
 
 #[derive(Deserialize, Serialize)]
 struct AssertGrant(Vec<u8>, Vec<u8>);
+
+#[derive(Serialize, Deserialize)]
+struct SerdeAssertionGrant {
+    /// Identifies the owner of the resource.
+    owner_id: String,
+
+    /// Identifies the client to which the grant was issued.
+    client_id: String,
+
+    /// The scope granted to the client.
+    #[serde(with = "scope_serde")]
+    scope: Scope,
+
+    /// The redirection uri under which the client resides. The url package does indeed seem to
+    /// parse valid URIs as well.
+    #[serde(with = "url_serde")]
+    redirect_uri: Url,
+
+    /// Expiration date of the grant (Utc).
+    #[serde(with = "time_serde")]
+    until: Time,
+
+    /// The public extensions, private extensions not supported currently
+    public_extensions: HashMap<String, Option<String>>,
+}
 
 impl RandomGenerator {
     /// Generates tokens with a specific byte length.
@@ -132,22 +156,14 @@ impl Assertion {
     }
 }
 
-impl<'a> Tagged<'a> for Assertion {
-    type Signer = TaggedAssertion<'a>;
-
-    fn tag(&'a self, tag: &'a str) -> Self::Signer {
-        TaggedAssertion(self, tag)
-    }
-}
-
-impl<'a> Signer for TaggedAssertion<'a> {
-    fn sign(&self, counter: u64, grant: &Grant) -> Result<String, ()> {
-        self.0.generate_tagged(counter, grant, self.1)
+impl Signer for Assertion {
+    fn sign(&self, tag: &str, counter: u64, grant: &Grant) -> Result<String, ()> {
+        self.generate_tagged(counter, grant, tag)
     }
 
-    fn extract(&self, token: &str) -> Result<Grant, ()> {
-        self.0.extract(token).and_then(|(token, tag)| {
-            if tag == self.1 {
+    fn extract(&self, tag: &str, token: &str) -> Result<Grant, ()> {
+        self.extract(token).and_then(|(token, extracted_tag)| {
+            if extracted_tag == tag {
                 Ok(token)
             } else {
                 Err(())
@@ -177,6 +193,93 @@ impl TagGrant for Assertion {
 impl<'a> TagGrant for &'a Assertion {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
+    }
+}
+
+mod scope_serde {
+    use oxide_auth::primitives::scope::Scope;
+
+    use serde::ser::{Serializer};
+    use serde::de::{Deserialize, Deserializer, Error};
+
+    pub fn serialize<S: Serializer>(scope: &Scope, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&scope.to_string())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Scope, D::Error> {
+        let as_string: &str = <(&str)>::deserialize(deserializer)?;
+        as_string.parse().map_err(Error::custom)
+    }
+}
+
+mod url_serde {
+    use super::Url;
+
+    use serde::ser::{Serializer};
+    use serde::de::{Deserialize, Deserializer, Error};
+
+    pub fn serialize<S: Serializer>(url: &Url, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&url.to_string())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {
+        let as_string: &str = <(&str)>::deserialize(deserializer)?;
+        as_string.parse().map_err(Error::custom)
+    }
+}
+
+mod time_serde {
+    use super::Time;
+    use chrono::{TimeZone, Utc};
+
+    use serde::ser::{Serializer};
+    use serde::de::{Deserialize, Deserializer};
+
+    pub fn serialize<S: Serializer>(time: &Time, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_i64(time.timestamp())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Time, D::Error> {
+        let as_timestamp: i64 = <i64>::deserialize(deserializer)?;
+        Ok(Utc.timestamp(as_timestamp, 0))
+    }
+}
+
+impl SerdeAssertionGrant {
+    fn try_from(grant: &Grant) -> Result<Self, ()> {
+        let mut public_extensions: HashMap<String, Option<String>> = HashMap::new();
+
+        if grant.extensions.private().any(|_| true) {
+            return Err(())
+        }
+
+        for (name, content) in grant.extensions.public() {
+            public_extensions.insert(name.to_string(), content.map(str::to_string));
+        }
+
+        Ok(SerdeAssertionGrant {
+            owner_id: grant.owner_id.clone(),
+            client_id: grant.client_id.clone(),
+            scope: grant.scope.clone(),
+            redirect_uri: grant.redirect_uri.clone(),
+            until: grant.until,
+            public_extensions,
+        })
+    }
+
+    fn grant(self) -> Grant {
+        let mut extensions = Extensions::new();
+        for (name, content) in self.public_extensions.into_iter() {
+            extensions.set_raw(name, Value::public(content))
+        }
+        Grant {
+            owner_id: self.owner_id,
+            client_id: self.client_id,
+            scope: self.scope,
+            redirect_uri: self.redirect_uri,
+            until: self.until,
+            extensions,
+        }
     }
 }
 

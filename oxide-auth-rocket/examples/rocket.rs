@@ -117,13 +117,12 @@ fn main() {
 
 impl MyState {
     pub fn preconfigured() -> Self {
-        let mut registrar = ClientMap::new();
-        registrar.set_password_policy(Pbkdf2::default());
+        let mut registrar = ClientMap::new(Pbkdf2::default());
         registrar.register_client(
             Client::public("LocalClient",
                 "http://localhost:8000/clientside/endpoint".parse().unwrap(),
                 "default-scope".parse().unwrap())
-        ).unwrap();
+        );
 
         MyState {
             registrar: Mutex::new(registrar),

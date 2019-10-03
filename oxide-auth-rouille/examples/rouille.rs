@@ -19,13 +19,12 @@ use rouille::{Response, ResponseBody, Server};
 pub fn main() {
     // Stores clients in a simple in-memory hash map.
     let registrar = {
-        let mut clients = ClientMap::new();
-        clients.set_password_policy(Pbkdf2::default());
+        let mut clients = ClientMap::new(Pbkdf2::default());
         // Register a dummy client instance
         let client = Client::public("LocalClient", // Client id
             "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
             "default".parse().unwrap()); // Allowed client scope
-        clients.register_client(client).unwrap();
+        clients.register_client(client);
         clients
     };
 

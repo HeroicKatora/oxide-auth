@@ -35,14 +35,6 @@ pub trait Issuer {
     fn recover_refresh<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
 }
 
-pub trait Tagged<'a>: TagGrant {
-    /// The Signer produced by this Tagged type
-    type Signer: Signer + 'a;
-
-    /// Get a reference to generator for the given tag.
-    fn tag(&'a self, tag: &'a str) -> Self::Signer;
-}
-
 pub trait Signer {
     /// Sign the grant for this usage.
     ///
@@ -51,13 +43,13 @@ pub trait Signer {
     /// function, similar to an IV to prevent accidentally producing the same token for the same
     /// grant (which may have multiple tokens). Note that the `tag` will be recovered and checked
     /// while the IV will not.
-    fn sign(&self, counter: u64, grant: &Grant) -> Result<String, ()>;
+    fn sign(&self, tag: &str, counter: u64, grant: &Grant) -> Result<String, ()>;
 
     /// Inverse operation of generate, retrieve the underlying token.
     ///
     /// Result in an Err if either the signature is invalid or if the tag does not match the
     /// expected usage tag given to this assertion.
-    fn extract(&self, token: &str) -> Result<Grant, ()>;
+    fn extract(&self, tag: &str, token: &str) -> Result<Grant, ()>;
 }
 
 /// Token parameters returned to a client.
@@ -393,15 +385,13 @@ where
 
     fn refreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()>
     where
-        for <'a> T: Tagged<'a>,
+        T: Signer,
     {
         let first_ctr = self.next_counter() as u64;
         let second_ctr = self.next_counter() as u64;
 
-        let token = self.as_token()
-            .sign(first_ctr, grant)?;
-        let refresh = self.as_refresh()
-            .sign(second_ctr, grant)?;
+        let token = self.signer.sign("token", first_ctr, grant)?;
+        let refresh = self.signer.sign("refresh", second_ctr, grant)?;
 
         Ok(IssuedToken {
             token,
@@ -412,28 +402,13 @@ where
 
     fn unrefreshable_token(&self, grant: &Grant) -> Result<IssuedToken, ()>
     where
-        for <'a> T: Tagged<'a>,
+        T: Signer,
     {
         let counter = self.next_counter() as u64;
 
-        let token = self.as_token()
-            .sign(counter, grant)?;
+        let token = self.signer.sign("token", counter, grant)?;
 
         Ok(IssuedToken::without_refresh(token, grant.until))
-    }
-
-    fn as_token(&self) -> <T as Tagged>::Signer
-    where
-        for <'a> T: Tagged<'a>,
-    {
-        self.signer.tag("token")
-    }
-
-    fn as_refresh(&self) -> <T as Tagged>::Signer
-    where
-        for <'a> T: Tagged<'a>,
-    {
-        self.signer.tag("refresh")
     }
 }
 
@@ -511,7 +486,7 @@ impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
 
 impl<T> Issuer for TokenSigner<T>
 where
-    for <'a> T: TagGrant + Tagged<'a>,
+    T: TagGrant + Signer,
 {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (&mut&*self).issue(grant)
@@ -528,7 +503,7 @@ where
 
 impl<'a, T> Issuer for &'a TokenSigner<T>
 where
-    for <'b> T: TagGrant + Tagged<'b>,
+    T: TagGrant + Signer,
 {
     fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
         if let Some(duration) = &self.duration {
@@ -543,7 +518,7 @@ where
     }
 
     fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
-        Ok(self.as_token().extract(token).ok())
+        Ok(self.signer.extract("token", token).ok())
     }
 
     fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
@@ -551,6 +526,6 @@ where
             return Ok(None)
         }
 
-        Ok(self.as_refresh().extract(token).ok())
+        Ok(self.signer.extract("refresh", token).ok())
     }
 }

@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
-use std::iter::{Extend, FromIterator};
+use std::iter::Extend;
 use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::rc::Rc;
 
@@ -162,10 +162,9 @@ pub enum ClientType {
 }
 
 /// A very simple, in-memory hash map of client ids to Client entries.
-#[derive(Default)]
 pub struct ClientMap {
     clients: HashMap<String, EncodedClient>,
-    password_policy: Option<Box<dyn PasswordPolicy>>,
+    password_policy: Box<dyn PasswordPolicy>,
 }
 
 impl fmt::Debug for ClientType {
@@ -272,25 +271,24 @@ pub trait PasswordPolicy: Send + Sync {
 
 impl ClientMap {
     /// Create an empty map without any clients in it.
-    pub fn new() -> ClientMap {
-        ClientMap::default()
+    pub fn new<P>(password_policy: P) -> ClientMap
+    where
+        P: PasswordPolicy + 'static,
+    {
+        ClientMap {
+            password_policy: Box::new(password_policy),
+            clients: Default::default(),
+        }
     }
 
     /// Insert or update the client record.
-    pub fn register_client(&mut self, client: Client) -> Result<(), RegistrarError> {
-        let password_policy = Self::current_policy(&self.password_policy).ok_or(RegistrarError::Unspecified)?;
-        self.clients.insert(client.client_id.clone(), client.encode(password_policy));
-        Ok(())
+    pub fn register_client(&mut self, client: Client) {
+        self.clients.insert(client.client_id.clone(), client.encode(&*self.password_policy));
     }
 
     /// Change how passwords are encoded while stored.
     pub fn set_password_policy<P: PasswordPolicy + 'static>(&mut self, new_policy: P) {
-        self.password_policy = Some(Box::new(new_policy))
-    }
-
-    // This is not an instance method because it needs to borrow the box but register needs &mut
-    fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> Option<&'a dyn PasswordPolicy> {
-        policy.as_ref().map(|boxed| &**boxed)
+        self.password_policy = Box::new(new_policy);
     }
 }
 
@@ -299,14 +297,6 @@ impl Extend<Client> for ClientMap {
         iter.into_iter().for_each(|client| {
             let _ = self.register_client(client);
         })
-    }
-}
-
-impl FromIterator<Client> for ClientMap {
-    fn from_iter<I>(iter: I) -> Self where I: IntoIterator<Item=Client> {
-        let mut into = ClientMap::new();
-        into.extend(iter);
-        into
     }
 }
 
@@ -441,11 +431,9 @@ impl Registrar for ClientMap {
     }
 
     fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
-        let password_policy = Self::current_policy(&self.password_policy).ok_or(RegistrarError::Unspecified)?;
-
         self.clients.get(client_id)
             .ok_or(RegistrarError::Unspecified)
-            .and_then(|client| RegisteredClient::new(client, password_policy)
+            .and_then(|client| RegisteredClient::new(client, &*self.password_policy)
                 .check_authentication(passphrase))?;
 
         Ok(())

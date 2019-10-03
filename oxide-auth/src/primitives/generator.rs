@@ -9,11 +9,8 @@
 //!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
 //!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
 //!     is not currently expressed in the type system or with traits.
-use super::grant::{Value, Extensions, Grant};
-use super::{Url, Time};
-use super::scope::Scope;
+use super::grant::Grant;
 
-use std:: collections::HashMap;
 
 /// Generic token for a specific grant.
 ///
@@ -36,31 +33,6 @@ pub trait TagGrant {
     fn tag(&mut self, usage: u64, grant: &Grant) -> Result<String, ()>;
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct SerdeAssertionGrant {
-    /// Identifies the owner of the resource.
-    owner_id: String,
-
-    /// Identifies the client to which the grant was issued.
-    client_id: String,
-
-    /// The scope granted to the client.
-    #[serde(with = "scope_serde")]
-    scope: Scope,
-
-    /// The redirection uri under which the client resides. The url package does indeed seem to
-    /// parse valid URIs as well.
-    #[serde(with = "url_serde")]
-    redirect_uri: Url,
-
-    /// Expiration date of the grant (Utc).
-    #[serde(with = "time_serde")]
-    until: Time,
-
-    /// The public extensions, private extensions not supported currently
-    public_extensions: HashMap<String, Option<String>>,
-}
-
 impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for Box<T> {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         (&mut **self).tag(counter, grant)
@@ -70,93 +42,6 @@ impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for Box<T> {
 impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for &'a mut T {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         (&mut **self).tag(counter, grant)
-    }
-}
-
-mod scope_serde {
-    use primitives::scope::Scope;
-
-    use serde::ser::{Serializer};
-    use serde::de::{Deserialize, Deserializer, Error};
-
-    pub fn serialize<S: Serializer>(scope: &Scope, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&scope.to_string())
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Scope, D::Error> {
-        let as_string: &str = <(&str)>::deserialize(deserializer)?;
-        as_string.parse().map_err(Error::custom)
-    }
-}
-
-mod url_serde {
-    use super::Url;
-
-    use serde::ser::{Serializer};
-    use serde::de::{Deserialize, Deserializer, Error};
-
-    pub fn serialize<S: Serializer>(url: &Url, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&url.to_string())
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {
-        let as_string: &str = <(&str)>::deserialize(deserializer)?;
-        as_string.parse().map_err(Error::custom)
-    }
-}
-
-mod time_serde {
-    use super::Time;
-    use chrono::{TimeZone, Utc};
-
-    use serde::ser::{Serializer};
-    use serde::de::{Deserialize, Deserializer};
-
-    pub fn serialize<S: Serializer>(time: &Time, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_i64(time.timestamp())
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Time, D::Error> {
-        let as_timestamp: i64 = <i64>::deserialize(deserializer)?;
-        Ok(Utc.timestamp(as_timestamp, 0))
-    }
-}
-
-impl SerdeAssertionGrant {
-    pub fn try_from(grant: &Grant) -> Result<Self, ()> {
-        let mut public_extensions: HashMap<String, Option<String>> = HashMap::new();
-
-        if grant.extensions.private().any(|_| true) {
-            return Err(())
-        }
-
-        for (name, content) in grant.extensions.public() {
-            public_extensions.insert(name.to_string(), content.map(str::to_string));
-        }
-
-        Ok(SerdeAssertionGrant {
-            owner_id: grant.owner_id.clone(),
-            client_id: grant.client_id.clone(),
-            scope: grant.scope.clone(),
-            redirect_uri: grant.redirect_uri.clone(),
-            until: grant.until,
-            public_extensions,
-        })
-    }
-
-    pub fn grant(self) -> Grant {
-        let mut extensions = Extensions::new();
-        for (name, content) in self.public_extensions.into_iter() {
-            extensions.set_raw(name, Value::public(content))
-        }
-        Grant {
-            owner_id: self.owner_id,
-            client_id: self.client_id,
-            scope: self.scope,
-            redirect_uri: self.redirect_uri,
-            until: self.until,
-            extensions,
-        }
     }
 }
 
