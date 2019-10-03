@@ -31,8 +31,7 @@ struct RefreshTokenSetup {
 
 impl RefreshTokenSetup {
     fn private_client() -> Self {
-        let mut registrar = ClientMap::new();
-        registrar.set_password_policy(Pbkdf2::default());
+        let mut registrar = ClientMap::new(Pbkdf2::default());
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
@@ -49,7 +48,7 @@ impl RefreshTokenSetup {
             extensions: Extensions::new(),
         };
 
-        registrar.register_client(client).unwrap();
+        registrar.register_client(client);
         let issued = issuer.issue(grant).unwrap();
         assert!(!issued.refresh.is_empty());
 
@@ -66,8 +65,7 @@ impl RefreshTokenSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
-        registrar.set_password_policy(Pbkdf2::default());
+        let mut registrar = ClientMap::new(Pbkdf2::default());
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::public(EXAMPLE_CLIENT_ID,
@@ -83,7 +81,7 @@ impl RefreshTokenSetup {
             extensions: Extensions::new(),
         };
 
-        registrar.register_client(client).unwrap();
+        registrar.register_client(client);
         let issued = issuer.issue(grant).unwrap();
         assert!(!issued.refresh.is_empty());
 
@@ -244,7 +242,7 @@ fn public_private_invalid_grant() {
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
-    setup.registrar.register_client(client).unwrap();
+    setup.registrar.register_client(client);
 
     let basic_authorization = base64::encode(&format!("{}:{}",
         "PrivateClient", EXAMPLE_PASSPHRASE));

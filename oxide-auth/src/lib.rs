@@ -78,6 +78,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate rand;
 
 #[cfg(test)]
 extern crate oxide_auth_ring;

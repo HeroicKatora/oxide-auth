@@ -70,18 +70,19 @@ pub enum Error<W: WebRequest> {
 /// use oxide_auth::endpoint::{AccessTokenFlow, Endpoint, WebRequest};
 /// use oxide_auth::primitives::{
 ///     authorizer::AuthMap,
+///     generator::RandGenerator,
 ///     issuer::TokenMap,
 ///     registrar::ClientMap,
 /// };
-/// use oxide_auth_ring::generator::RandomGenerator;
+/// use oxide_auth_ring::registrar::Pbkdf2;
 ///
 /// fn access_token_endpoint<R: WebRequest>() -> AccessTokenFlow<impl Endpoint<R>, R> 
 ///     where R::Response: Default,
 /// {
 ///     let endpoint = Generic {
-///         authorizer: AuthMap::new(RandomGenerator::new(16)),
-///         registrar: ClientMap::new(),
-///         issuer: TokenMap::new(RandomGenerator::new(16)),
+///         authorizer: AuthMap::new(RandGenerator::new_std_rng(16)),
+///         registrar: ClientMap::new(Pbkdf2::default()),
+///         issuer: TokenMap::new(RandGenerator::new_std_rng(16)),
 ///         scopes: Vacant,
 ///         solicitor: Vacant,
 ///         response: Vacant,

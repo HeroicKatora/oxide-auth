@@ -38,9 +38,8 @@ impl PkceSetup {
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap());
 
-        let mut registrar = ClientMap::new();
-        registrar.set_password_policy(Pbkdf2::default());
-        registrar.register_client(client).unwrap();
+        let mut registrar = ClientMap::new(Pbkdf2::default());
+        registrar.register_client(client);
 
         let token = "ExampleAuthorizationToken".to_string();
         let authorizer = AuthMap::new(TestGenerator(token.clone()));

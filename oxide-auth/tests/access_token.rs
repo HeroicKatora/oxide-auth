@@ -34,8 +34,7 @@ struct AccessTokenSetup {
 
 impl AccessTokenSetup {
     fn private_client() -> Self {
-        let mut registrar = ClientMap::new();
-        registrar.set_password_policy(Pbkdf2::default());
+        let mut registrar = ClientMap::new(Pbkdf2::default());
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
@@ -54,7 +53,7 @@ impl AccessTokenSetup {
         };
 
         let authtoken = authorizer.authorize(authrequest).unwrap();
-        registrar.register_client(client).unwrap();
+        registrar.register_client(client);
 
         let basic_authorization = base64::encode(&format!("{}:{}",
             EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
@@ -69,8 +68,7 @@ impl AccessTokenSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
-        registrar.set_password_policy(Pbkdf2::default());
+        let mut registrar = ClientMap::new(Pbkdf2::default());
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
@@ -88,7 +86,7 @@ impl AccessTokenSetup {
         };
 
         let authtoken = authorizer.authorize(authrequest).unwrap();
-        registrar.register_client(client).unwrap();
+        registrar.register_client(client);
 
         let basic_authorization = base64::encode(&format!("{}:{}",
             EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
@@ -203,7 +201,7 @@ fn access_equivalent_url() {
         REDIRECT_URL.parse().unwrap(),
         EXAMPLE_SCOPE.parse().unwrap());
 
-    setup.registrar.register_client(confusing_client).unwrap();
+    setup.registrar.register_client(confusing_client);
 
     let authrequest = Grant {
         client_id: CLIENT_ID.to_string(),

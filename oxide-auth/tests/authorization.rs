@@ -29,15 +29,14 @@ struct AuthorizationSetup {
 
 impl AuthorizationSetup {
     fn new() -> AuthorizationSetup {
-        let mut registrar = ClientMap::new();
-        registrar.set_password_policy(Pbkdf2::default());
+        let mut registrar = ClientMap::new(Pbkdf2::default());
         let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
-        registrar.register_client(client).unwrap();
+        registrar.register_client(client);
         AuthorizationSetup {
             registrar,
             authorizer,
