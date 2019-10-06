@@ -13,7 +13,7 @@
 //!     crate
 use super::grant::Grant;
 
-use rand::{CryptoRng, Rng, SeedableRng, rngs::{OsRng, StdRng, ThreadRng}};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 /// Generic token for a specific grant.
 ///
@@ -37,50 +37,17 @@ pub trait TagGrant {
 }
 
 /// An implementation of TagGrant backed by a cryptographically secure source of randomness
-pub struct RandGenerator<T> {
-    rand: T,
+pub struct RandGenerator {
+    rand: StdRng,
     len: usize,
 }
 
-impl RandGenerator<StdRng> {
-    /// Create a new RandGenerator backed by StdRng
-    pub fn new_std_rng(len: usize) -> Self {
-        RandGenerator {
-            rand: SeedableRng::from_entropy(),
-            len,
-        }
-    }
-}
-
-impl RandGenerator<OsRng> {
-    /// Create a new RandGenerator backed by OsRng
-    pub fn new_os_rng(len: usize) -> Self {
-        RandGenerator {
-            rand: OsRng,
-            len,
-        }
-    }
-}
-
-impl RandGenerator<ThreadRng> {
-    /// Create a new RandGenerator backed by ThreadRng
-    pub fn new_thread_rng(len: usize) -> Self {
-        RandGenerator {
-            rand: rand::thread_rng(),
-            len,
-        }
-    }
-}
-
-impl<T> RandGenerator<T>
-where
-    T: CryptoRng + Rng,
-{
+impl RandGenerator {
     /// Create a new RandGenerator from a CryptoRng type and the length of tags that will be
     /// generated
-    pub fn new(rand: T, len: usize) -> Self {
+    pub fn new(len: usize) -> Self {
         RandGenerator {
-            rand,
+            rand: StdRng::from_entropy(),
             len,
         }
     }
@@ -92,10 +59,7 @@ where
     }
 }
 
-impl<T> TagGrant for RandGenerator<T>
-where
-    T: CryptoRng + Rng,
-{
+impl TagGrant for RandGenerator {
     fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
         self.generate()
     }
@@ -132,14 +96,11 @@ mod tests {
     #[test]
     fn assert_send_sync_static_rand() {
         fn uses<T: Send + Sync + 'static>(_: T) {}
-        let _ = uses(RandGenerator::new_os_rng(16));
-        let _ = uses(RandGenerator::new_std_rng(16));
+        let _ = uses(RandGenerator::new(16));
     }
 
     #[test]
     fn assert_generators_work() {
-        assert!(RandGenerator::new_os_rng(16).tag(64, &build_grant()).is_ok());
-        assert!(RandGenerator::new_thread_rng(16).tag(64, &build_grant()).is_ok());
-        assert!(RandGenerator::new_std_rng(16).tag(64, &build_grant()).is_ok());
+        assert!(RandGenerator::new(16).tag(64, &build_grant()).is_ok());
     }
 }

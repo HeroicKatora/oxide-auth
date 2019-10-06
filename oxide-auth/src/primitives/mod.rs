@@ -22,9 +22,9 @@
 //! use oxide_auth_ring::registrar::Pbkdf2;
 //!
 //! Generic {
-//!     authorizer: AuthMap::new(RandGenerator::new_std_rng(16)),
+//!     authorizer: AuthMap::new(RandGenerator::new(16)),
 //!     registrar: ClientMap::new(Pbkdf2::default()),
-//!     issuer: TokenMap::new(RandGenerator::new_std_rng(16)),
+//!     issuer: TokenMap::new(RandGenerator::new(16)),
 //!     // ...
 //! #   scopes: Vacant,
 //! #   solicitor: Vacant,
