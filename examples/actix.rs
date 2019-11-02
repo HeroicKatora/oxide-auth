@@ -34,7 +34,7 @@ struct State {
     scopes: &'static [Scope],
 }
 
-/// Example of a main function of a rouille server supporting oauth.
+/// Example of a main function of a actix server supporting oauth.
 pub fn main() {
     let mut sys = actix::System::new("HttpServerClient");
 
