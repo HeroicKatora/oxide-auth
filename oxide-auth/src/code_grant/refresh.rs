@@ -6,7 +6,6 @@ use chrono::{Duration, Utc};
 
 use code_grant::error::{AccessTokenError, AccessTokenErrorType};
 use primitives::grant::Grant;
-use primitives::scope::Scope;
 use primitives::issuer::{RefreshedToken, Issuer};
 use primitives::registrar::{Registrar, RegistrarError};
 
@@ -55,37 +54,48 @@ pub trait Endpoint {
 pub struct BearerToken(RefreshedToken, String);
 
 /// An ongoing refresh request.
-pub struct Refresh<'a> {
-    state: RefreshState<'a>,
+pub struct Refresh<'req> {
+    state: RefreshState<'req>,
 }
 
 /// Inner state machine for refreshing.
-enum RefreshState<'a> {
+enum RefreshState<'req> {
+    /// The initial state.
+    New {
+        request: &'req dyn Request,
+    },
     /// State we reach after the request has been validated.
     ///
     /// Next, the registrar must verify the authentication (authorization header).
-    Authorizing {
-        request: &'a mut dyn Request,
-        client: String,
-        passdata: Vec<u8>,
+    Authenticating {
+        request: &'req dyn Request,
+        client: Cow<'req, str>,
+        passdata: Option<Cow<'req, [u8]>>,
+        token: Cow<'req, str>,
     },
-    /// State after authorization has passed.
-    ///
-    /// Next, we restore the refresh token.
-    Fetching {
-        request: &'a mut dyn Request,
+    /// State after authorization has passed, waiting on recovering the refresh token.
+    Recovering {
+        request: &'req dyn Request,
         /// The user the registrar verified.
         authenticated: Option<String>,
+        token: Cow<'req, str>,
     },
-    /// State after the token has been determined and validated.
-    ///
-    /// Next, we issue a new token.
-    Issuing {
-        request: &'a mut dyn Request,
-        /// The scope we have determined.
-        scope: Scope,
+    /// State after the token has been determined but no authenticated client was used. Need to
+    /// potentially wait on grant-to-authorized-user-correspondence matching.
+    CoAuthenticating {
+        request: &'req dyn Request,
         /// The restored grant.
         grant: Grant,
+        /// The refresh token of the grant.
+        token: Cow<'req, str>,
+    },
+    /// State when we await the issuing of a refreshed token.
+    Issuing {
+        request: &'req dyn Request,
+        /// The grant with the parameter set.
+        grant: Grant,
+        /// The refresh token of the grant.
+        token: Cow<'req, str>,
     },
     /// State after an error occurred.
     Err(Error),
@@ -102,6 +112,8 @@ pub enum Input {
     Issued(RefreshedToken),
     /// The issuer failed internally.
     IssuerError,
+    /// Advance without input as far as possible, or just retrieve the output again.
+    None,
 }
 
 pub enum Output<'a> {
@@ -117,11 +129,12 @@ pub enum Output<'a> {
         token: &'a str,
         grant: Grant,
     },
-    Success(BearerToken),
+    Ok(BearerToken),
+    Err(Error),
 }
 
 /// Defines actions for the response to an access token request.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Error {
     /// The token did not represent a valid token.
     Invalid(ErrorDescription),
@@ -138,18 +151,85 @@ pub enum Error {
 
 /// Simple wrapper around RefreshError.
 ///
-/// Enables addtional json functionality to generate a properly formatted response in the user of
+/// Enables additional json functionality to generate a properly formatted response in the user of
 /// this module.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ErrorDescription {
     error: AccessTokenError,
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
-impl Refresh<'_> {
+impl<'req> Refresh<'req> {
+    pub fn new(request: &'req dyn Request) -> Self {
+        Refresh {
+            state: RefreshState::New { request },
+        }
+    }
+
+    fn take(&mut self)  -> RefreshState<'req> {
+        core::mem::replace(&mut self.state, RefreshState::Err(Error::Primitive))
+    }
+
     pub fn next(&mut self, input: Input) -> Output<'_> {
-        unimplemented!()
+        // Run the next state transition if we got the right input. Errors that happen will be
+        // stored as a inescapable error state.
+        match (self.take(), input) {
+            (RefreshState::Err(error), _) => {
+                self.state = RefreshState::Err(error.clone());
+                Output::Err(error)
+            },
+            (RefreshState::New { request }, Input::None) => {
+                self.state = initialize(request)
+                    .unwrap_or_else(RefreshState::Err);
+                self.output()
+            },
+            (RefreshState::Authenticating { request, client, passdata: _, token }, Input::Authenticated) => {
+                self.state = authenticated(request, client, token);
+                self.output()
+            },
+            (RefreshState::Recovering { request, authenticated, token }, Input::Recovered(grant)) => {
+                self.state = recovered_refresh(request, authenticated, grant, token)
+                    .unwrap_or_else(RefreshState::Err);
+                self.output()
+            },
+            (RefreshState::CoAuthenticating { request, grant, token }, Input::Authenticated) => {
+                self.state = co_authenticated(request, grant, token)
+                    .unwrap_or_else(RefreshState::Err);
+                self.output()
+            },
+            (RefreshState::Issuing { request, grant, token: _ }, Input::Issued(token)) => {
+                // Ensure that this result is not duplicated.
+                self.state = RefreshState::Err(Error::Primitive);
+                Output::Ok(issued(request, grant, token))
+            },
+            (_, Input::None) => self.output(),
+            (_, _) => {
+                self.state = RefreshState::Err(Error::Primitive);
+                self.output()
+            }
+        }
+    }
+
+    fn output(&self) -> Output<'_> {
+        match &self.state {
+            RefreshState::New { .. } => unreachable!("This state never produces output"),
+            RefreshState::Authenticating { client, passdata, .. } 
+                => Output::Unauthenticated { client, pass: passdata.as_ref().map(|cow| cow.as_ref()) },
+            RefreshState::CoAuthenticating { grant, .. }
+                => Output::Unauthenticated { client: &grant.client_id, pass: None },
+            RefreshState::Recovering { token, .. }
+                => Output::RecoverRefresh(token.clone().into_owned()),
+            RefreshState::Issuing { token, grant, .. }
+                => Output::Refresh { token, grant: grant.clone(), },
+            RefreshState::Err(error) => Output::Err(error.clone()),
+        }
+    }
+}
+
+impl Input {
+    pub fn take(&mut self) -> Self {
+        core::mem::replace(self, Input::None)
     }
 }
 
@@ -166,6 +246,43 @@ impl Refresh<'_> {
 pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
     -> Result<BearerToken> 
 {
+    let mut refresh = Refresh::new(request);
+    let mut input = Input::None;
+    loop {
+        match refresh.next(input.take()) {
+            Output::Err(error) => return Err(error),
+            Output::Ok(token) => return Ok(token),
+            Output::Refresh { token, grant } => {
+                let refreshed = handler
+                    .issuer()
+                    .refresh(token, grant)
+                    .map_err(|()| Error::Primitive)?;
+                input = Input::Issued(refreshed);
+            },
+            Output::RecoverRefresh(token) => {
+                let recovered = handler
+                    .issuer()
+                    .recover_refresh(&token)
+                    .map_err(|()| Error::Primitive)?;
+                input = Input::Recovered(recovered);
+            },
+            Output::Unauthenticated { client, pass } => {
+                let _: () = handler
+                    .registrar()
+                    .check(client, pass)
+                    .map_err(|err| match err {
+                        RegistrarError::PrimitiveError => Error::Primitive,
+                        RegistrarError::Unspecified => Error::unauthorized("basic"),
+                    })?;
+                input = Input::Authenticated;
+            },
+        }
+    }
+}
+
+fn initialize(request: &dyn Request)
+    -> Result<RefreshState>
+{
     if !request.valid() {
         return Err(Error::invalid(AccessTokenErrorType::InvalidRequest))
     }
@@ -181,33 +298,38 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
         Some(_) => return Err(Error::invalid(AccessTokenErrorType::UnsupportedGrantType)),
     };
 
-    // The server MUST authenticate the client if authentication is included.
-    // ... MUST request client authentication for confidential clients.
-    //
-    // In effect, if this is `Some(_)` we should error due to wrong refresh token before we have
-    // validated that the authorization authenticates a client? But we must inspect the token to
-    // know if there is a client to validate.
-    let authenticated = match request.authorization() {
-        Some((client, passdata)) => {
-            handler
-                .registrar()
-                .check(&client, Some(&passdata))
-                .map_err(|err| match err {
-                    RegistrarError::PrimitiveError => Error::Primitive,
-                    RegistrarError::Unspecified => Error::unauthorized("basic"),
-                })?;
-            Some(client)
-        },
-        None => None,
-    };
+    match request.authorization() {
+        Some((client, passdata)) => Ok(RefreshState::Authenticating {
+            request,
+            client,
+            passdata: Some(passdata),
+            token,
+        }),
+        None => Ok(RefreshState::Recovering { 
+            request,
+            token,
+            authenticated: None,
+        })
+    }
+}
 
-    // MUST validate the refresh token.
-    let grant = handler
-        .issuer()
-        .recover_refresh(&token)
-        // Primitive error is ok, that's like internal server error.
-        .map_err(|()| Error::Primitive)?;
+fn authenticated<'req>(request: &'req dyn Request, client: Cow<'req, str>, token: Cow<'req, str>)
+    -> RefreshState<'req>
+{
+    // Trivial, simply advance to recovering the token.
+    RefreshState::Recovering {
+        request,
+        token,
+        authenticated: Some(client.into_owned()),
+    }
+}
 
+fn recovered_refresh<'req>(
+    request: &'req dyn Request,
+    authenticated: Option<String>,
+    grant: Option<Grant>,
+    token: Cow<'req, str>,
+) -> Result<RefreshState<'req>> {
     let grant = grant
         // ... is invalid, ... (Section 5.2)
         .ok_or_else(|| Error::invalid(AccessTokenErrorType::InvalidGrant))?;
@@ -219,7 +341,9 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
                 // ... or was issued to another client (Section 5.2)
                 // importantly, the client authentication itself was okay, so we don't respond with
                 // Unauthorized but with BadRequest.
-                return Err(Error::invalid(AccessTokenErrorType::InvalidGrant))
+                Err(Error::invalid(AccessTokenErrorType::InvalidGrant))
+            } else {
+                validate(request, grant, token)
             }
         },
         
@@ -228,16 +352,28 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
         // We'll see if this was confidential by trying to auth with no passdata. If that fails,
         // then the client should have authenticated with header information.
         None => {
-            handler
-                .registrar()
-                .check(&grant.client_id, None)
-                .map_err(|err| match err {
-                    RegistrarError::PrimitiveError => Error::Primitive,
-                    RegistrarError::Unspecified => Error::unauthorized("basic"),
-                })?;
+            Ok(RefreshState::CoAuthenticating {
+                request,
+                grant,
+                token,
+            })
         }
     }
+}
 
+fn co_authenticated<'req>(
+    request: &'req dyn Request,
+    grant: Grant,
+    token: Cow<'req, str>,
+) -> Result<RefreshState<'req>> {
+    validate(request, grant, token)
+}
+
+fn validate<'req>(
+    request: &'req dyn Request,
+    grant: Grant,
+    token: Cow<'req, str>,
+) -> Result<RefreshState<'req>> {
     // .. is expired, revoked, ... (Section 5.2)
     if grant.until <= Utc::now() {
         return Err(Error::invalid(AccessTokenErrorType::InvalidGrant));
@@ -263,17 +399,23 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
     };
 
     // Update the grant with the derived data.
-    let str_scope = scope.to_string();
     let mut grant = grant;
     grant.scope = scope;
     grant.until = Utc::now() + Duration::hours(1);
 
-    let token = handler
-        .issuer()
-        .refresh(&token, grant)
-        .map_err(|()| Error::Primitive)?;
+    Ok(RefreshState::Issuing {
+        request,
+        grant,
+        token,
+    })
+}
 
-    Ok(BearerToken { 0: token, 1: str_scope })
+fn issued<'req>(
+    _: &'req dyn Request,
+    grant: Grant,
+    token: RefreshedToken,
+) -> BearerToken {
+    BearerToken(token, grant.scope.to_string())
 }
 
 impl Error {
