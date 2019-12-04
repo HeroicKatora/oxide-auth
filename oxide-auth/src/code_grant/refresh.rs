@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use chrono::{Duration, Utc};
 
 use code_grant::{accesstoken::TokenResponse, error::{AccessTokenError, AccessTokenErrorType}};
+use primitives::grant::Grant;
+use primitives::scope::Scope;
 use primitives::issuer::{RefreshedToken, Issuer};
 use primitives::registrar::{Registrar, RegistrarError};
 
@@ -52,6 +54,72 @@ pub trait Endpoint {
 /// Represents a bearer token, optional refresh token and the associated scope for serialization.
 pub struct BearerToken(RefreshedToken, String);
 
+/// An ongoing refresh request.
+pub struct Refresh<'a> {
+    state: RefreshState<'a>,
+}
+
+/// Inner state machine for refreshing.
+enum RefreshState<'a> {
+    /// State we reach after the request has been validated.
+    ///
+    /// Next, the registrar must verify the authentication (authorization header).
+    Authorizing {
+        request: &'a mut dyn Request,
+        client: String,
+        passdata: Vec<u8>,
+    },
+    /// State after authorization has passed.
+    ///
+    /// Next, we restore the refresh token.
+    Fetching {
+        request: &'a mut dyn Request,
+        /// The user the registrar verified.
+        authenticated: Option<String>,
+    },
+    /// State after the token has been determined and validated.
+    ///
+    /// Next, we issue a new token.
+    Issuing {
+        request: &'a mut dyn Request,
+        /// The scope we have determined.
+        scope: Scope,
+        /// The restored grant.
+        grant: Grant,
+    },
+    /// State after an error occurred.
+    Err(Error),
+}
+
+pub enum Input {
+    /// Positively answer an authentication query.
+    Authenticated,
+    /// Negatively answer an authentication query.
+    RegistrarError(RegistrarError),
+    /// Provide the queried refresh token.
+    Recovered(Option<Grant>),
+    /// The refreshed token.
+    Issued(RefreshedToken),
+    /// The issuer failed internally.
+    IssuerError,
+}
+
+pub enum Output<'a> {
+    /// The registrar should authenticate a client.
+    Unauthenticated {
+        client: &'a str,
+        pass: Option<&'a [u8]>,
+    },
+    /// The issuer should try to recover a refresh token.
+    RecoverRefresh(String),
+    /// The issuer should issue a refreshed token.
+    Refresh {
+        token: &'a str,
+        grant: Grant,
+    },
+    Success(BearerToken),
+}
+
 /// Defines actions for the response to an access token request.
 #[derive(Debug)]
 pub enum Error {
@@ -78,6 +146,12 @@ pub struct ErrorDescription {
 }
 
 type Result<T> = std::result::Result<T, Error>;
+
+impl Refresh<'_> {
+    pub fn next(&mut self, input: Input) -> Output<'_> {
+        unimplemented!()
+    }
+}
 
 /// Try to get a refreshed access token.
 ///
