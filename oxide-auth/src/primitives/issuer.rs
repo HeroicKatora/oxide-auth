@@ -24,9 +24,7 @@ pub trait Issuer {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()>;
 
     /// Refresh a token.
-    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
-        Err(())
-    }
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()>;
 
     /// Get the values corresponding to a bearer token
     fn recover_token<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
@@ -173,7 +171,8 @@ impl IssuedToken {
     /// offers some additional compatibility.
     ///
     /// ```
-    /// # use oxide_auth::primitives::grant::Grant;
+    /// # use oxide_auth::primitives::issuer::RefreshedToken;
+    /// use oxide_auth::primitives::grant::Grant;
     /// use oxide_auth::primitives::issuer::{Issuer, IssuedToken};
     ///
     /// struct MyIssuer;
@@ -193,6 +192,7 @@ impl IssuedToken {
     ///     // …
     /// # fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
     /// # fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
+    /// # fn refresh(&mut self, _: &str, _: Grant) -> Result<RefreshedToken, ()> { Err(()) }
     /// }
     /// ```
     pub fn without_refresh(token: String, until: Time) -> Self {
@@ -471,6 +471,10 @@ impl Issuer for TokenSigner {
         (&mut&*self).issue(grant)
     }
 
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
+        Err(())
+    }
+
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
         (&&*self).recover_token(token)
     }
@@ -491,6 +495,10 @@ impl<'a> Issuer for &'a TokenSigner {
         } else {
             self.unrefreshable_token(&grant)
         }
+    }
+
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
+        Err(())
     }
 
     fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
