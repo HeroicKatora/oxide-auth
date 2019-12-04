@@ -171,7 +171,8 @@ impl IssuedToken {
     /// offers some additional compatibility.
     ///
     /// ```
-    /// # use oxide_auth::primitives::grant::Grant;
+    /// # use oxide_auth::primitives::issuer::RefreshedToken;
+    /// use oxide_auth::primitives::grant::Grant;
     /// use oxide_auth::primitives::issuer::{Issuer, IssuedToken};
     ///
     /// struct MyIssuer;
@@ -191,6 +192,7 @@ impl IssuedToken {
     ///     // …
     /// # fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
     /// # fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
+    /// # fn refresh(&mut self, _: &str, _: Grant) -> Result<RefreshedToken, ()> { Err(()) }
     /// }
     /// ```
     pub fn without_refresh(token: String, until: Time) -> Self {
