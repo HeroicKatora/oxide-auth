@@ -294,7 +294,7 @@ mod scope_serde {
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Scope, D::Error> {
-        let as_string: &str = <(&str)>::deserialize(deserializer)?;
+        let as_string: &str = <&str>::deserialize(deserializer)?;
         as_string.parse().map_err(Error::custom)
     }
 }
@@ -310,7 +310,7 @@ mod url_serde {
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {
-        let as_string: &str = <(&str)>::deserialize(deserializer)?;
+        let as_string: &str = <&str>::deserialize(deserializer)?;
         as_string.parse().map_err(Error::custom)
     }
 }
