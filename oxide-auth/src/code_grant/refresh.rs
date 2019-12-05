@@ -37,11 +37,17 @@ pub trait Request {
     fn extension(&self, key: &str) -> Option<Cow<str>>;
 }
 
-/// The specific endpoin trait for refreshing.
+/// The specific endpoint trait for refreshing.
 ///
 /// Each method will only be invoked exactly once when processing a correct and authorized request,
 /// and potentially less than once when the request is faulty.  These methods should be implemented
 /// by internally using `primitives`, as it is implemented in the `frontend` module.
+///
+/// This is the utility trait used by [`refresh`] to provide a simple loop around the [`Refresh`]
+/// state machine, the trait objects returned are used to fulfill the input requests.
+///
+/// [`refresh`]: method.refresh.html
+/// [`Refresh`]: struct.Refresh.html
 pub trait Endpoint {
     /// Authenticate the requesting confidential client.
     fn registrar(&self) -> &dyn Registrar;
@@ -51,9 +57,32 @@ pub trait Endpoint {
 }
 
 /// Represents a bearer token, optional refresh token and the associated scope for serialization.
+#[derive(Debug)]
 pub struct BearerToken(RefreshedToken, String);
 
 /// An ongoing refresh request.
+///
+/// This is a rather linear Mealy machine with four basic phases. It will pose some requests in the
+/// form of [`Output`] which should be satisfied with the next [`Input`] data. This will eventually
+/// produce a refreshed [`BearerToken`] or an [`Error`]. Note that the executing environment will
+/// need to use a [`Registrar`] and an [`Issuer`] to which some requests should be forwarded.
+///
+/// [`Input`]: struct.Input.html
+/// [`Output`]: struct.Output.html
+/// [`BearerToken`]: struct.BearerToken.html
+/// [`Error`]: struct.Error.html
+/// [`Issuer`] ../primitives/issuer/trait.Issuer.html
+/// [`Registrar`] ../primitives/registrar/trait.Registrar.html
+///
+/// A rough sketch of the operational phases:
+///
+/// 1. Ensure the request is valid based on the basic requirements (includes required parameters)
+/// 2. Check any included authentication
+/// 3. Try to recover the refresh token
+///     3.1. Check that it belongs to the authenticated client
+///     3.2. If there was no authentication, assert token does not require authentication
+///     3.3. Check the intrinsic validity (timestamp, scope)
+/// 4. Query the backend for a renewed (bearer) token
 pub struct Refresh<'req> {
     state: RefreshState<'req>,
 }
@@ -101,35 +130,63 @@ enum RefreshState<'req> {
     Err(Error),
 }
 
+/// An input injected by the executor into the state machine.
+#[derive(Clone, Debug)]
 pub enum Input {
     /// Positively answer an authentication query.
     Authenticated,
-    /// Negatively answer an authentication query.
-    RegistrarError(RegistrarError),
     /// Provide the queried refresh token.
     Recovered(Option<Grant>),
     /// The refreshed token.
-    Issued(RefreshedToken),
-    /// The issuer failed internally.
-    IssuerError,
+    Refreshed(RefreshedToken),
     /// Advance without input as far as possible, or just retrieve the output again.
     None,
 }
 
+/// A request by the statemachine to the executor.
+///
+/// Each variant is fulfilled by certain variants of the next inputs as an argument to
+/// `Refresh::next`. The output of most states is simply repeated if `Input::None` is provided
+/// instead but note that the successful bearer token response is **not** repeated.
+///
+/// This borrows data from the underlying state machine, so you need to drop it before advancing it
+/// with newly provided input.
+#[derive(Debug)]
 pub enum Output<'a> {
     /// The registrar should authenticate a client.
+    ///
+    /// Fulfilled by `Input::Authenticated`. In an unsuccessful case, the executor should not
+    /// continue and discard the flow.
     Unauthenticated {
+        /// The to-be-authenticated client.
         client: &'a str,
+        /// The supplied passdata/password.
         pass: Option<&'a [u8]>,
     },
-    /// The issuer should try to recover a refresh token.
-    RecoverRefresh(String),
-    /// The issuer should issue a refreshed token.
-    Refresh {
+    /// The issuer should try to recover the grant of a refresh token.
+    ///
+    /// Fulfilled by `Input::Recovered`.
+    RecoverRefresh {
+        /// The token supplied by the client.
         token: &'a str,
+    },
+    /// The issuer should issue a refreshed code grant token.
+    ///
+    /// Fulfilled by `Input::Refreshed`.
+    Refresh {
+        /// The refresh token that has been used.
+        token: &'a str,
+        /// The grant that should be issued as determined.
         grant: Grant,
     },
+    /// The state machine finished and a new bearer token was generated.
+    ///
+    /// This output **can not** be requested repeatedly, any future `Input` will yield a primitive
+    /// error instead.
     Ok(BearerToken),
+    /// The state machine finished in an error.
+    ///
+    /// The error will be repeated on *any* following input.
     Err(Error),
 }
 
@@ -161,16 +218,20 @@ pub struct ErrorDescription {
 type Result<T> = std::result::Result<T, Error>;
 
 impl<'req> Refresh<'req> {
+    /// Construct a new refresh state machine.
+    ///
+    /// This borrows the request for the duration of the request execution to ensure consistency of
+    /// all client input.
     pub fn new(request: &'req dyn Request) -> Self {
         Refresh {
             state: RefreshState::New { request },
         }
     }
 
-    fn take(&mut self)  -> RefreshState<'req> {
-        core::mem::replace(&mut self.state, RefreshState::Err(Error::Primitive))
-    }
-
+    /// Advance the state machine.
+    ///
+    /// The provided `Input` needs to fulfill the *previous* `Output` request. See their
+    /// documentation for more information.
     pub fn next(&mut self, input: Input) -> Output<'_> {
         // Run the next state transition if we got the right input. Errors that happen will be
         // stored as a inescapable error state.
@@ -198,7 +259,7 @@ impl<'req> Refresh<'req> {
                     .unwrap_or_else(RefreshState::Err);
                 self.output()
             },
-            (RefreshState::Issuing { request, grant, token: _ }, Input::Issued(token)) => {
+            (RefreshState::Issuing { request, grant, token: _ }, Input::Refreshed(token)) => {
                 // Ensure that this result is not duplicated.
                 self.state = RefreshState::Err(Error::Primitive);
                 Output::Ok(issued(request, grant, token))
@@ -211,6 +272,10 @@ impl<'req> Refresh<'req> {
         }
     }
 
+    fn take(&mut self)  -> RefreshState<'req> {
+        core::mem::replace(&mut self.state, RefreshState::Err(Error::Primitive))
+    }
+
     fn output(&self) -> Output<'_> {
         match &self.state {
             RefreshState::New { .. } => unreachable!("This state never produces output"),
@@ -219,7 +284,7 @@ impl<'req> Refresh<'req> {
             RefreshState::CoAuthenticating { grant, .. }
                 => Output::Unauthenticated { client: &grant.client_id, pass: None },
             RefreshState::Recovering { token, .. }
-                => Output::RecoverRefresh(token.clone().into_owned()),
+                => Output::RecoverRefresh { token: &token },
             RefreshState::Issuing { token, grant, .. }
                 => Output::Refresh { token, grant: grant.clone(), },
             RefreshState::Err(error) => Output::Err(error.clone()),
@@ -228,7 +293,7 @@ impl<'req> Refresh<'req> {
 }
 
 impl Input {
-    pub fn take(&mut self) -> Self {
+    fn take(&mut self) -> Self {
         core::mem::replace(self, Input::None)
     }
 }
@@ -257,9 +322,9 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
                     .issuer()
                     .refresh(token, grant)
                     .map_err(|()| Error::Primitive)?;
-                input = Input::Issued(refreshed);
+                input = Input::Refreshed(refreshed);
             },
-            Output::RecoverRefresh(token) => {
+            Output::RecoverRefresh { token } => {
                 let recovered = handler
                     .issuer()
                     .recover_refresh(&token)
