@@ -293,7 +293,7 @@ impl<'req> Refresh<'req> {
 }
 
 impl Input {
-    fn take(&mut self) -> Self {
+    pub fn take(&mut self) -> Self {
         core::mem::replace(self, Input::None)
     }
 }
@@ -490,7 +490,7 @@ impl Error {
         })
     }
 
-    fn unauthorized(authtype: &str) -> Self {
+    pub fn unauthorized(authtype: &str) -> Self {
         Error::Unauthorized(ErrorDescription {
                 // ... authentication failed (Section 5.2)
                 error: AccessTokenError::new(AccessTokenErrorType::InvalidClient),

@@ -1,6 +1,7 @@
 [workspace]
 members = [
 	"oxide-auth",
+	"oxide-auth-async",
 	"oxide-auth-actix",
 	"oxide-auth-actix/examples/actix-example",
 	"oxide-auth-iron",
