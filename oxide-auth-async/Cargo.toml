@@ -1,0 +1,12 @@
+[package]
+name = "oxide-auth-async"
+description = "Combines oxide-auth with async and futures"
+version = "0.1.0-alpha"
+authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.21"
+oxide-auth = { path = "../oxide-auth" }
