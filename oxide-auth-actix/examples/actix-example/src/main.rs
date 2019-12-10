@@ -1,16 +1,19 @@
 mod support;
 
-use actix::{Actor, Addr, Context, Handler};
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
-use futures::{future, Future};
+use futures::{
+    channel::{mpsc, oneshot},
+    stream::StreamExt,
+};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
+    primitives::grant::Grant,
     primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
 };
 use oxide_auth_actix::{
-    Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResource, OAuthResponse, Refresh,
-    Resource, Token, WebError,
+    Authorize, OAuthOperation, OAuthRequest, OAuthResource, OAuthResponse, Refresh, Resource,
+    Token, WebError,
 };
 use std::thread;
 
@@ -20,6 +23,25 @@ This page should be accessed via an oauth token from the client in the example. 
 here</a> to begin the authorization process.
 </html>
 ";
+
+enum Message {
+    AuthorizeGet(Authorize),
+    AuthorizePost(Authorize, String),
+    Refresh(Refresh),
+    Resource(Resource),
+    Token(Token),
+}
+
+enum Response {
+    Error(WebError),
+    OAuth(OAuthResponse),
+    Grant(Grant),
+}
+
+//type ReceiveResponse = oneshot::Receiver<Response>;
+type SendResponse = oneshot::Sender<Response>;
+type ReceiveMessage = mpsc::UnboundedReceiver<(Message, SendResponse)>;
+type SendMessage = mpsc::UnboundedSender<(Message, SendResponse)>;
 
 struct State {
     endpoint: Generic<
@@ -32,10 +54,134 @@ struct State {
     >,
 }
 
-enum Extras {
-    AuthGet,
-    AuthPost(String),
-    Nothing,
+async fn get_authorize(
+    req: OAuthRequest,
+    state: web::Data<SendMessage>,
+) -> Result<OAuthResponse, WebError> {
+    // GET requests should not mutate server state and are extremely
+    // vulnerable accidental repetition as well as Cross-Site Request
+    // Forgery (CSRF).
+    let (sender, receiver) = oneshot::channel();
+    state
+        .unbounded_send((Message::AuthorizeGet(Authorize(req)), sender))
+        .map_err(|err| WebError::InternalError(Some(format!("send error: {:?}", err))))?;
+    match receiver.await {
+        Ok(Response::OAuth(resp)) => Ok(resp),
+        Ok(Response::Error(err)) => Err(err),
+        Ok(_) => Err(WebError::InternalError(Some(
+            "Unexpected result".to_string(),
+        ))),
+        Err(err) => Err(WebError::InternalError(Some(format!(
+            "Messaging error {}",
+            err
+        )))),
+    }
+}
+
+async fn post_authorize(
+    r: HttpRequest,
+    req: OAuthRequest,
+    state: web::Data<SendMessage>,
+) -> Result<OAuthResponse, WebError> {
+    // Some authentication should be performed here in production cases
+    let (sender, receiver) = oneshot::channel();
+    state
+        .unbounded_send((
+            Message::AuthorizePost(Authorize(req), r.query_string().to_owned()),
+            sender,
+        ))
+        .map_err(|err| WebError::InternalError(Some(format!("send error: {:?}", err))))?;
+    match receiver.await {
+        Ok(Response::OAuth(resp)) => Ok(resp),
+        Ok(Response::Error(err)) => Err(err),
+        Ok(_) => Err(WebError::InternalError(Some(
+            "Unexpected result".to_string(),
+        ))),
+        Err(err) => Err(WebError::InternalError(Some(format!(
+            "Messaging error {}",
+            err
+        )))),
+    }
+}
+
+async fn token(
+    req: OAuthRequest,
+    state: web::Data<SendMessage>,
+) -> Result<OAuthResponse, WebError> {
+    let (sender, receiver) = oneshot::channel();
+    state
+        .unbounded_send((Message::Token(Token(req)), sender))
+        .map_err(|err| WebError::InternalError(Some(format!("send error: {:?}", err))))?;
+    match receiver.await {
+        Ok(Response::OAuth(resp)) => Ok(resp),
+        Ok(Response::Error(err)) => Err(err),
+        Ok(_) => Err(WebError::InternalError(Some(
+            "Unexpected result".to_string(),
+        ))),
+        Err(err) => Err(WebError::InternalError(Some(format!(
+            "Messaging error {}",
+            err
+        )))),
+    }
+}
+
+async fn refresh(
+    req: OAuthRequest,
+    state: web::Data<SendMessage>,
+) -> Result<OAuthResponse, WebError> {
+    let (sender, receiver) = oneshot::channel();
+    state
+        .unbounded_send((Message::Refresh(Refresh(req)), sender))
+        .map_err(|err| WebError::InternalError(Some(format!("send error: {:?}", err))))?;
+    match receiver.await {
+        Ok(Response::OAuth(resp)) => Ok(resp),
+        Ok(Response::Error(err)) => Err(err),
+        Ok(_) => Err(WebError::InternalError(Some(
+            "Unexpected result".to_string(),
+        ))),
+        Err(err) => Err(WebError::InternalError(Some(format!(
+            "Messaging error {}",
+            err
+        )))),
+    }
+}
+
+async fn index(
+    req: OAuthResource,
+    state: web::Data<SendMessage>,
+) -> Result<OAuthResponse, WebError> {
+    let (sender, receiver) = oneshot::channel();
+    state
+        .unbounded_send((Message::Resource(Resource(req.into_request())), sender))
+        .map_err(|err| WebError::InternalError(Some(format!("send error: {:?}", err))))?;
+    match receiver.await {
+        Ok(Response::Grant(_grant)) => Ok(OAuthResponse::ok()
+            .content_type("text/plain")?
+            .body("Hello world!")),
+        Ok(Response::OAuth(err)) => Ok(err.body(DENY_TEXT)),
+        Ok(_) => {
+            return Err(WebError::InternalError(Some(
+                "Unexpected result".to_string(),
+            )))
+        }
+        Err(err) => {
+            return Err(WebError::InternalError(Some(format!(
+                "Messaging error {}",
+                err
+            ))))
+        }
+    }
+}
+
+async fn start_browser() -> () {
+    let _ = thread::spawn(support::open_in_browser);
+}
+
+async fn start_db(mut state: State, mut rx: ReceiveMessage) -> () {
+    while let Some((m, f)) = rx.next().await {
+        let resp = state.process_message(m);
+        let _ = f.send(resp);
+    }
 }
 
 /// Example of a main function of an actix-web server supporting oauth.
@@ -46,82 +192,34 @@ pub fn main() {
     );
     env_logger::init();
 
-    let mut sys = actix::System::new("HttpServerClient");
+    let mut sys = actix_rt::System::new("HttpServerClient");
 
-    let state = State::preconfigured().start();
+    // Start, then open in browser, don't care about this finishing.
+    let _ = sys.block_on(start_browser());    
+
+    let (sender, receiver) = mpsc::unbounded();
+    let state = State::preconfigured();
+    let _ = actix_rt::spawn(start_db(state, receiver));
 
     // Create the main server instance
     HttpServer::new(move || {
         App::new()
-            .data(state.clone())
+            .data(sender.clone())
             .wrap(Logger::default())
             .service(
                 web::resource("/authorize")
-                    .route(web::get().to_async(
-                        |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                            // GET requests should not mutate server state and are extremely
-                            // vulnerable accidental repetition as well as Cross-Site Request
-                            // Forgery (CSRF).
-                            state
-                                .send(Authorize(req).wrap(Extras::AuthGet))
-                                .map_err(WebError::from)
-                        },
-                    ))
-                    .route(web::post().to_async(
-                        |(r, req, state): (HttpRequest, OAuthRequest, web::Data<Addr<State>>)| {
-                            // Some authentication should be performed here in production cases
-                            state
-                                .send(
-                                    Authorize(req)
-                                        .wrap(Extras::AuthPost(r.query_string().to_owned())),
-                                )
-                                .map_err(WebError::from)
-                        },
-                    )),
+                    .route(web::get().to(get_authorize))
+                    .route(web::post().to(post_authorize)),
             )
-            .route(
-                "/token",
-                web::post().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                    state
-                        .send(Token(req).wrap(Extras::Nothing))
-                        .map_err(WebError::from)
-                }),
-            )
-            .route(
-                "/refresh",
-                web::post().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                    state
-                        .send(Refresh(req).wrap(Extras::Nothing))
-                        .map_err(WebError::from)
-                }),
-            )
-            .route(
-                "/",
-                web::get().to_async(|(req, state): (OAuthResource, web::Data<Addr<State>>)| {
-                    state
-                        .send(Resource(req.into_request()).wrap(Extras::Nothing))
-                        .map_err(WebError::from)
-                        .and_then(|res| match res {
-                            Ok(_grant) => Ok(OAuthResponse::ok()
-                                .content_type("text/plain")?
-                                .body("Hello world!")),
-                            Err(Ok(response)) => Ok(response.body(DENY_TEXT)),
-                            Err(Err(e)) => Err(e.into()),
-                        })
-                }),
-            )
+            .route("/token", web::post().to(token))
+            .route("/refresh", web::post().to(refresh))
+            .route("/", web::get().to(index))
     })
     .bind("localhost:8020")
     .expect("Failed to bind to socket")
     .start();
 
     support::dummy_client();
-
-    // Start, then open in browser, don't care about this finishing.
-    let _: Result<(), ()> = sys.block_on(future::lazy(|| {
-        let _ = thread::spawn(support::open_in_browser);
-        future::ok(())
-    }));
 
     // Run the rest of the system.
     let _ = sys.run();
@@ -159,7 +257,7 @@ impl State {
         }
     }
 
-    pub fn with_solicitor<'a, S>(
+    fn with_solicitor<'a, S>(
         &'a mut self,
         solicitor: S,
     ) -> impl Endpoint<OAuthRequest, Error = WebError> + 'a
@@ -175,23 +273,10 @@ impl State {
             response: OAuthResponse::ok,
         })
     }
-}
 
-impl Actor for State {
-    type Context = Context<Self>;
-}
-
-impl<Op> Handler<OAuthMessage<Op, Extras>> for State
-where
-    Op: OAuthOperation,
-{
-    type Result = Result<Op::Item, Op::Error>;
-
-    fn handle(&mut self, msg: OAuthMessage<Op, Extras>, _: &mut Self::Context) -> Self::Result {
-        let (op, ex) = msg.into_inner();
-
-        match ex {
-            Extras::AuthGet => {
+    pub fn process_message(&mut self, msg: Message) -> Response {
+        match msg {
+            Message::AuthorizeGet(op) => {
                 let solicitor = FnSolicitor(move |_: &mut OAuthRequest, pre_grant: &PreGrant| {
                     // This will display a page to the user asking for his permission to proceed. The submitted form
                     // will then trigger the other authorization handler which actually completes the flow.
@@ -202,9 +287,12 @@ where
                     )
                 });
 
-                op.run(self.with_solicitor(solicitor))
+                match op.run(self.with_solicitor(solicitor)) {
+                    Ok(resp) => Response::OAuth(resp),
+                    Err(err) => Response::Error(err),
+                }
             }
-            Extras::AuthPost(query_string) => {
+            Message::AuthorizePost(op, query_string) => {
                 let solicitor = FnSolicitor(move |_: &mut OAuthRequest, _: &PreGrant| {
                     if query_string.contains("allow") {
                         OwnerConsent::Authorized("dummy user".to_owned())
@@ -213,9 +301,24 @@ where
                     }
                 });
 
-                op.run(self.with_solicitor(solicitor))
+                match op.run(self.with_solicitor(solicitor)) {
+                    Ok(resp) => Response::OAuth(resp),
+                    Err(err) => Response::Error(err),
+                }
             }
-            _ => op.run(&mut self.endpoint),
+            Message::Token(op) => match op.run(&mut self.endpoint) {
+                Ok(resp) => Response::OAuth(resp),
+                Err(err) => Response::Error(err),
+            },
+            Message::Refresh(op) => match op.run(&mut self.endpoint) {
+                Ok(resp) => Response::OAuth(resp),
+                Err(err) => Response::Error(err),
+            },
+            Message::Resource(op) => match op.run(&mut self.endpoint) {
+                Ok(resp) => Response::Grant(resp),
+                Err(Ok(err)) => Response::OAuth(err),
+                Err(Err(err)) => Response::Error(err),
+            },
         }
     }
 }
