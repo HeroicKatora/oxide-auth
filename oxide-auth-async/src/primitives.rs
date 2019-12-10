@@ -38,26 +38,35 @@ impl<T> Issuer for T
 
 #[async_trait(?Send)]
 pub trait Registrar {
-    async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
+    async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>)
+        -> Result<BoundClient<'a>, RegistrarError>;
 
-    async fn negotiate<'a>(&self, client: BoundClient<'a>, scope: Option<Scope>) -> Result<PreGrant, RegistrarError>;
+    async fn negotiate<'a>(&self, client: BoundClient<'a>, scope: Option<Scope>)
+        -> Result<PreGrant, RegistrarError>;
 
-    async fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError>;
+    async fn check(&self, client_id: &str, passphrase: Option<&[u8]>)
+        -> Result<(), RegistrarError>;
 }
 
 #[async_trait(?Send)]
 impl<T> Registrar for T
     where T: oxide_auth::primitives::registrar::Registrar + ?Sized,
 {
-    async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+    async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>)
+        -> Result<BoundClient<'a>, RegistrarError>
+    {
         oxide_auth::primitives::registrar::Registrar::bound_redirect(self, bound)
     }
 
-    async fn negotiate<'a>(&self, client: BoundClient<'a>, scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+    async fn negotiate<'a>(&self, client: BoundClient<'a>, scope: Option<Scope>)
+        -> Result<PreGrant, RegistrarError>
+    {
         oxide_auth::primitives::registrar::Registrar::negotiate(self, client, scope)
     }
 
-    async fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
+    async fn check(&self, client_id: &str, passphrase: Option<&[u8]>)
+        -> Result<(), RegistrarError>
+    {
         oxide_auth::primitives::registrar::Registrar::check(self, client_id, passphrase)
     }
 }
