@@ -14,7 +14,8 @@ edition = "2018"
 
 [dependencies]
 actix-rt = "1.0.0-alpha.3"
-actix-web = "2.0.0-alpha.4"
+actix-web = "2.0.0-alpha.5"
+actix-session = "0.3.0-alpha.3"
 futures = "0.3.1"
 oxide-auth = { version = "0.5.0-preview.0", path = "../oxide-auth" }
 serde_urlencoded = "0.6.1"

@@ -18,9 +18,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use base64::{encode, decode};
-use ring::digest::SHA256;
 use ring::rand::{SystemRandom, SecureRandom};
-use ring::hmac::SigningKey;
+use ring::hmac;
 use rmp_serde;
 
 /// Generic token for a specific grant.
@@ -80,7 +79,7 @@ impl RandomGenerator {
 /// signing the same grant for different uses, i.e. separating authorization from bearer grants and
 /// refresh tokens.
 pub struct Assertion {
-    secret: SigningKey,
+    secret: hmac::Key,
 }
 
 /// The cryptographic suite ensuring integrity of tokens.
@@ -136,7 +135,7 @@ impl Assertion {
     /// with an incorrect key length.
     pub fn new(kind: AssertionKind, key: &[u8]) -> Self {
         let key = match kind {
-            AssertionKind::HmacSha256 => SigningKey::new(&SHA256, key),
+            AssertionKind::HmacSha256 => hmac::Key::new(hmac::HMAC_SHA256, key),
             AssertionKind::__NonExhaustive => unreachable!(),
         };
 
@@ -155,7 +154,7 @@ impl Assertion {
     /// Construct an assertion instance whose tokens are only valid for the program execution.
     pub fn ephemeral() -> Self {
         Assertion {
-            secret: SigningKey::generate(&SHA256, &SystemRandom::new()).unwrap(),
+            secret: hmac::Key::generate(hmac::HMAC_SHA256, &SystemRandom::new()).unwrap(),
         }
     }
 
@@ -167,14 +166,14 @@ impl Assertion {
     fn extract<'a>(&self, token: &'a str) -> Result<(Grant, String), ()> {
         let decoded = decode(token).map_err(|_| ())?;
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
-        ring::hmac::verify_with_own_key(&self.secret, &assertion.0, &assertion.1).map_err(|_| ())?;
+        hmac::verify(&self.secret, &assertion.0, &assertion.1).map_err(|_| ())?;
         let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String)
             = rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
         Ok((serde_grant.grant(), tag))
     }
 
-    fn signature(&self, data: &[u8]) -> ring::hmac::Signature {
-        ring::hmac::sign(&self.secret, data)
+    fn signature(&self, data: &[u8]) -> hmac::Tag {
+        hmac::sign(&self.secret, data)
     }
 
     fn counted_signature(&self, counter: u64, grant: &Grant) 
@@ -294,7 +293,7 @@ mod scope_serde {
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Scope, D::Error> {
-        let as_string: &str = <(&str)>::deserialize(deserializer)?;
+        let as_string: &str = <&str>::deserialize(deserializer)?;
         as_string.parse().map_err(Error::custom)
     }
 }
@@ -310,7 +309,7 @@ mod url_serde {
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {
-        let as_string: &str = <(&str)>::deserialize(deserializer)?;
+        let as_string: &str = <&str>::deserialize(deserializer)?;
         as_string.parse().map_err(Error::custom)
     }
 }
