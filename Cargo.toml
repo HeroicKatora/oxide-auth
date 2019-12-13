@@ -3,7 +3,7 @@ members = [
 	"oxide-auth",
 	"oxide-auth-actix",
 	"oxide-auth-actix/examples/actix-example",
-	"oxide-auth-iron",
-	"oxide-auth-rocket",
-	"oxide-auth-rouille",
+	#"oxide-auth-iron",
+	#"oxide-auth-rocket",
+	#"oxide-auth-rouille",
 ]

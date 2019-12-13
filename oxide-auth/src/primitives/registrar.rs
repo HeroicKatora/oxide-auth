@@ -15,7 +15,7 @@ use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::rc::Rc;
 
 use url::Url;
-use ring::{digest, pbkdf2};
+use ring::pbkdf2;
 use ring::error::Unspecified;
 use ring::rand::{SystemRandom, SecureRandom};
 
@@ -354,7 +354,7 @@ impl PasswordPolicy for Pbkdf2 {
         output.append(&mut self.salt(client_id.as_bytes()));
         {
             let (output, salt) = output.split_at_mut(64);
-            pbkdf2::derive(&digest::SHA256, self.iterations.into(), salt, passphrase,
+            pbkdf2::derive(pbkdf2::PBKDF2_HMAC_SHA256, self.iterations.into(), salt, passphrase,
                 output);
         }
         output
@@ -368,7 +368,7 @@ impl PasswordPolicy for Pbkdf2 {
         }
 
         let (verifier, salt) = stored.split_at(64);
-        pbkdf2::verify(&digest::SHA256, self.iterations.into(), salt, passphrase, verifier)
+        pbkdf2::verify(pbkdf2::PBKDF2_HMAC_SHA256, self.iterations.into(), salt, passphrase, verifier)
             .map_err(RegistrarError::from)
     }
 }

@@ -80,7 +80,7 @@ async fn index(
             .body("Hello world!")),
         Err(Ok(e)) => Ok(e.body(DENY_TEXT)),
         Err(Err(e)) => Err(e),
-    }
+    } 
 }
 
 async fn start_browser() -> () {
