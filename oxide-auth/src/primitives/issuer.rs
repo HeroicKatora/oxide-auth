@@ -39,8 +39,8 @@ pub struct IssuedToken {
     /// The bearer token
     pub token: String,
 
-    /// The refresh token
-    pub refresh: String,
+    /// The refresh token, if any.
+    pub refresh: Option<String>,
 
     /// Expiration timestamp (Utc).
     ///
@@ -163,12 +163,11 @@ impl Token {
 impl IssuedToken {
     /// Construct a token that can not be refreshed.
     ///
-    /// Use this constructor for custom issuers that can not revoke their tokens. Since refresh
-    /// tokens are both long-lived and more powerful than their access token counterparts, it is
-    /// more dangerous to have an unrevokable refresh token. This is currently semantically
-    /// equivalent to an empty refresh token but may change in a future iteration of the interface.
-    /// While the member attributes may change, this method will not change as quickly and thus
-    /// offers some additional compatibility.
+    /// This is essential for issuers that can not revoke their tokens. Since refresh tokens are
+    /// both long-lived and more powerful than their access token counterparts, it is more
+    /// dangerous to have an unrevokable refresh token.
+    ///
+    /// This is only a shorthand for initializing the `IssuedToken` with `None` for `refresh`.
     ///
     /// ```
     /// # use oxide_auth::primitives::issuer::RefreshedToken;
@@ -198,14 +197,16 @@ impl IssuedToken {
     pub fn without_refresh(token: String, until: Time) -> Self {
         IssuedToken {
             token,
-            refresh: "".into(),
+            refresh: None,
             until,
         }
     }
 
     /// Determine if the access token can be refreshed.
+    ///
+    /// This returns `false` if `refresh` is `None` and `true` otherwise.
     pub fn refreshable(&self) -> bool {
-        !self.refresh.is_empty()
+        self.refresh.is_some()
     }
 }
 
@@ -235,7 +236,7 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         self.usage = next_usage;
         Ok(IssuedToken {
             token: access,
-            refresh,
+            refresh: Some(refresh),
             until,
         })
     }
@@ -371,7 +372,7 @@ impl TokenSigner {
 
         Ok(IssuedToken {
             token,
-            refresh,
+            refresh: Some(refresh),
             until: grant.until,
         })
     }
@@ -549,7 +550,7 @@ pub mod tests {
             .expect("Issuer failed during recover")
             .expect("Issued token appears to be invalid");
 
-        assert_ne!(issued.token, issued.refresh);
+        assert_ne!(Some(&issued.token), issued.refresh.as_ref());
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");
         assert!(Utc::now() < from_token.until);
@@ -557,9 +558,9 @@ pub mod tests {
         let issued_2 = issuer.issue(request)
             .expect("Issuing failed");
         assert_ne!(issued.token, issued_2.token);
-        assert_ne!(issued.token, issued_2.refresh);
+        assert_ne!(Some(&issued.token), issued_2.refresh.as_ref());
         assert_ne!(issued.refresh, issued_2.refresh);
-        assert_ne!(issued.refresh, issued_2.token);
+        assert_ne!(issued.refresh.as_ref(), Some(&issued_2.token));
     }
 
     #[test]

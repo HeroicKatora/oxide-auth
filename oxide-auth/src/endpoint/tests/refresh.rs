@@ -16,7 +16,12 @@ use frontends::simple::endpoint::{refresh_flow, resource_flow};
 struct RefreshTokenSetup {
     registrar: ClientMap,
     issuer: TokenMap<RandomGenerator>,
+    /// The original issued token. Unused atm.
+    #[allow(unused)]
     issued: IssuedToken,
+    /// The extract refresh token.
+    refresh_token: String,
+    /// The combined authorization header.
     basic_authorization: String,
 }
 
@@ -41,7 +46,8 @@ impl RefreshTokenSetup {
 
         registrar.register_client(client);
         let issued = issuer.issue(grant).unwrap();
-        assert!(!issued.refresh.is_empty());
+        assert!(issued.refreshable());
+        let refresh_token = issued.refresh.clone().unwrap();
 
         let basic_authorization = base64::encode(&format!("{}:{}",
             EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
@@ -51,6 +57,7 @@ impl RefreshTokenSetup {
             registrar,
             issuer,
             issued,
+            refresh_token,
             basic_authorization,
         }
     }
@@ -74,7 +81,8 @@ impl RefreshTokenSetup {
 
         registrar.register_client(client);
         let issued = issuer.issue(grant).unwrap();
-        assert!(!issued.refresh.is_empty());
+        assert!(issued.refreshable());
+        let refresh_token = issued.refresh.clone().unwrap();
 
         let basic_authorization = "DO_NOT_USE".into();
 
@@ -82,6 +90,7 @@ impl RefreshTokenSetup {
             registrar,
             issuer,
             issued,
+            refresh_token,
             basic_authorization,
         }
     }
@@ -200,7 +209,7 @@ fn access_valid_public() {
         query: None,
         urlbody: Some(vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
+                ("refresh_token", &setup.refresh_token)]
             .iter().to_single_value_query()),
         auth: None,
     };
@@ -217,7 +226,7 @@ fn access_valid_private() {
         query: None,
         urlbody: Some(vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
+                ("refresh_token", &setup.refresh_token)]
             .iter().to_single_value_query()),
         auth: Some(setup.basic_authorization.clone()),
     };
@@ -243,7 +252,7 @@ fn public_private_invalid_grant() {
         query: None,
         urlbody: Some(vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
+                ("refresh_token", &setup.refresh_token)]
             .iter().to_single_value_query()),
         auth: Some(basic_authorization),
     };
@@ -259,7 +268,7 @@ fn private_wrong_client_fails() {
         query: None,
         urlbody: Some(vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
+                ("refresh_token", &setup.refresh_token)]
             .iter().to_single_value_query()),
         auth: None,
     };
@@ -270,7 +279,7 @@ fn private_wrong_client_fails() {
         query: None,
         urlbody: Some(vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
+                ("refresh_token", &setup.refresh_token)]
             .iter().to_single_value_query()),
         auth: Some(format!("Basic {}", base64::encode("Wrong:AndWrong"))),
     };
@@ -286,7 +295,7 @@ fn invalid_request() {
         query: None,
         urlbody: Some(vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
+                ("refresh_token", &setup.refresh_token)]
             .iter().to_single_value_query()),
         auth: Some(setup.basic_authorization.clone() + "=/"),
     };
@@ -306,13 +315,15 @@ fn invalid_request() {
 
 #[test]
 fn public_invalid_token() {
+    const WRONG_REFRESH_TOKEN: &str = "not_the_issued_token";
     let mut setup = RefreshTokenSetup::public_client();
+    assert_ne!(setup.refresh_token, WRONG_REFRESH_TOKEN);
 
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", "not_the_issued_token")]
+                ("refresh_token", WRONG_REFRESH_TOKEN)]
             .iter().to_single_value_query()),
         auth: None,
     };
@@ -322,13 +333,15 @@ fn public_invalid_token() {
 
 #[test]
 fn private_invalid_token() {
+    const WRONG_REFRESH_TOKEN: &str = "not_the_issued_token";
     let mut setup = RefreshTokenSetup::private_client();
+    assert_ne!(setup.refresh_token, WRONG_REFRESH_TOKEN);
 
     let valid_private = CraftedRequest {
         query: None,
         urlbody: Some(vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", "not_the_issued_token")]
+                ("refresh_token", WRONG_REFRESH_TOKEN)]
             .iter().to_single_value_query()),
         auth: Some(setup.basic_authorization.clone()),
     };

@@ -364,8 +364,7 @@ impl BearerToken {
         let remaining = self.0.until.signed_duration_since(Utc::now());
         let serial = Serial {
             access_token: self.0.token.as_str(),
-            refresh_token: Some(self.0.refresh.as_str())
-                .filter(|_| self.0.refreshable()),
+            refresh_token: self.0.refresh.as_ref().map(String::as_str),
             token_type: "bearer",
             expires_in: remaining.num_seconds().to_string(),
             scope: self.1.as_str(),
@@ -384,7 +383,7 @@ mod tests {
     fn bearer_token_encoding() {
         let token = BearerToken(IssuedToken {
             token: "access".into(),
-            refresh: "refresh".into(),
+            refresh: Some("refresh".into()),
             until: Utc::now(),
         }, "scope".into());
 
