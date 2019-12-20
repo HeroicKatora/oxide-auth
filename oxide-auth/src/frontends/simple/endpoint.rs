@@ -87,7 +87,6 @@ pub enum Error<W: WebRequest> {
 ///     };
 ///     endpoint.to_access_token()
 /// }
-/// # fn main() { }
 /// ```
 ///
 /// [`Endpoint`]: ../../../endpoint/trait.Endpoint.html

@@ -58,7 +58,6 @@
 //!     /// The body sent
 //!     body: Option<String>,
 //! }
-//! # fn main() { }
 //! ```
 //! This is obviously incredibly simplified but will showcase the most valuable features of this
 //! library. Let's implement the required traits:
@@ -93,7 +92,7 @@
 //! #    /// The body sent
 //! #    body: Option<String>,
 //! # }
-//! # extern crate oxide_auth;
+//!
 //! impl WebRequest for ExampleRequest {
 //!     // Declare the corresponding response type.
 //!     type Response = ExampleResponse;
@@ -161,8 +160,6 @@
 //!         Ok(())
 //!     }
 //! }
-//!
-//! # fn main() {}
 //! ```
 //!
 //! And we're done, the library is fully useable. In fact, the implementation for `simple` is

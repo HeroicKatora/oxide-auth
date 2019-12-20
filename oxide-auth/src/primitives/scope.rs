@@ -18,7 +18,6 @@ use std::collections::HashSet;
 /// # extern crate oxide_auth;
 /// # use std::cmp;
 /// # use oxide_auth::primitives::scope::Scope;
-/// # pub fn main() {
 /// let grant_scope    = "some_scope other_scope".parse::<Scope>().unwrap();
 /// let resource_scope = "some_scope".parse::<Scope>().unwrap();
 /// let uncomparable   = "some_scope third_scope".parse::<Scope>().unwrap();
@@ -34,7 +33,6 @@ use std::collections::HashSet;
 /// // This would also not work the other way around:
 /// assert!(!(grant_scope <= uncomparable));
 /// assert!(!grant_scope.allow_access(&uncomparable));
-/// # }
 /// ```
 ///
 /// Scope-tokens are restricted to the following subset of ascii:
