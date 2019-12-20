@@ -163,12 +163,11 @@ impl Token {
 impl IssuedToken {
     /// Construct a token that can not be refreshed.
     ///
-    /// Use this constructor for custom issuers that can not revoke their tokens. Since refresh
-    /// tokens are both long-lived and more powerful than their access token counterparts, it is
-    /// more dangerous to have an unrevokable refresh token. This is currently semantically
-    /// equivalent to an empty refresh token but may change in a future iteration of the interface.
-    /// While the member attributes may change, this method will not change as quickly and thus
-    /// offers some additional compatibility.
+    /// This is essential for issuers that can not revoke their tokens. Since refresh tokens are
+    /// both long-lived and more powerful than their access token counterparts, it is more
+    /// dangerous to have an unrevokable refresh token.
+    ///
+    /// This is only a shorthand for initializing the `IssuedToken` with `None` for `refresh`.
     ///
     /// ```
     /// # use oxide_auth::primitives::issuer::RefreshedToken;
@@ -204,6 +203,8 @@ impl IssuedToken {
     }
 
     /// Determine if the access token can be refreshed.
+    ///
+    /// This returns `false` if `refresh` is `None` and `true` otherwise.
     pub fn refreshable(&self) -> bool {
         self.refresh.is_some()
     }
