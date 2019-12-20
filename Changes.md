@@ -26,6 +26,16 @@ Interface improvements
   interface of the crate, preparing the replacement with different crypto
   libraries.
 - The version requirement for `ring` has been relaxed to `>=0.13,<0.15`.
+- Added `iter` methods for `AuthorizationError` and `AccessTokenError`.
+- Add extension `Value` reference accessors `public_value` and `private_value`.
+
+Interface ergonomic adjustments
+- The `BearerToken` and `ErrorDescription` conversion with `to_json` now takes
+  `&self` by reference instead of by-value.
+- Implemented `IntoIter` for `&AuthorizationError` and `&AccessTokenError`.
+- The `description` method of `Copy` error kinds now takes `self` by value.
+- Renamed extension `Value` variant owning accessors to include `into_`.
+- Renamed statically checked `Generic` endpoint flow constructors.
 
 # v0.4.5 (2019-Aug-20)
 
