@@ -4,12 +4,12 @@ version = "0.5.0-preview.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
-description = "A OAuth2 server library, for actix, gotham or other libraries, featuring a set of configurable and pluggable backends."
+description = "An OAuth2 server library. Integration for actix, rocket, gotham, iron, .. in corresponding crates."
 readme = "../Readme.md"
 
 keywords = ["oauth", "server", "oauth2"]
 categories = ["web-programming::http-server", "authentication"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 autoexamples = false
 
