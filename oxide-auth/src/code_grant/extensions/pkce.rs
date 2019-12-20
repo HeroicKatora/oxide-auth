@@ -106,7 +106,7 @@ impl Pkce {
             (Some(method), Some(verifier)) => (method, verifier),
         };
 
-        let method = match method.as_private() {
+        let method = match method.into_private_value() {
             Ok(Some(method)) => method,
             _ => return Err(()),
         };

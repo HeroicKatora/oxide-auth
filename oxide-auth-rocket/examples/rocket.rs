@@ -30,7 +30,7 @@ struct MyState {
 fn authorize<'r>(oauth: OAuthRequest<'r>, state: State<MyState>) -> Result<OAuthResponse<'r>, OAuthFailure> {
     state.endpoint()
         .with_solicitor(FnSolicitor(consent_form))
-        .to_authorization()
+        .authorization_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
@@ -42,7 +42,7 @@ fn authorize_consent<'r>(oauth: OAuthRequest<'r>, allow: Option<bool>, state: St
     let allowed = allow.unwrap_or(false);
     state.endpoint()
         .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| consent_decision(allowed, grant)))
-        .to_authorization()
+        .authorization_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
@@ -53,7 +53,7 @@ fn token<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
 {
     oauth.add_body(body);
     state.endpoint()
-        .to_access_token()
+        .access_token_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
@@ -64,7 +64,7 @@ fn refresh<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
 {
     oauth.add_body(body);
     state.endpoint()
-        .to_refresh()
+        .refresh_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
@@ -82,7 +82,7 @@ here</a> to begin the authorization process.
 
     let protect = state.endpoint()
         .with_scopes(vec!["default-scope".parse().unwrap()])
-        .to_resource()
+        .resource_flow()
         .execute(oauth);
     match protect {
         Ok(_grant) => Ok("Hello, world"),

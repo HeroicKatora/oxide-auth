@@ -109,7 +109,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request)
 
     // Setup an error with url and state, makes the code flow afterwards easier.
     let error_uri = bound_client.redirect_uri.clone().into_owned();
-    let mut prepared_error = ErrorUrl::new(error_uri.clone(), state.clone(),
+    let mut prepared_error = ErrorUrl::new(error_uri, state.clone(),
         AuthorizationError::default());
 
     match request.response_type() {

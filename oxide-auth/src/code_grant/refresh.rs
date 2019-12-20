@@ -98,7 +98,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
 
     // REQUIRED, so not having it makes it an invalid request.
     let token = request.refresh_token();
-    let token = token.ok_or(Error::invalid(AccessTokenErrorType::InvalidRequest))?;
+    let token = token.ok_or_else(|| Error::invalid(AccessTokenErrorType::InvalidRequest))?;
 
     // REQUIRED, otherwise invalid request.
     match request.grant_type() {
@@ -178,7 +178,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
     let scope = match scope {
         Some(scope) => {
             // ... MUST NOT include any scope not originally granted.
-            if !(&scope <= &grant.scope) {
+            if !grant.scope.priviledged_to(&scope) {
                 // ... or exceeds the scope grant (Section 5.2)
                 return Err(Error::invalid(AccessTokenErrorType::InvalidScope))
             }
@@ -239,8 +239,9 @@ impl ErrorDescription {
     /// Convert the error into a json string.
     ///
     /// The string may be the content of an `application/json` body for example.
-    pub fn to_json(self) -> String {
-        let asmap = self.error.into_iter()
+    pub fn to_json(&self) -> String {
+        let asmap = self.error
+            .iter()
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();
         serde_json::to_string(&asmap).unwrap()
@@ -250,16 +251,20 @@ impl ErrorDescription {
 impl BearerToken {
     /// Convert the token into a json string, viable for being sent over a network with
     /// `application/json` encoding.
-    pub fn to_json(self) -> String {
-        let remaining = self.0.until.signed_duration_since(Utc::now());
+    pub fn to_json(&self) -> String {
+        let remaining = self.0.until
+            .signed_duration_since(Utc::now())
+            .num_seconds()
+            .to_string();
         let mut kvmap: HashMap<_, _> = vec![
-            ("access_token", self.0.token),
-            ("token_type", "bearer".to_string()),
-            ("expires_in", remaining.num_seconds().to_string()),
-            ("scope", self.1)].into_iter().collect();
+            ("access_token", self.0.token.as_str()),
+            ("token_type", "bearer"),
+            ("expires_in", remaining.as_str()),
+            ("scope", self.1.as_str())
+        ].into_iter().collect();
 
-        if let Some(refresh) = self.0.refresh {
-            kvmap.insert("refresh_token", refresh);
+        if let Some(refresh) = &self.0.refresh {
+            kvmap.insert("refresh_token", refresh.as_str());
         }
 
         serde_json::to_string(&kvmap).unwrap()

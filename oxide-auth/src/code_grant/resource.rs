@@ -198,6 +198,12 @@ impl BearerHeader {
         fmt::write(&mut self.content, args).unwrap();
     }
 
+    fn add_kvp(&mut self, key: &'static str, value: Option<impl fmt::Display>) {
+        if let Some(value) = value {
+            self.add_option(format_args!("{}=\"{}\"", key, value));
+        }
+    }
+
     fn finalize(self) -> String {
         self.content
     }
@@ -205,14 +211,14 @@ impl BearerHeader {
 
 impl Authenticate {
     fn extend_header(self, header: &mut BearerHeader) {
-        self.realm.map(|realm| header.add_option(format_args!("realm=\"{}\"", realm)));
-        self.scope.map(|scope| header.add_option(format_args!("scope=\"{}\"", scope)));
+        header.add_kvp("realm", self.realm);
+        header.add_kvp("scope", self.scope);
     }
 }
 
 impl AccessFailure {
     fn extend_header(self, header: &mut BearerHeader) {
-        self.code.map(|code| header.add_option(format_args!("error=\"{}\"", code.description())));
+        header.add_kvp("error", self.code.map(ErrorCode::description));
     }
 }
 

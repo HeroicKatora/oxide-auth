@@ -4,7 +4,7 @@
 
 use std::fmt;
 use std::borrow::Cow;
-use std::vec::IntoIter;
+use std::vec;
 use url::Url;
 
 /// Error codes returned from an authorization code request.
@@ -38,8 +38,8 @@ pub enum AuthorizationErrorType {
 }
 
 impl AuthorizationErrorType {
-    fn description(&self) -> &'static str {
-        match *self {
+    fn description(self) -> &'static str {
+        match self {
             AuthorizationErrorType::InvalidRequest => "invalid_request",
             AuthorizationErrorType::UnauthorizedClient => "unauthorized_client",
             AuthorizationErrorType::AccessDenied => "access_denied",
@@ -91,6 +91,15 @@ impl AuthorizationError {
     pub fn explain_uri(&mut self, uri: Url) {
         self.uri = Some(uri.into_string().into())
     }
+
+    /// Iterate over the key value pairs that describe this error.
+    ///
+    /// These pairs must be added to the detailed description of an error. To this end the pairs
+    /// appear as part of a form urlencoded query component in the `Location` header of a server
+    /// response.
+    pub fn iter(&self) -> <Self as IntoIterator>::IntoIter {
+        self.into_iter()
+    }
 }
 
 /// All defined error codes
@@ -129,8 +138,8 @@ pub enum AccessTokenErrorType {
 }
 
 impl AccessTokenErrorType {
-    fn description(&self) -> &'static str {
-        match *self {
+    fn description(self) -> &'static str {
+        match self {
             AccessTokenErrorType::InvalidRequest => "invalid_request",
             AccessTokenErrorType::InvalidClient => "invalid_client",
             AccessTokenErrorType::InvalidGrant => "invalid_grant",
@@ -183,6 +192,14 @@ impl AccessTokenError {
     /// A uri identifying a resource explaining the error in detail.
     pub fn explain_uri(&mut self, uri: Url) {
         self.uri = Some(uri.into_string().into())
+    }
+
+    /// Iterate over the key value pairs that describe this error.
+    ///
+    /// These pairs must be added to the detailed description of an error. The pairs will be
+    /// encoded in the json body of the Bad Request response.
+    pub fn iter(&self) -> <Self as IntoIterator>::IntoIter {
+        self.into_iter()
     }
 }
 
@@ -241,11 +258,32 @@ impl fmt::Display for AccessTokenErrorType {
 /// The error as key-value pairs.
 impl IntoIterator for AuthorizationError {
     type Item = (&'static str, Cow<'static, str>);
-    type IntoIter = IntoIter<(&'static str, Cow<'static, str>)>;
+    type IntoIter = vec::IntoIter<(&'static str, Cow<'static, str>)>;
+
     fn into_iter(self) -> Self::IntoIter {
         let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
-        vec.extend(self.description.map(|d| ("description", d)));
-        vec.extend(self.uri.map(|uri| ("uri", uri)));
+        if let Some(description) = self.description {
+            vec.push(("description", description));
+        }
+        if let Some(uri) = self.uri {
+            vec.push(("uri", uri));
+        }
+        vec.into_iter()
+    }
+}
+
+impl IntoIterator for &'_ AuthorizationError {
+    type Item = (&'static str, Cow<'static, str>);
+    type IntoIter = vec::IntoIter<(&'static str, Cow<'static, str>)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
+        if let Some(description) = &self.description {
+            vec.push(("description", description.clone().to_owned()));
+        }
+        if let Some(uri) = &self.uri {
+            vec.push(("uri", uri.clone().to_owned()));
+        }
         vec.into_iter()
     }
 }
@@ -253,11 +291,32 @@ impl IntoIterator for AuthorizationError {
 /// The error as key-value pairs.
 impl IntoIterator for AccessTokenError {
     type Item = (&'static str, Cow<'static, str>);
-    type IntoIter = IntoIter<(&'static str, Cow<'static, str>)>;
+    type IntoIter = vec::IntoIter<(&'static str, Cow<'static, str>)>;
+
     fn into_iter(self) -> Self::IntoIter {
         let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
-        vec.extend(self.description.map(|d| ("description", d)));
-        vec.extend(self.uri.map(|uri| ("uri", uri)));
+        if let Some(description) = self.description {
+            vec.push(("description", description));
+        }
+        if let Some(uri) = self.uri {
+            vec.push(("uri", uri));
+        }
+        vec.into_iter()
+    }
+}
+
+impl IntoIterator for &'_ AccessTokenError {
+    type Item = (&'static str, Cow<'static, str>);
+    type IntoIter = vec::IntoIter<(&'static str, Cow<'static, str>)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut vec = vec![("error", Cow::Borrowed(self.error.description()))];
+        if let Some(description) = &self.description {
+            vec.push(("description", description.clone().to_owned()));
+        }
+        if let Some(uri) = &self.uri {
+            vec.push(("uri", uri.clone().to_owned()));
+        }
         vec.into_iter()
     }
 }
