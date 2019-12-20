@@ -225,7 +225,7 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
             (access, refresh)
         };
 
-        let until = grant.until.clone();
+        let until = grant.until;
         let access_key: Arc<str> = Arc::from(access.clone());
         let refresh_key: Arc<str> = Arc::from(refresh.clone());
         let token = Token::from_refresh(access_key.clone(), refresh_key.clone(), grant);
@@ -245,12 +245,11 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         // Remove the old token.
         let (refresh_key, mut token) = self.refresh.remove_entry(refresh)
             // Should only be called on valid refresh tokens.
-            .ok_or(())?
-            .clone();
+            .ok_or(())?;
 
         assert!(Arc::ptr_eq(token.refresh.as_ref().unwrap(), &refresh_key));
         self.set_duration(&mut grant);
-        let until = grant.until.clone();
+        let until = grant.until;
 
         let next_usage = self.usage.wrapping_add(1);
         let new_access = self.generator.tag(self.usage, &grant)?;

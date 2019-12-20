@@ -27,7 +27,12 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
     authorization: Option<Authorization>,
 
     /// An error if one occurred.
-    error: Option<Option<R::Error>>,
+    error: Option<InitError<R::Error>>,
+}
+
+enum InitError<E> {
+    Malformed,
+    Internal(E),
 }
 
 struct Authorization(String, Vec<u8>);
@@ -125,23 +130,23 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             .unwrap_or_else(Self::from_err)
     }
 
-    fn new_or_fail(request: &'a mut R) -> Result<Self, Option<R::Error>> {
+    fn new_or_fail(request: &'a mut R) -> Result<Self, InitError<R::Error>> {
         // If there is a header, it must parse correctly.
         let authorization = match request.authheader() {
-            Err(err) => return Err(Some(err)),
+            Err(err) => return Err(InitError::Internal(err)),
             Ok(Some(header)) => Self::parse_header(header).map(Some)?,
             Ok(None) => None,
         };
 
         Ok(WrappedRequest {
             request: PhantomData,
-            body: request.urlbody()?,
+            body: request.urlbody().map_err(InitError::Internal)?,
             authorization,
             error: None,
         })
     }
 
-    fn from_err(err: Option<R::Error>) -> Self {
+    fn from_err(err: InitError<R::Error>) -> Self {
         WrappedRequest {
             request: PhantomData,
             body: Cow::Owned(Default::default()),
@@ -150,29 +155,29 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
         }
     }
 
-    fn parse_header(header: Cow<str>) -> Result<Authorization, Option<R::Error>> {
+    fn parse_header(header: Cow<str>) -> Result<Authorization, InitError<R::Error>> {
         let authorization = {
             if !header.starts_with("Basic ") {
-                return Err(None)
+                return Err(InitError::Malformed)
             }
 
             let combined = match base64::decode(&header[6..]) {
-                Err(_) => return Err(None),
+                Err(_) => return Err(InitError::Malformed),
                 Ok(vec) => vec,
             };
 
             let mut split = combined.splitn(2, |&c| c == b':');
             let client_bin = match split.next() {
-                None => return Err(None),
+                None => return Err(InitError::Malformed),
                 Some(client) => client,
             };
             let passwd = match split.next() {
-                None => return Err(None),
+                None => return Err(InitError::Malformed),
                 Some(passwd64) => passwd64,
             };
 
             let client = match from_utf8(client_bin) {
-                Err(_) => return Err(None),
+                Err(_) => return Err(InitError::Malformed),
                 Ok(client) => client,
             };
 

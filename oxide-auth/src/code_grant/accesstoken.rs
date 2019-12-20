@@ -333,8 +333,9 @@ impl Error {
 impl ErrorDescription {
     /// Convert the error into a json string, viable for being sent over a network with
     /// `application/json` encoding.
-    pub fn to_json(self) -> String {
-        let asmap = self.error.into_iter()
+    pub fn to_json(&self) -> String {
+        let asmap = self.error
+            .iter()
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();
         serde_json::to_string(&asmap).unwrap()
@@ -350,7 +351,7 @@ impl BearerToken {
     /// Convert the token into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     // FIXME: rename to `into_json` or have `&self` argument.
-    pub fn to_json(self) -> String {
+    pub fn to_json(&self) -> String {
         #[derive(Serialize)]
         struct Serial<'a> {
             access_token: &'a str,
