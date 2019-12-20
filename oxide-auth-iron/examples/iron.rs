@@ -36,7 +36,7 @@ fn main_router() -> impl Handler + 'static {
         let state = auth_get_state.clone();
         let response = state.endpoint()
             .with_solicitor(FnSolicitor(consent_form))
-            .to_authorization()
+            .authorization_flow()
             .execute(request.into())
             .map_err(|e| {
                 let e: OAuthError = e.into();
@@ -48,7 +48,7 @@ fn main_router() -> impl Handler + 'static {
         let state = auth_post_state.clone();
         let response = state.endpoint()
             .with_solicitor(FnSolicitor(consent_decision))
-            .to_authorization()
+            .authorization_flow()
             .execute(request.into())
             .map_err(|e| {
                 let e: OAuthError = e.into();
@@ -59,7 +59,7 @@ fn main_router() -> impl Handler + 'static {
     router.post("/token", move |request: &mut Request| {
         let state = token_state.clone();
         let response = state.endpoint()
-            .to_access_token()
+            .access_token_flow()
             .execute(request.into())
             .map_err(|e| {
                 let e: OAuthError = e.into();
@@ -73,7 +73,7 @@ fn main_router() -> impl Handler + 'static {
         let state = get_state.clone();
         let protect = state.endpoint()
             .with_scopes(vec!["default-scope".parse().unwrap()])
-            .to_resource()
+            .resource_flow()
             .execute(oauth_request);
 
         let _grant = match protect {
