@@ -549,7 +549,7 @@ pub mod tests {
             .expect("Issuer failed during recover")
             .expect("Issued token appears to be invalid");
 
-        assert_ne!(Some(issued.token), issued.refresh);
+        assert_ne!(Some(&issued.token), issued.refresh.as_ref());
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");
         assert!(Utc::now() < from_token.until);
@@ -557,9 +557,9 @@ pub mod tests {
         let issued_2 = issuer.issue(request)
             .expect("Issuing failed");
         assert_ne!(issued.token, issued_2.token);
-        assert_ne!(Some(issued.token), issued_2.refresh);
+        assert_ne!(Some(&issued.token), issued_2.refresh.as_ref());
         assert_ne!(issued.refresh, issued_2.refresh);
-        assert_ne!(issued.refresh, Some(issued_2.token));
+        assert_ne!(issued.refresh.as_ref(), Some(&issued_2.token));
     }
 
     #[test]
