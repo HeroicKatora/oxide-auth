@@ -88,16 +88,46 @@ impl Value {
         Value::Private(content)
     }
 
-    /// Ensures that the extension stored was created as public, returns `Err` if it was not.
-    pub fn as_public(self) -> Result<Option<String>, ()> {
+    /// Inspect the public value.
+    ///
+    /// Returns an `Err` if this is not a public extension, `None` if the extension has no value
+    /// but consists only of the key, and `Some(_)` otherwise.
+    pub fn public_value(&self) -> Result<Option<&str>, ()> {
+        match self {
+            Value::Public(Some(content)) => Ok(Some(&content)),
+            Value::Public(None) => Ok(None),
+            _ => Err(())
+        }
+    }
+
+    /// Convert into the public value.
+    ///
+    /// Returns an `Err` if this is not a public extension, `None` if the extension has no value
+    /// but consists only of the key, and `Some(_)` otherwise.
+    pub fn into_public_value(self) -> Result<Option<String>, ()> {
         match self {
             Value::Public(content) => Ok(content),
             _ => Err(())
         }
     }
 
-    /// Ensures that the extension stored was created as private, returns `Err` if it was not.
-    pub fn as_private(self) -> Result<Option<String>, ()> {
+    /// Inspect the private value.
+    ///
+    /// Returns an `Err` if this is not a private extension, `None` if the extension has no value
+    /// but consists only of the key, and `Some(_)` otherwise.
+    pub fn private_value(&self) -> Result<Option<&str>, ()> {
+        match self {
+            Value::Private(Some(content)) => Ok(Some(&content)),
+            Value::Private(None) => Ok(None),
+            _ => Err(())
+        }
+    }
+
+    /// Inspect the private value.
+    ///
+    /// Returns an `Err` if this is not a private extension, `None` if the extension has no value
+    /// but consists only of the key, and `Some(_)` otherwise.
+    pub fn into_private_value(self) -> Result<Option<String>, ()> {
         match self {
             Value::Private(content) => Ok(content),
             _ => Err(())
@@ -156,11 +186,10 @@ impl<'a> Iterator for PublicExtensions<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.iter.next() {
-                None => return None,
-                Some((key, Value::Public(content)))
-                    => return Some((key, content.as_ref().map(String::as_str))),
-                _ => (),
+            let (key, value) = self.iter.next()?;
+
+            if let Ok(value) = value.public_value() {
+                return Some((key, value));
             }
         }
     }
@@ -171,11 +200,10 @@ impl<'a> Iterator for PrivateExtensions<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.0.next() {
-                None => return None,
-                Some((key, Value::Private(content)))
-                    => return Some((key, content.as_ref().map(String::as_str))),
-                _ => (),
+            let (key, value) = self.0.next()?;
+
+            if let Ok(value) = value.private_value() {
+                return Some((key, value));
             }
         }
     }

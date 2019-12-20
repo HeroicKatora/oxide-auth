@@ -49,8 +49,8 @@ pub enum Error<W: WebRequest> {
 /// You should prefer this implementation when there are special requirements for your [`Endpoint`]
 /// implementation, or it is created ad-hoc. It also does some static type checking on dedicated
 /// methods to ensure that the creation of specific flows succeeds. You should prefer
-/// `to_authorization`, `to_access_token`, and `to_resource` over the erroring preparation methods
-/// in [`AuthorizationFlow`], [`AccessTokenFlow`], and [`ResourceFlow`] respectively.
+/// `authorization_flow`, `access_token_flow`, and `resource_flow` over the erroring preparation
+/// methods in [`AuthorizationFlow`], [`AccessTokenFlow`], and [`ResourceFlow`] respectively.
 ///
 /// This should not be used when you special interacting primitives are used, that originate from
 /// outside this library. For example if you intend for your [`Scopes`] to be dynamically generated
@@ -85,7 +85,7 @@ pub enum Error<W: WebRequest> {
 ///         solicitor: Vacant,
 ///         response: Vacant,
 ///     };
-///     endpoint.to_access_token()
+///     endpoint.access_token_flow()
 /// }
 /// ```
 ///
@@ -386,7 +386,7 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
     ///
     /// Opposed to `AuthorizationFlow::prepare` this statically ensures that the construction
     /// succeeds.
-    pub fn to_authorization<W: WebRequest>(self) -> AuthorizationFlow<Self, W>
+    pub fn authorization_flow<W: WebRequest>(self) -> AuthorizationFlow<Self, W>
     where
         Self: Endpoint<W>,
         R: Registrar,
@@ -402,7 +402,7 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
     ///
     /// Opposed to `AccessTokenFlow::prepare` this statically ensures that the construction
     /// succeeds.
-    pub fn to_access_token<W: WebRequest>(self) -> AccessTokenFlow<Self, W>
+    pub fn access_token_flow<W: WebRequest>(self) -> AccessTokenFlow<Self, W>
     where
         Self: Endpoint<W>,
         R: Registrar,
@@ -418,7 +418,7 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
     /// Create a token refresh flow.
     ///
     /// Opposed to `RefreshFlow::prepare` this statically ensures that the construction succeeds.
-    pub fn to_refresh<W: WebRequest>(self) -> RefreshFlow<Self, W>
+    pub fn refresh_flow<W: WebRequest>(self) -> RefreshFlow<Self, W>
     where
         Self: Endpoint<W>,
         R: Registrar,
@@ -434,7 +434,7 @@ impl<R, A, I, O, C, L> Generic<R, A, I, O, C, L> {
     /// Create a resource access flow.
     ///
     /// Opposed to `ResourceFlow::prepare` this statically ensures that the construction succeeds.
-    pub fn to_resource<W: WebRequest>(self) -> ResourceFlow<Self, W>
+    pub fn resource_flow<W: WebRequest>(self) -> ResourceFlow<Self, W>
     where
         Self: Endpoint<W>,
         I: Issuer,
