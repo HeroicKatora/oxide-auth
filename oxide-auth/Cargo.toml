@@ -9,7 +9,7 @@ readme = "../Readme.md"
 
 keywords = ["oauth", "server", "oauth2"]
 categories = ["web-programming::http-server", "authentication"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 autoexamples = false
 

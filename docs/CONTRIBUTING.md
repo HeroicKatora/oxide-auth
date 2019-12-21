@@ -15,8 +15,9 @@ I appreciate suggestions but sometimes the associate workload can seem
 daunting. That means that simplifications to the workflow are also *highly*
 appreciated. I may also not get back to you immediately.
 
-By contributing code, you agree to make it available under the MIT license and
-assure that you have the legal rights to do so.
+By contributing code, you agree to make it available under both MIT license and
+Apache-2.0 license at the choice of the licensee and assure that you have the
+rights to do so (the Github terms of service also require this from You).
 
 This project generally follows a **full disclosure principle**.  We believe
 that vulnerabilities are fixed most swiftly when shared openly. As this project
