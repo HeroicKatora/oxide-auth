@@ -9,7 +9,7 @@ description = "A OAuth2 server library, for actix, gotham or other libraries, fe
 
 keywords = ["oauth", "server", "oauth2"]
 categories = ["web-programming::http-server", "authentication"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 rouille = "3.0"
