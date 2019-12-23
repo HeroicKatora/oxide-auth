@@ -2,6 +2,41 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.5.0-preview.0 (2019-Dec-??)
+
+Refactoring and Tech Debt release
+
+Moves all web server specific modules to separate crates
+- `actix` is in `oxide-auth-actix`
+  - Was updated to `actix-web = 1.0`
+- `iron` is in `oxide-auth-iron`
+- `rocket` is in `oxide-auth-rocket`
+- `rouille` is in `oxide-auth-rouille`
+
+Addressed the following deprecations
+- The `ephemeral` constructor of `Assertion` is no longer accompanied by a
+  wrongly spelled variant
+- The type issue with `PublicExtensions` was resolved, `is_private` removed.
+- The refresh attribute of `IssuedToken` is now an `Option`.
+
+Interface improvements
+- The error type `ring::Unspecified` was replaced by `RegistrarError`.
+- Replaced the public constructor from `ring::hmac::SigningKey` with an opaque
+  interface. Together with the above, this removes `ring` from the public
+  interface of the crate, preparing the replacement with different crypto
+  libraries.
+- The version requirement for `ring` has been relaxed to `>=0.13,<0.15`.
+- Added `iter` methods for `AuthorizationError` and `AccessTokenError`.
+- Add extension `Value` reference accessors `public_value` and `private_value`.
+
+Interface ergonomic adjustments
+- The `BearerToken` and `ErrorDescription` conversion with `to_json` now takes
+  `&self` by reference instead of by-value.
+- Implemented `IntoIter` for `&AuthorizationError` and `&AccessTokenError`.
+- The `description` method of `Copy` error kinds now takes `self` by value.
+- Renamed extension `Value` variant owning accessors to include `into_`.
+- Renamed statically checked `Generic` endpoint flow constructors.
+
 # v0.4.5 (2019-Aug-20)
 
 Feature release

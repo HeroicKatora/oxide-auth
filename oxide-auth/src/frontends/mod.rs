@@ -1,26 +1,24 @@
-//! Fully implemented frontends.
+//! A base for implementing front-ends.
 //!
-//! Frontends are glue adapters from other http server crates to the interface exposed by
-//! individual methods offered in this crate. The exact usage of the frontend varies from
+//! Front-ends are glue adapters from other http server crates to the interface exposed by
+//! individual methods offered in this crate. The exact usage of the front-end varies from
 //! implementation to implementation. Composability and usability are the main concerns for
-//! frontends, full feature support is a secondary concern.
+//! front-ends, full feature support is a secondary concern.
 //!
-//! Usage
-//! -----
+//! ## Usage
 //!
-//! First you need to enable the correct feature flag. Note that for the convenience of viewing
-//! this documentation, the version on `docs.rs` has all features enabled. The following frontends
-//! require the following features:
+//! This only adds some base functionality for front-ends. The following front-ends have been
+//! implemented in separate crates:
 //!
-//! * `simple`: None, this can also be a basis for other implementations
-//! * `actix`: `actix-frontend`
-//! * `rouille`: `rouille-frontend`
-//! * `rocket`: `rocket-frontend`
+//! * `simple`: Implemented here, can be reused in other web servers.
+//! * `actix`: `oxide-auth-actix`
+//! * `iron`: `oxide-auth-iron`
+//! * `rouille`: `oxide-auth-rouille`
+//! * `rocket`: `oxide-auth-rocket`
 //!
-//! Guide
-//! ------
+//! ## Guide to implementing a custom front-end
 //!
-//! All frontend implementations should start with two closely related traits: [`WebRequest`] and
+//! All front-end implementations should start with two closely related traits: [`WebRequest`] and
 //! [`WebResponse`].  These central interfaces are used to interact with the libraries supported
 //! token flows (currently only authorization code grant).
 //!
@@ -162,14 +160,14 @@
 //! }
 //! ```
 //!
-//! And we're done, the library is fully useable. In fact, the implementation for `simple` is
+//! And we're done, the library is fully usable. In fact, the implementation for `simple` is
 //! almost the same as what we just did with some minor extras. All that is missing is your web
 //! servers main loop to drive the thing and a look into the
 //! [`code_grant::endpoint::{AuthorizationFlow, GrantFlow, AccessFlow}`] which will explain the usage
 //! of the above traits in the context of the Authorization Code Grant.
 //!
 //! Of course, this style might not the intended way for some server libraries. In this case, you
-//! may want to provide additional wrappers. The `actix` frontend adds utilities for abstracting
+//! may want to provide additional wrappers. The `actix` front-end adds utilities for abstracting
 //! futures and actor messaging, for example.
 //!
 //! [`code_grant::endpoint::{AuthorizationFlow, GrantFlow, AccessFlow}`]: ../code_grant/endpoint/index.html
@@ -177,16 +175,7 @@
 
 pub mod simple;
 
-#[cfg(feature = "actix-frontend")]
-pub mod actix;
-#[cfg(feature = "iron-frontend")]
-pub mod iron;
-#[cfg(feature = "rouille-frontend")]
-pub mod rouille;
-#[cfg(feature = "rocket-frontend")]
-pub mod rocket;
-
-/// Includes useful for writing frontends.
+/// Simply a prelude useful for writing front-ends.
 pub mod dev {
     pub use std::borrow::Cow;
     pub use url::Url;

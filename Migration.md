@@ -13,21 +13,32 @@ This document is independent of the [release notes](Changes.md).
 
 # [NEXT] v0.5 – Enstatite
 
+[NEXT] This section will be merged with `v0.5-preview.0`.
+
+A new attribute for the token type of the access token has been added, its enum
+type has a `Default` implementation that generates the `Bearer` corresponding
+variant. (This is only planned, if it gets introduced depends on the usefulness
+of differentiating other token types).
+
+# v0.5-preview.0
+
+The crate has been split into a core (`oxide-auth`) and several sub-crates for
+each frontend version. The corresponding modules and features no longer exist.
+Instead, it is expected that You *additionally* depend on the crate that
+implements the web server bindings of your need. This decouples implementations
+of generic primitives from servers and reduces dependencies.
+
 As advised in deprecation warnings, the iterators for public and private
 extension data of a grant are now constructed via the `public` and `private`
 method respectively and the older `iter_public` and `iter_private` method have
 been removed. The `is_private` method of `PublicExtensions` is now obsolete and
 has been removed since the return type of `private` is now correct.
 
-The wrongly spelled `ephermal` constructor of the `Assertion` grant generator
-has been replaced by `ephemeral`.
+The wrongly spelled and deprecated `ephermal` constructor of the `Assertion`
+grant generator has removed. Use the recommended replacement `ephemeral`.
 
-The crate has been split into a core (`oxide-auth`) and several sub-crates for
-each frontend version
-
-The refresh token in `IssuedToken` is now optional. A new attribute for the
-token type of the access token has been added, its enum type has a `Default`
-implementation that generates the `Bearer` corresponding variant.
+The refresh token in `IssuedToken` is now an `Option`. An empty token is still
+accepted but now has the semantics of an existing, actually empty token.
 
 The `Issuer::refresh` method no longer has a default implementation. To
 replicate the old behaviour, its body should simply consist of `Err(())`.
