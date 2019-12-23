@@ -50,11 +50,13 @@ make_git_tag() {
 
 is_force=""
 do_tag=""
+do_version_check="yes"
 
 for param in $@
 do
 	case "$param" in
 		-f) is_force="-f";;
+		--no-version-check) do_version_check="";;
 		--tag) do_tag="yes";;
 		--help) ;&
 		-h) { cat << EOF
@@ -92,7 +94,7 @@ new_version="$(determine_new_version "oxide-auth/Cargo.toml")"
 # check it is a sane version number
 [[ -z $(grep -vE '[0-9a-zA-Z.-]*' <<< "$new_version" ) ]] || { echo "Fail: Check version number: ${new_version}"; exit 1; }
 
-check_notexists_version || { echo "Version $new_version appears already published"; exit 1; }
+[[ -z $version_check ]] || check_notexists_version || { echo "Version $new_version appears already published"; exit 1; }
 
 # Check there are no more [WIP] markers in Migrate and Readme
 count_wip_marker || { echo "Fail: Work in progress in documentation"; exit 1; }
