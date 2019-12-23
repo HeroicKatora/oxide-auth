@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth-rouille"
-version = "0.0.0"
+version = "0.1.0-rc.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 edition = "2018"
