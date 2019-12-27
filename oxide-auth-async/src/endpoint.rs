@@ -1,5 +1,5 @@
 use oxide_auth::endpoint::{OAuthError, Template, WebRequest, WebResponse};
-use crate::primitives::{Registrar, Issuer};
+use crate::primitives::{Authorizer, Registrar, Issuer};
 
 pub trait Endpoint<Request: WebRequest> {
     /// The error typed used as the error representation of each flow.
@@ -15,7 +15,7 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// Returning `None` will implicate failing any flow that requires an authorizer but does not
     /// have any effect on flows that do not require one.
-    // fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer>;
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer>;
 
     /// An issuer if this endpoint can access one.
     ///
@@ -27,13 +27,13 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// Returning `None` will implicated failing the authorization code flow but does have any
     /// effect on other flows.
-    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<Request>>;
+    // fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<Request>>;
 
     /// Determine the required scopes for a request.
     ///
     /// The client must fulfill any one scope, so returning an empty slice will always deny the
     /// request.
-    fn scopes(&mut self) -> Option<&mut dyn Scopes<Request>>;
+    // fn scopes(&mut self) -> Option<&mut dyn Scopes<Request>>;
 
     /// Generate a prototype response.
     ///
