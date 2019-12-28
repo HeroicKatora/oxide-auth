@@ -166,7 +166,7 @@ pub enum WebError {
     Mailbox,
 
     /// General internal server error
-    ServerError(Option<String>),
+    InternalError(Option<String>),
 }
 
 impl OAuthRequest {
@@ -437,8 +437,8 @@ impl fmt::Display for WebError {
             WebError::Authorization => write!(f, "Request has invalid Authorization headers"),
             WebError::Canceled => write!(f, "Operation canceled"),
             WebError::Mailbox => write!(f,"An actor's mailbox was full"),
-            WebError::ServerError(None) => write!(f, "An internal server error occured"),
-            WebError::ServerError(Some(ref e)) => write!(f, "An internal server error occured: {}", e),
+            WebError::InternalError(None) => write!(f, "An internal server error occured"),
+            WebError::InternalError(Some(ref e)) => write!(f, "An internal server error occured: {}", e),
         }
     }
 }
@@ -455,7 +455,7 @@ impl error::Error for WebError {
             WebError::Authorization => "Request has invalid Authorization headers",
             WebError::Canceled => "Operation canceled",
             WebError::Mailbox => "An actor's mailbox was full",
-            WebError::ServerError(_) => "An internal server error occured",
+            WebError::InternalError(_) => "An internal server error occured",
         }
     }
 
@@ -470,7 +470,7 @@ impl error::Error for WebError {
             | WebError::Body
             | WebError::Canceled
             | WebError::Mailbox 
-            | WebError::ServerError(_) => None,
+            | WebError::InternalError(_) => None,
         }
     }
 }
