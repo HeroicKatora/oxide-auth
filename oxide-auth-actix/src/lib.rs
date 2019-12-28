@@ -7,23 +7,22 @@
 use actix::{MailboxError, Message};
 use actix_web::{
     dev::{HttpResponseBuilder, Payload},
-    error::BlockingError,
     http::{
-        header::{self, HeaderMap, InvalidHeaderValue, InvalidHeaderValueBytes},
-        HttpTryFrom, StatusCode,
+        header::{self, HeaderMap, InvalidHeaderValue},
+        StatusCode,
     },
     web::Form,
     web::Query,
     FromRequest, HttpRequest, HttpResponse, Responder, ResponseError,
 };
-use futures::Future;
+use futures::future::{self, FutureExt, LocalBoxFuture, Ready};
 use oxide_auth::{
     endpoint::{
         Endpoint, NormalizedParameter, OAuthError, QueryParameter, WebRequest, WebResponse,
     },
     frontends::simple::endpoint::Error,
 };
-use std::{borrow::Cow, error, fmt};
+use std::{borrow::Cow, error, fmt, convert::TryFrom};
 use url::Url;
 
 mod operations;
@@ -145,9 +144,6 @@ pub enum WebError {
     /// Errors occuring when producing Headers
     Header(InvalidHeaderValue),
 
-    /// Errors occuring when producing Headers
-    HeaderBytes(InvalidHeaderValueBytes),
-
     /// Errors with the request encoding
     Encoding,
 
@@ -168,38 +164,30 @@ pub enum WebError {
 
     /// An actor's mailbox was full
     Mailbox,
+
+    /// General internal server error
+    ServerError(Option<String>),
 }
 
 impl OAuthRequest {
     /// Create a new OAuthRequest from an HttpRequest and Payload
-    pub fn new(
-        req: &HttpRequest,
-        payload: &mut Payload,
-    ) -> impl Future<Item = Self, Error = WebError> {
-        let query_res = Query::extract(req);
-        let form_fut = Form::from_request(&req, payload);
+    pub async fn new(
+        req: HttpRequest,
+        mut payload: Payload,
+    ) -> Result<Self, WebError> {
+        let query = Query::extract(&req).await.ok().map(|q: Query<NormalizedParameter>| q.into_inner());
+        let body = Form::from_request(&req, &mut payload).await.ok().map(|b: Form<NormalizedParameter>| b.into_inner());
 
-        let req = req.clone();
+        let mut all_auth = req.headers().get_all(header::AUTHORIZATION);
+        let optional = all_auth.next();
 
-        form_fut.then(move |form_res| {
-            let body = form_res
-                .ok()
-                .map(|b: Form<NormalizedParameter>| b.into_inner());
-            let query = query_res
-                .ok()
-                .map(|q: Query<NormalizedParameter>| q.into_inner());
+        let auth = if let Some(_) = all_auth.next() {
+            return Err(WebError::Authorization);
+        } else {
+            optional.and_then(|hv| hv.to_str().ok().map(str::to_owned))
+        };
 
-            let mut all_auth = req.headers().get_all(header::AUTHORIZATION);
-            let optional = all_auth.next();
-
-            let auth = if let Some(_) = all_auth.next() {
-                return Err(WebError::Authorization);
-            } else {
-                optional.and_then(|hv| hv.to_str().ok().map(str::to_owned))
-            };
-
-            Ok(OAuthRequest { auth, query, body })
-        })
+        Ok(OAuthRequest { auth, query, body })
     }
 
     /// Fetch the authorization header from the request
@@ -261,7 +249,7 @@ impl OAuthResponse {
     /// Set the `ContentType` header on a response
     pub fn content_type(mut self, content_type: &str) -> Result<Self, WebError> {
         self.headers
-            .insert(header::CONTENT_TYPE, HttpTryFrom::try_from(content_type)?);
+            .insert(header::CONTENT_TYPE, TryFrom::try_from(content_type)?);
         Ok(self)
     }
 
@@ -313,7 +301,7 @@ impl WebResponse for OAuthResponse {
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.status = StatusCode::FOUND;
         self.headers
-            .insert(header::LOCATION, HttpTryFrom::try_from(url.into_string())?);
+            .insert(header::LOCATION, TryFrom::try_from(url.into_string())?);
         Ok(())
     }
 
@@ -325,14 +313,14 @@ impl WebResponse for OAuthResponse {
     fn unauthorized(&mut self, kind: &str) -> Result<(), Self::Error> {
         self.status = StatusCode::UNAUTHORIZED;
         self.headers
-            .insert(header::WWW_AUTHENTICATE, HttpTryFrom::try_from(kind)?);
+            .insert(header::WWW_AUTHENTICATE, TryFrom::try_from(kind)?);
         Ok(())
     }
 
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
         self.body = Some(text.to_owned());
         self.headers
-            .insert(header::CONTENT_TYPE, HttpTryFrom::try_from("text/plain")?);
+            .insert(header::CONTENT_TYPE, TryFrom::try_from("text/plain")?);
         Ok(())
     }
 
@@ -340,7 +328,7 @@ impl WebResponse for OAuthResponse {
         self.body = Some(json.to_owned());
         self.headers.insert(
             header::CONTENT_TYPE,
-            HttpTryFrom::try_from("application/json")?,
+            TryFrom::try_from("application/json")?,
         );
         Ok(())
     }
@@ -355,27 +343,27 @@ where
 
 impl FromRequest for OAuthRequest {
     type Error = WebError;
-    type Future = Box<dyn Future<Item = Self, Error = Self::Error>>;
+    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
     type Config = ();
 
     fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
-        Box::new(Self::new(req, payload))
+        Self::new(req.clone(), payload.take()).boxed_local()
     }
 }
 
 impl FromRequest for OAuthResource {
     type Error = WebError;
-    type Future = Result<Self, Self::Error>;
+    type Future = Ready<Result<Self, Self::Error>>;
     type Config = ();
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        Self::new(req)
+        future::ready(Self::new(req))
     }
 }
 
 impl Responder for OAuthResponse {
     type Error = WebError;
-    type Future = Result<HttpResponse, Self::Error>;
+    type Future = Ready<Result<HttpResponse, Self::Error>>;
 
     fn respond_to(self, _: &HttpRequest) -> Self::Future {
         let mut builder = HttpResponseBuilder::new(self.status);
@@ -384,9 +372,9 @@ impl Responder for OAuthResponse {
         }
 
         if let Some(body) = self.body {
-            Ok(builder.body(body))
+            future::ok(builder.body(body))
         } else {
-            Ok(builder.finish())
+            future::ok(builder.finish())
         }
     }
 }
@@ -422,24 +410,6 @@ impl From<InvalidHeaderValue> for WebError {
     }
 }
 
-impl From<InvalidHeaderValueBytes> for WebError {
-    fn from(e: InvalidHeaderValueBytes) -> Self {
-        WebError::HeaderBytes(e)
-    }
-}
-
-impl<E> From<BlockingError<E>> for WebError
-where
-    E: Into<WebError> + fmt::Debug,
-{
-    fn from(e: BlockingError<E>) -> Self {
-        match e {
-            BlockingError::Canceled => WebError::Canceled,
-            BlockingError::Error(e) => e.into(),
-        }
-    }
-}
-
 impl From<MailboxError> for WebError {
     fn from(e: MailboxError) -> Self {
         match e {
@@ -460,14 +430,15 @@ impl fmt::Display for WebError {
         match *self {
             WebError::Endpoint(ref e) => write!(f, "Endpoint, {}", e),
             WebError::Header(ref e) => write!(f, "Couldn't set header, {}", e),
-            WebError::HeaderBytes(ref e) => write!(f, "Couldn't set header, {}", e),
             WebError::Encoding => write!(f, "Error decoding request"),
             WebError::Form => write!(f, "Request is not a form"),
             WebError::Query => write!(f, "No query present"),
             WebError::Body => write!(f, "No body present"),
             WebError::Authorization => write!(f, "Request has invalid Authorization headers"),
             WebError::Canceled => write!(f, "Operation canceled"),
-            WebError::Mailbox => write!(f, "An actor's mailbox was full"),
+            WebError::Mailbox => write!(f,"An actor's mailbox was full"),
+            WebError::ServerError(None) => write!(f, "An internal server error occured"),
+            WebError::ServerError(Some(ref e)) => write!(f, "An internal server error occured: {}", e),
         }
     }
 }
@@ -477,7 +448,6 @@ impl error::Error for WebError {
         match *self {
             WebError::Endpoint(ref e) => e.description(),
             WebError::Header(ref e) => e.description(),
-            WebError::HeaderBytes(ref e) => e.description(),
             WebError::Encoding => "Error decoding request",
             WebError::Form => "Request is not a form",
             WebError::Query => "No query present",
@@ -485,6 +455,7 @@ impl error::Error for WebError {
             WebError::Authorization => "Request has invalid Authorization headers",
             WebError::Canceled => "Operation canceled",
             WebError::Mailbox => "An actor's mailbox was full",
+            WebError::ServerError(_) => "An internal server error occured",
         }
     }
 
@@ -492,14 +463,14 @@ impl error::Error for WebError {
         match *self {
             WebError::Endpoint(ref e) => e.source(),
             WebError::Header(ref e) => e.source(),
-            WebError::HeaderBytes(ref e) => e.source(),
             WebError::Encoding
             | WebError::Form
             | WebError::Authorization
             | WebError::Query
             | WebError::Body
             | WebError::Canceled
-            | WebError::Mailbox => None,
+            | WebError::Mailbox 
+            | WebError::ServerError(_) => None,
         }
     }
 }

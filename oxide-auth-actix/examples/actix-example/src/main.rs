@@ -1,8 +1,8 @@
 mod support;
 
 use actix::{Actor, Addr, Context, Handler};
+use actix_rt;
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
-use futures::{future, Future};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
@@ -38,6 +38,73 @@ enum Extras {
     Nothing,
 }
 
+async fn get_authorize(
+    (req, state): (OAuthRequest, web::Data<Addr<State>>),
+) -> Result<OAuthResponse, WebError> {
+    // GET requests should not mutate server state and are extremely
+    // vulnerable accidental repetition as well as Cross-Site Request
+    // Forgery (CSRF).
+    match state.send(Authorize(req).wrap(Extras::AuthGet)).await {
+        Ok(Ok(r)) => Ok(r),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(WebError::from(e)),
+    }
+}
+
+async fn post_authorize(
+    (r, req, state): (HttpRequest, OAuthRequest, web::Data<Addr<State>>),
+) -> Result<OAuthResponse, WebError> {
+    // Some authentication should be performed here in production cases
+    match state
+        .send(Authorize(req).wrap(Extras::AuthPost(r.query_string().to_owned())))
+        .await
+    {
+        Ok(Ok(r)) => Ok(r),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(WebError::from(e)),
+    }
+}
+
+async fn token(
+    (req, state): (OAuthRequest, web::Data<Addr<State>>),
+) -> Result<OAuthResponse, WebError> {
+    match state.send(Token(req).wrap(Extras::Nothing)).await {
+        Ok(Ok(r)) => Ok(r),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(WebError::from(e)),
+    }
+}
+
+async fn refresh(
+    (req, state): (OAuthRequest, web::Data<Addr<State>>),
+) -> Result<OAuthResponse, WebError> {
+    match state.send(Refresh(req).wrap(Extras::Nothing)).await {
+        Ok(Ok(r)) => Ok(r),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(WebError::from(e)),
+    }
+}
+
+async fn index(
+    (req, state): (OAuthResource, web::Data<Addr<State>>),
+) -> Result<OAuthResponse, WebError> {
+    match state
+        .send(Resource(req.into_request()).wrap(Extras::Nothing))
+        .await
+    {
+        Ok(Ok(_grant)) => Ok(OAuthResponse::ok()
+            .content_type("text/plain")?
+            .body("Hello world!")),
+        Ok(Err(Ok(e))) => Ok(e.body(DENY_TEXT)),
+        Ok(Err(Err(e))) => Err(e),
+        Err(e) => Err(WebError::from(e)),
+    }
+}
+
+async fn start_browser() -> () {
+    let _ = thread::spawn(support::open_in_browser);
+}
+
 /// Example of a main function of an actix-web server supporting oauth.
 pub fn main() {
     std::env::set_var(
@@ -46,7 +113,10 @@ pub fn main() {
     );
     env_logger::init();
 
-    let mut sys = actix::System::new("HttpServerClient");
+    let mut sys = actix_rt::System::new("HttpServerClient");
+
+    // Start, then open in browser, don't care about this finishing.
+    let _ = sys.block_on(start_browser());
 
     let state = State::preconfigured().start();
 
@@ -57,71 +127,18 @@ pub fn main() {
             .wrap(Logger::default())
             .service(
                 web::resource("/authorize")
-                    .route(web::get().to_async(
-                        |(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                            // GET requests should not mutate server state and are extremely
-                            // vulnerable accidental repetition as well as Cross-Site Request
-                            // Forgery (CSRF).
-                            state
-                                .send(Authorize(req).wrap(Extras::AuthGet))
-                                .map_err(WebError::from)
-                        },
-                    ))
-                    .route(web::post().to_async(
-                        |(r, req, state): (HttpRequest, OAuthRequest, web::Data<Addr<State>>)| {
-                            // Some authentication should be performed here in production cases
-                            state
-                                .send(
-                                    Authorize(req)
-                                        .wrap(Extras::AuthPost(r.query_string().to_owned())),
-                                )
-                                .map_err(WebError::from)
-                        },
-                    )),
+                    .route(web::get().to(get_authorize))
+                    .route(web::post().to(post_authorize)),
             )
-            .route(
-                "/token",
-                web::post().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                    state
-                        .send(Token(req).wrap(Extras::Nothing))
-                        .map_err(WebError::from)
-                }),
-            )
-            .route(
-                "/refresh",
-                web::post().to_async(|(req, state): (OAuthRequest, web::Data<Addr<State>>)| {
-                    state
-                        .send(Refresh(req).wrap(Extras::Nothing))
-                        .map_err(WebError::from)
-                }),
-            )
-            .route(
-                "/",
-                web::get().to_async(|(req, state): (OAuthResource, web::Data<Addr<State>>)| {
-                    state
-                        .send(Resource(req.into_request()).wrap(Extras::Nothing))
-                        .map_err(WebError::from)
-                        .and_then(|res| match res {
-                            Ok(_grant) => Ok(OAuthResponse::ok()
-                                .content_type("text/plain")?
-                                .body("Hello world!")),
-                            Err(Ok(response)) => Ok(response.body(DENY_TEXT)),
-                            Err(Err(e)) => Err(e.into()),
-                        })
-                }),
-            )
+            .route("/token", web::post().to(token))
+            .route("/refresh", web::post().to(refresh))
+            .route("/", web::get().to(index))
     })
     .bind("localhost:8020")
     .expect("Failed to bind to socket")
-    .start();
+    .run();
 
     support::dummy_client();
-
-    // Start, then open in browser, don't care about this finishing.
-    let _: Result<(), ()> = sys.block_on(future::lazy(|| {
-        let _ = thread::spawn(support::open_in_browser);
-        future::ok(())
-    }));
 
     // Run the rest of the system.
     let _ = sys.run();
