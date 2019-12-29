@@ -44,45 +44,28 @@ async fn get_authorize(
     // GET requests should not mutate server state and are extremely
     // vulnerable accidental repetition as well as Cross-Site Request
     // Forgery (CSRF).
-    match state.send(Authorize(req).wrap(Extras::AuthGet)).await {
-        Ok(Ok(r)) => Ok(r),
-        Ok(Err(e)) => Err(e),
-        Err(e) => Err(WebError::from(e)),
-    }
+    state.send(Authorize(req).wrap(Extras::AuthGet)).await?
 }
 
 async fn post_authorize(
     (r, req, state): (HttpRequest, OAuthRequest, web::Data<Addr<State>>),
 ) -> Result<OAuthResponse, WebError> {
     // Some authentication should be performed here in production cases
-    match state
+    state
         .send(Authorize(req).wrap(Extras::AuthPost(r.query_string().to_owned())))
-        .await
-    {
-        Ok(Ok(r)) => Ok(r),
-        Ok(Err(e)) => Err(e),
-        Err(e) => Err(WebError::from(e)),
-    }
+        .await?
 }
 
 async fn token(
     (req, state): (OAuthRequest, web::Data<Addr<State>>),
 ) -> Result<OAuthResponse, WebError> {
-    match state.send(Token(req).wrap(Extras::Nothing)).await {
-        Ok(Ok(r)) => Ok(r),
-        Ok(Err(e)) => Err(e),
-        Err(e) => Err(WebError::from(e)),
-    }
+    state.send(Token(req).wrap(Extras::Nothing)).await?
 }
 
 async fn refresh(
     (req, state): (OAuthRequest, web::Data<Addr<State>>),
 ) -> Result<OAuthResponse, WebError> {
-    match state.send(Refresh(req).wrap(Extras::Nothing)).await {
-        Ok(Ok(r)) => Ok(r),
-        Ok(Err(e)) => Err(e),
-        Err(e) => Err(WebError::from(e)),
-    }
+    state.send(Refresh(req).wrap(Extras::Nothing)).await?
 }
 
 async fn index(
@@ -90,14 +73,13 @@ async fn index(
 ) -> Result<OAuthResponse, WebError> {
     match state
         .send(Resource(req.into_request()).wrap(Extras::Nothing))
-        .await
+        .await?
     {
-        Ok(Ok(_grant)) => Ok(OAuthResponse::ok()
+        Ok(_grant) => Ok(OAuthResponse::ok()
             .content_type("text/plain")?
             .body("Hello world!")),
-        Ok(Err(Ok(e))) => Ok(e.body(DENY_TEXT)),
-        Ok(Err(Err(e))) => Err(e),
-        Err(e) => Err(WebError::from(e)),
+        Err(Ok(e)) => Ok(e.body(DENY_TEXT)),
+        Err(Err(e)) => Err(e),
     }
 }
 
