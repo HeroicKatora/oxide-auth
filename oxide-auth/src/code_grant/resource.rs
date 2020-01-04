@@ -14,7 +14,7 @@ use primitives::scope::Scope;
 /// authentication information.
 ///
 /// [rfc6750]: https://tools.ietf.org/html/rfc6750#section-3.1
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AccessFailure {
     /// The standard error code representation.
     pub code: Option<ErrorCode>,
@@ -34,7 +34,7 @@ pub enum ErrorCode {
 }
 
 /// Additional information provided for the WWW-Authenticate header.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Authenticate {
     /// Information about which realm the credentials correspond to.
     pub realm: Option<String>,
@@ -44,7 +44,7 @@ pub struct Authenticate {
 }
 
 /// An error signalling the resource access was not permitted.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Error {
     /// The client tried to access a resource but was not able to.
     AccessDenied {
@@ -74,6 +74,8 @@ pub enum Error {
 const BEARER_START: &str = "Bearer ";
 
 type Result<T> = std::result::Result<T, Error>;
+
+type StateResult<'req> = std::result::Result<(ResourceState, Output<'req>), Error>;
 
 /// Required request methods for deciding on the rights to access a protected resource.
 pub trait Request {
@@ -105,6 +107,76 @@ pub trait Endpoint {
 }
 
 /// The result will indicate whether the resource access should be allowed or not.
+pub struct Resource {
+    state: ResourceState,
+}
+
+enum ResourceState {
+    /// The initial state.
+    New,
+    /// State after request has been validated.
+    Recovering,
+    /// State after a grant has been determined.
+    Checking {
+        /// The grant corresponding to the token in the request.
+        grant: Grant,
+    },
+    /// State after an error occurred.
+    Err(Error),
+}
+
+/// An input injected by the executor into the state machine.
+#[derive(Clone)]
+pub enum Input<'req, 'a> {
+    /// Provide the queried (bearer) token.
+    Recovered(Option<Grant>),
+    /// Determine the scopes of requested resource.
+    Scopes(&'a [Scope]),
+    /// Provides simply the original request.
+    Request {
+        request: &'req dyn Request,
+    },
+    /// Advance without input as far as possible, or just retrieve the output again.
+    None,
+}
+
+/// A request by the statemachine to the executor.
+///
+/// Each variant is fulfilled by certain variants of the next inputs as an argument to
+/// `Refresh::next`. The output of most states is simply repeated if `Input::None` is provided
+/// instead but note that the successful bearer token response is **not** repeated.
+///
+/// This borrows data from the underlying state machine, so you need to drop it before advancing it
+/// with newly provided input.
+#[derive(Clone, Debug)]
+pub enum Output<'req> {
+    /// The state requires some information from the request to advance.
+    GetRequest,
+    /// The issuer should try to recover the grant of a bearer token.
+    ///
+    /// Fulfilled by `Input::Recovered`.
+    Recover {
+        /// The token supplied by the client.
+        token: Cow<'req, str>,
+    },
+    /// The executor must determine the scopes applying to the resource.
+    ///
+    /// Fulfilled by `Input::Scopes`.
+    DetermineScopes,
+    /// The state machine finished and access was allowed.
+    ///
+    /// Returns the grant with which access was granted in case a detailed inspection or logging is
+    /// required.
+    ///
+    /// This output **can not** be requested repeatedly, any future `Input` will yield a primitive
+    /// error instead.
+    Ok(Grant),
+    /// The state machine finished in an error.
+    ///
+    /// The error will be repeated on *any* following input.
+    Err(Error),
+}
+
 pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
     let authenticate = Authenticate {
         realm: None,
@@ -166,6 +238,84 @@ pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
     Ok(grant)
 }
 
+fn validate<'req>(
+    request: &'req dyn Request,
+) -> StateResult<'req> {
+    if !request.valid() {
+        return Err(Error::InvalidRequest {
+            authenticate: Authenticate::empty(),
+        });
+    }
+
+    let client_token = match request.token() {
+        Some(token) => token,
+        None => return Err(Error::NoAuthentication {
+            authenticate: Authenticate::empty(),
+        }),
+    };
+
+    if !client_token.starts_with(BEARER_START) {
+        return Err(Error::InvalidRequest {
+            authenticate: Authenticate::empty(),
+        });
+    }
+
+    let token = match client_token {
+        Cow::Borrowed(token) => Cow::Borrowed(&token[BEARER_START.len()..]),
+        Cow::Owned(mut token) => Cow::Owned(token.split_off(BEARER_START.len())),
+    };
+
+    Ok((
+        ResourceState::Recovering,
+        Output::Recover { token },
+    ))
+}
+
+fn recovered<'req>(
+    grant: Grant,
+) -> StateResult<'req> {
+    if grant.until < Utc::now() {
+        return Err(Error::AccessDenied {
+            failure: AccessFailure {
+                code: Some(ErrorCode::InvalidToken),
+            },
+            authenticate: Authenticate::empty(),
+        });
+    }
+
+    Ok((
+        ResourceState::Checking { grant },
+        Output::DetermineScopes,
+    ))
+}
+
+fn check_scopes<'req>(
+    grant: Grant,
+    scopes: &[Scope],
+) -> StateResult<'req> {
+    let allowing = scopes
+        .iter()
+        .find(|resource_scope| resource_scope.allow_access(&grant.scope));
+
+    if allowing.is_none() {
+        return Err(Error::AccessDenied {
+            failure: AccessFailure {
+                code: Some(ErrorCode::InsufficientScope),
+            },
+            authenticate: Authenticate {
+                realm: None,
+                scope: scopes.get(0).cloned(),
+            },
+        });
+    }
+
+    // TODO: should we return the allowing scope?
+    Ok((
+        ResourceState::Err(Error::PrimitiveError),
+        Output::Ok(grant),
+    ))
+}
+
 impl ErrorCode {
     fn description(self) -> &'static str {
         match self {
@@ -210,6 +360,13 @@ impl BearerHeader {
 }
 
 impl Authenticate {
+    fn empty() -> Self {
+        Authenticate {
+            realm: None,
+            scope: None,
+        }
+    }
+
     fn extend_header(self, header: &mut BearerHeader) {
         header.add_kvp("realm", self.realm);
         header.add_kvp("scope", self.scope);
