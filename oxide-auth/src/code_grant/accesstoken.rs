@@ -135,6 +135,12 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
         }
     }
 
+    match request.grant_type() {
+        Some(ref cow) if cow == "authorization_code" => (),
+        None => return Err(Error::invalid()),
+        Some(_) => return Err(Error::invalid_with(AccessTokenErrorType::UnsupportedGrantType)),
+    };
+
     let (client_id, auth) = credentials
         .into_client()
         .ok_or_else(Error::invalid)?;
@@ -148,12 +154,6 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
                 extensions: None,
             }),
         })?;
-
-    match request.grant_type() {
-        Some(ref cow) if cow == "authorization_code" => (),
-        None => return Err(Error::invalid()),
-        Some(_) => return Err(Error::invalid_with(AccessTokenErrorType::UnsupportedGrantType)),
-    };
 
     let code = request
         .code()
