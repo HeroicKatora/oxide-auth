@@ -26,7 +26,7 @@ pub fn dummy_client() {
     })
     .bind("localhost:8021")
     .expect("Failed to start dummy client")
-    .start();
+    .run();
 }
 
 fn endpoint_impl(
