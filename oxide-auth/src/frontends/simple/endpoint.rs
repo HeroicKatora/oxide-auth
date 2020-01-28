@@ -13,7 +13,7 @@ use primitives::registrar::Registrar;
 use primitives::scope::Scope;
 
 use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow, RefreshFlow};
-use endpoint::{Endpoint, OAuthError, PreGrant, Template, Scopes};
+use endpoint::{Endpoint, Extension, OAuthError, PreGrant, Template, Scopes};
 use endpoint::{OwnerConsent, OwnerSolicitor};
 use endpoint::WebRequest;
 
@@ -509,6 +509,10 @@ where
 
     fn web_error(&mut self, err: W::Error) -> Self::Error {
         self.0.web_error(err).into()
+    }
+
+    fn extension(&mut self) -> Option<&mut dyn Extension> {
+        self.0.extension()
     }
 }
 
