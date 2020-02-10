@@ -1,6 +1,6 @@
 //! Provides the handling for Resource Requests.
+use std::{fmt, mem};
 use std::borrow::Cow;
-use std::fmt;
 
 use chrono::Utc;
 
@@ -75,8 +75,6 @@ const BEARER_START: &str = "Bearer ";
 
 type Result<T> = std::result::Result<T, Error>;
 
-type StateResult<'req> = std::result::Result<(ResourceState, Output<'req>), Error>;
-
 /// Required request methods for deciding on the rights to access a protected resource.
 pub trait Request {
     /// Received request might not be encoded correctly. This method gives implementors the chance
@@ -115,11 +113,13 @@ enum ResourceState {
     /// The initial state.
     New,
     /// State after request has been validated.
-    Recovering,
-    /// State after a grant has been determined.
-    Checking {
-        /// The grant corresponding to the token in the request.
-        grant: Grant,
+    Internalized {
+        token: String,
+    },
+    /// State after scopes have been determined.
+    Recovering {
+        token: String,
+        scopes: Vec<Scope>,
     },
     /// State after an error occurred.
     Err(Error),
@@ -127,11 +127,11 @@ enum ResourceState {
 
 /// An input injected by the executor into the state machine.
 #[derive(Clone)]
-pub enum Input<'req, 'a> {
+pub enum Input<'req> {
     /// Provide the queried (bearer) token.
     Recovered(Option<Grant>),
     /// Determine the scopes of requested resource.
-    Scopes(&'a [Scope]),
+    Scopes(&'req [Scope]),
     /// Provides simply the original request.
     Request {
         request: &'req dyn Request,
@@ -149,7 +149,7 @@ pub enum Input<'req, 'a> {
 /// This borrows data from the underlying state machine, so you need to drop it before advancing it
 /// with newly provided input.
 #[derive(Clone, Debug)]
-pub enum Output<'req> {
+pub enum Output<'machine> {
     /// The state requires some information from the request to advance.
     GetRequest,
     /// The issuer should try to recover the grant of a bearer token.
@@ -157,7 +157,7 @@ pub enum Output<'req> {
     /// Fulfilled by `Input::Recovered`.
     Recover {
         /// The token supplied by the client.
-        token: Cow<'req, str>,
+        token: &'machine str,
     },
     /// The executor must determine the scopes applying to the resource.
     ///
@@ -177,70 +177,83 @@ pub enum Output<'req> {
     Err(Error),
 }
 
+impl Resource {
+    pub fn new() -> Self {
+        Resource { state: ResourceState::New }
+    }
+
+    pub fn advance(&mut self, input: Input) -> Output<'_> {
+        self.state = match (self.take(), input) {
+            (any, Input::None) => any,
+            (ResourceState::New, Input::Request { request }) => {
+                validate(request).unwrap_or_else(ResourceState::Err)
+            },
+            (ResourceState::Internalized { token }, Input::Scopes(scopes)) => {
+                get_scopes(token, scopes)
+            },
+            (ResourceState::Recovering { token: _, scopes }, Input::Recovered(grant)) => {
+                match recovered(grant, scopes) {
+                    Ok(grant) => return Output::Ok(grant),
+                    Err(err) => ResourceState::Err(err),
+                }
+            },
+            _ => return Output::Err(Error::PrimitiveError),
+        };
+
+        self.output()
+    }
+
+    fn output(&self) -> Output<'_> {
+        match &self.state {
+            ResourceState::New => Output::GetRequest,
+            ResourceState::Internalized { .. } => Output::DetermineScopes,
+            ResourceState::Recovering { token, .. } => Output::Recover { token },
+            ResourceState::Err(error) => Output::Err(error.clone()),
+        }
+    }
+
+    fn take(&mut self) -> ResourceState {
+        mem::replace(&mut self.state, ResourceState::Err(Error::PrimitiveError))
+    }
+}
+
 pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
-    let authenticate = Authenticate {
-        realm: None,
-        scope: handler.scopes().get(0).cloned(),
-    };
-
-    if !req.valid() {
-        return Err(Error::InvalidRequest {
-            authenticate
-        });
+    enum Requested {
+        None,
+        Request,
+        Scopes,
+        Grant(String),
     }
 
-    let token = match req.token() {
-        Some(token) => token,
-        None => return Err(Error::NoAuthentication {
-            authenticate,
-        }),
-    };
-
-    if !token.starts_with(BEARER_START) {
-        return Err(Error::InvalidRequest {
-            authenticate,
-        })
-    }
-
-    let token = &token[BEARER_START.len()..];
-
-    let grant = match handler.issuer().recover_token(token) {
-        Err(()) => return Err(Error::PrimitiveError),
-        Ok(Some(grant)) => grant,
-        Ok(None) => return Err(Error::AccessDenied {
-            failure: AccessFailure {
-                code: Some(ErrorCode::InvalidRequest),
+    let mut resource = Resource::new();
+    let mut requested = Requested::None;
+    loop {
+        let input = match requested {
+            Requested::None => Input::None,
+            Requested::Request => Input::Request { request: req },
+            Requested::Scopes => Input::Scopes(handler.scopes()),
+            Requested::Grant(token) => {
+                let grant = handler
+                    .issuer()
+                    .recover_token(&token)
+                    .map_err(|_| Error::PrimitiveError)?;
+                Input::Recovered(grant)
             },
-            authenticate,
-        }),
-    };
+        };
 
-    if grant.until < Utc::now() {
-        return Err(Error::AccessDenied {
-            failure: AccessFailure {
-                code: Some(ErrorCode::InvalidToken),
-            },
-            authenticate,
-        });
+        requested = match resource.advance(input) {
+            Output::Err(error) => return Err(error),
+            Output::Ok(grant) => return Ok(grant),
+            Output::GetRequest => Requested::Request,
+            Output::DetermineScopes => Requested::Scopes,
+            Output::Recover { token } => Requested::Grant(token.to_string()),
+        };
     }
-
-    // Test if any of the possible allowed scopes is included in the grant
-    if !handler.scopes().iter()
-        .any(|resource_scope| resource_scope.allow_access(&grant.scope)) {
-        return Err(Error::AccessDenied {
-            failure: AccessFailure {
-                code: Some(ErrorCode::InsufficientScope),
-            },
-            authenticate,
-        });
-    }
-
-    Ok(grant)
 }
 
 fn validate<'req>(
     request: &'req dyn Request,
-) -> StateResult<'req> {
+) -> Result<ResourceState> {
     if !request.valid() {
         return Err(Error::InvalidRequest {
             authenticate: Authenticate::empty(),
@@ -261,19 +274,41 @@ fn validate<'req>(
     }
 
     let token = match client_token {
-        Cow::Borrowed(token) => Cow::Borrowed(&token[BEARER_START.len()..]),
-        Cow::Owned(mut token) => Cow::Owned(token.split_off(BEARER_START.len())),
+        Cow::Borrowed(token) => token[BEARER_START.len()..].to_string(),
+        Cow::Owned(mut token) => token.split_off(BEARER_START.len()),
     };
 
-    Ok((
-        ResourceState::Recovering,
-        Output::Recover { token },
-    ))
+    Ok(ResourceState::Internalized { token })
+}
+
+fn get_scopes<'req>(
+    token: String,
+    scopes: &'req [Scope],
+) -> ResourceState {
+    ResourceState::Recovering {
+        token,
+        scopes: scopes.to_owned(),
+    }
 }
 
 fn recovered<'req>(
-    grant: Grant,
-) -> StateResult<'req> {
+    grant: Option<Grant>,
+    mut scopes: Vec<Scope>,
+) -> Result<Grant> {
+    let grant = match grant {
+        Some(grant) => grant,
+        None => return Err(Error::AccessDenied {
+            failure: AccessFailure {
+                code: Some(ErrorCode::InvalidRequest),
+            },
+            authenticate: Authenticate {
+                realm: None,
+                // TODO. Don't drop the other scopes?
+                scope: scopes.drain(..).next(),
+            },
+        }),
+    };
+
     if grant.until < Utc::now() {
         return Err(Error::AccessDenied {
             failure: AccessFailure {
@@ -283,16 +318,6 @@ fn recovered<'req>(
         });
     }
 
-    Ok((
-        ResourceState::Checking { grant },
-        Output::DetermineScopes,
-    ))
-}
-
-fn check_scopes<'req>(
-    grant: Grant,
-    scopes: &[Scope],
-) -> StateResult<'req> {
     let allowing = scopes
         .iter()
         .find(|resource_scope| resource_scope.allow_access(&grant.scope));
@@ -304,16 +329,13 @@ fn check_scopes<'req>(
             },
             authenticate: Authenticate {
                 realm: None,
-                scope: scopes.get(0).cloned(),
+                scope: scopes.drain(..).next(),
             },
         });
     }
 
     // TODO: should we return the allowing scope?
-    Ok((
-        ResourceState::Err(Error::PrimitiveError),
-        Output::Ok(grant),
-    ))
+    Ok(grant)
 }
 
 impl ErrorCode {
