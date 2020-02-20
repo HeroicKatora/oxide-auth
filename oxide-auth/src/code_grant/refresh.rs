@@ -252,21 +252,25 @@ impl BearerToken {
     /// Convert the token into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(&self) -> String {
-        let remaining = self.0.until
-            .signed_duration_since(Utc::now())
-            .num_seconds()
-            .to_string();
-        let mut kvmap: HashMap<_, _> = vec![
-            ("access_token", self.0.token.as_str()),
-            ("token_type", "bearer"),
-            ("expires_in", remaining.as_str()),
-            ("scope", self.1.as_str())
-        ].into_iter().collect();
-
-        if let Some(refresh) = &self.0.refresh {
-            kvmap.insert("refresh_token", refresh.as_str());
+        #[derive(Serialize)]
+        struct Serial<'a> {
+            access_token: &'a str,
+            #[serde(skip_serializing_if="Option::is_none")]
+            refresh_token: Option<&'a str>,
+            token_type: &'a str,
+            expires_in: String,
+            scope: &'a str,
         }
 
-        serde_json::to_string(&kvmap).unwrap()
+        let remaining = self.0.until.signed_duration_since(Utc::now());
+        let serial = Serial {
+            access_token: self.0.token.as_str(),
+            refresh_token: self.0.refresh.as_ref().map(String::as_str),
+            token_type: "bearer",
+            expires_in: remaining.num_seconds().to_string(),
+            scope: self.1.as_str(),
+        };
+
+        serde_json::to_string(&serial).unwrap()
     }
 }
