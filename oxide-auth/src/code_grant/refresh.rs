@@ -258,7 +258,7 @@ impl BearerToken {
             #[serde(skip_serializing_if="Option::is_none")]
             refresh_token: Option<&'a str>,
             token_type: &'a str,
-            expires_in: String,
+            expires_in: i64,
             scope: &'a str,
         }
 
@@ -267,7 +267,7 @@ impl BearerToken {
             access_token: self.0.token.as_str(),
             refresh_token: self.0.refresh.as_ref().map(String::as_str),
             token_type: "bearer",
-            expires_in: remaining.num_seconds().to_string(),
+            expires_in: remaining.num_seconds(),
             scope: self.1.as_str(),
         };
 
