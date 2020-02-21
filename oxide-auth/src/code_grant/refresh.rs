@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
 
-use code_grant::error::{AccessTokenError, AccessTokenErrorType};
+use code_grant::{accesstoken::TokenResponse, error::{AccessTokenError, AccessTokenErrorType}};
 use primitives::issuer::{RefreshedToken, Issuer};
 use primitives::registrar::{Registrar, RegistrarError};
 
@@ -252,25 +252,16 @@ impl BearerToken {
     /// Convert the token into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(&self) -> String {
-        #[derive(Serialize)]
-        struct Serial<'a> {
-            access_token: &'a str,
-            #[serde(skip_serializing_if="Option::is_none")]
-            refresh_token: Option<&'a str>,
-            token_type: &'a str,
-            expires_in: i64,
-            scope: &'a str,
-        }
-
         let remaining = self.0.until.signed_duration_since(Utc::now());
-        let serial = Serial {
-            access_token: self.0.token.as_str(),
-            refresh_token: self.0.refresh.as_ref().map(String::as_str),
-            token_type: "bearer",
-            expires_in: remaining.num_seconds(),
-            scope: self.1.as_str(),
+        let token_response = TokenResponse {
+            access_token: Some(self.0.token.clone()),
+            refresh_token: self.0.refresh.clone(),
+            token_type: Some("bearer".to_owned()),
+            expires_in: Some(remaining.num_seconds()),
+            scope: Some(self.1.clone()),
+            error: None,
         };
 
-        serde_json::to_string(&serial).unwrap()
+        serde_json::to_string(&token_response).unwrap()
     }
 }
