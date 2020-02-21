@@ -11,6 +11,7 @@ use serde_json;
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
 use super::defaults::*;
+use code_grant::accesstoken::TokenResponse;
 use frontends::simple::endpoint::{refresh_flow, resource_flow};
 
 struct RefreshTokenSetup {
@@ -104,15 +105,12 @@ impl RefreshTokenSetup {
             Some(Body::Json(body)) => body,
             _ => panic!("Expect json body"),
         };
-        let mut body: HashMap<String, String> = serde_json::from_str(&body)
+        let body: TokenResponse = serde_json::from_str(&body)
             .expect("Expected valid json body");
-        let duration: i64 = body.remove("expires_in")
-            .unwrap()
-            .parse()
-            .unwrap();
+        let duration = body.expires_in.unwrap();
         RefreshedToken {
-            token: body.remove("access_token").expect("Expected a token"),
-            refresh: body.remove("refresh_token"),
+            token: body.access_token.expect("Expected a token"),
+            refresh: body.refresh_token,
             until: Utc::now() + Duration::seconds(duration),
         }
     }
