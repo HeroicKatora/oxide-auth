@@ -11,6 +11,34 @@ use primitives::issuer::{IssuedToken, Issuer};
 use primitives::grant::{Extensions, Grant};
 use primitives::registrar::{Registrar, RegistrarError};
 
+/// Token Response
+#[derive(Deserialize, Serialize)]
+pub struct TokenResponse {
+    /// The access token issued by the authorization server.
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub access_token: Option<String>,
+
+    /// The refresh token, which can be used to obtain new access tokens.
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub refresh_token: Option<String>,
+
+    /// The type of the token issued.
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub token_type: Option<String>,
+
+    /// The lifetime in seconds of the access token.
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub expires_in: Option<i64>,
+
+    /// The scope, which limits the permissions on the access token.
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub scope: Option<String>,
+
+    /// Error code
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub error: Option<String>,
+}
+
 /// Trait based retrieval of parameters necessary for access token request handling.
 pub trait Request {
     /// Received request might not be encoded correctly. This method gives implementors the chance
@@ -352,33 +380,23 @@ impl BearerToken {
     /// `application/json` encoding.
     // FIXME: rename to `into_json` or have `&self` argument.
     pub fn to_json(&self) -> String {
-        #[derive(Serialize)]
-        struct Serial<'a> {
-            access_token: &'a str,
-            #[serde(skip_serializing_if="Option::is_none")]
-            refresh_token: Option<&'a str>,
-            token_type: &'a str,
-            expires_in: i64,
-            scope: &'a str,
-        }
-
         let remaining = self.0.until.signed_duration_since(Utc::now());
-        let serial = Serial {
-            access_token: self.0.token.as_str(),
-            refresh_token: self.0.refresh.as_ref().map(String::as_str),
-            token_type: "bearer",
-            expires_in: remaining.num_seconds(),
-            scope: self.1.as_str(),
+        let token_response = TokenResponse {
+            access_token: Some(self.0.token.clone()),
+            refresh_token: self.0.refresh.clone(),
+            token_type: Some("bearer".to_owned()),
+            expires_in: Some(remaining.num_seconds()),
+            scope: Some(self.1.clone()),
+            error: None,
         };
 
-        serde_json::to_string(&serial).unwrap()
+        serde_json::to_string(&token_response).unwrap()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     #[test]
     fn bearer_token_encoding() {
@@ -389,13 +407,13 @@ mod tests {
         }, "scope".into());
 
         let json = token.to_json();
-        let mut token = serde_json::from_str::<HashMap<String, String>>(&json).unwrap();
+        let token = serde_json::from_str::<TokenResponse>(&json).unwrap();
 
-        assert_eq!(token.remove("access_token"), Some("access".to_string()));
-        assert_eq!(token.remove("refresh_token"), Some("refresh".to_string()));
-        assert_eq!(token.remove("scope"), Some("scope".to_string()));
-        assert_eq!(token.remove("token_type"), Some("bearer".to_string()));
-        assert!(token.remove("expires_in").is_some());
+        assert_eq!(token.access_token, Some("access".to_owned()));
+        assert_eq!(token.refresh_token, Some("refresh".to_owned()));
+        assert_eq!(token.scope, Some("scope".to_owned()));
+        assert_eq!(token.token_type, Some("bearer".to_owned()));
+        assert!(token.expires_in.is_some());
     }
 
     #[test]
@@ -406,12 +424,12 @@ mod tests {
         ), "scope".into());
 
         let json = token.to_json();
-        let mut token = serde_json::from_str::<HashMap<String, String>>(&json).unwrap();
+        let token = serde_json::from_str::<TokenResponse>(&json).unwrap();
 
-        assert_eq!(token.remove("access_token"), Some("access".to_string()));
-        assert_eq!(token.remove("refresh_token"), None);
-        assert_eq!(token.remove("scope"), Some("scope".to_string()));
-        assert_eq!(token.remove("token_type"), Some("bearer".to_string()));
-        assert!(token.remove("expires_in").is_some());
+        assert_eq!(token.access_token, Some("access".to_owned()));
+        assert_eq!(token.refresh_token, None);
+        assert_eq!(token.scope, Some("scope".to_owned()));
+        assert_eq!(token.token_type, Some("bearer".to_owned()));
+        assert!(token.expires_in.is_some());
     }
 }
