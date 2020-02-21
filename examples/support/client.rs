@@ -2,7 +2,7 @@ extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
 
-use serde::*;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::collections::HashMap;
 use std::io::Read;
