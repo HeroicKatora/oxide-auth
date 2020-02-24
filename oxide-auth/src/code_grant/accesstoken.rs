@@ -1,4 +1,5 @@
 //! Provides the handling for Access Token Requests
+use std::mem;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -133,6 +134,209 @@ enum Credentials<'a> {
     ///
     /// This is a security issue, only one attempt must be made per request.
     Duplicate,
+}
+
+pub struct AccessToken {
+    state: AccessTokenState,
+}
+
+enum AccessTokenState {
+    /// State after the request has been validated.
+    Authenticate {
+        client: String,
+        passdata: Option<Vec<u8>>,
+        code: String,
+        // TODO: parsing here is unnecessary if we compare a string representation.
+        redirect_uri: url::Url,
+    },
+    Recover {
+        code: String,
+        redirect_uri: url::Url,
+    },
+    Extend {
+        saved_params: Grant,
+        extensions: Extensions,
+    },
+    Issue {
+        grant: Grant,
+    },
+    Err(Error),
+}
+
+pub enum Input<'req> {
+    Request(&'req dyn Request),
+    Authenticated,
+    Recovered(Option<Grant>),
+    Done,
+    Issued(IssuedToken),
+    None,
+}
+
+pub enum Output<'machine> {
+    Authenticate {
+        client: &'machine str,
+        passdata: Option<&'machine [u8]>,
+    },
+    Recover {
+        code: &'machine str,
+    },
+    Extend {
+        grant: &'machine Grant,
+        extensions: &'machine mut Extensions,
+    },
+    Issue {
+        grant: &'machine Grant,
+    },
+    Ok(BearerToken),
+    Err(Error),
+}
+
+impl AccessToken {
+    pub fn new(request: &dyn Request) -> Self {
+        AccessToken {
+            state: Self::validate(request).unwrap_or_else(AccessTokenState::Err),
+        }
+    }
+
+    pub fn advance(&mut self, input: Input) -> Output<'_> {
+        self.state = match (self.take(), input) {
+            (current, Input::None) => current,
+            (
+                AccessTokenState::Authenticate {
+                    code, redirect_uri, ..
+                },
+                Input::Authenticated,
+            ) => Self::authencicated(code, redirect_uri),
+            (AccessTokenState::Recover { code, redirect_uri }, Input::Recovered(grant)) => {
+                Self::recovered(code, redirect_uri, grant).unwrap_or_else(AccessTokenState::Err)
+            }
+            (
+                AccessTokenState::Extend {
+                    saved_params,
+                    extensions,
+                },
+                Input::Done,
+            ) => Self::issue(saved_params, extensions),
+            (AccessTokenState::Issue { grant }, Input::Issued(token)) => {
+                return Output::Ok(Self::finish(grant, token));
+            }
+            (AccessTokenState::Err(err), _) => AccessTokenState::Err(err),
+            (_, _) => AccessTokenState::Err(Error::Primitive(PrimitiveError::empty())),
+        };
+
+        self.output()
+    }
+
+    fn output(&mut self) -> Output<'_> {
+        match &mut self.state {
+            AccessTokenState::Err(err) => Output::Err(err.clone()),
+            AccessTokenState::Authenticate { client, passdata, .. } => Output::Authenticate {
+                client,
+                passdata: passdata.as_ref().map(Vec::as_slice),
+            },
+            AccessTokenState::Recover { code, .. } => Output::Recover { code },
+            AccessTokenState::Extend {
+                saved_params,
+                extensions,
+            } => Output::Extend {
+                grant: saved_params,
+                extensions,
+            },
+            AccessTokenState::Issue { grant } => Output::Issue { grant },
+        }
+    }
+
+    fn take(&mut self) -> AccessTokenState {
+        mem::replace(
+            &mut self.state,
+            AccessTokenState::Err(Error::Primitive(PrimitiveError::empty())),
+        )
+    }
+
+    fn validate(request: &dyn Request) -> Result<AccessTokenState> {
+        if !request.valid() {
+            return Err(Error::invalid());
+        }
+
+        let authorization = request.authorization();
+        let client_id = request.client_id();
+        let client_secret = request.extension("client_secret");
+
+        let mut credentials = Credentials::None;
+        if let Some((client_id, auth)) = &authorization {
+            credentials.authenticate(client_id.as_ref(), auth.as_ref());
+        }
+
+        if let Some(client_id) = &client_id {
+            match &client_secret {
+                Some(auth) if request.allow_credentials_in_body() => {
+                    credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes())
+                }
+                // Ignore parameter if not allowed.
+                Some(_) | None => credentials.unauthenticated(client_id.as_ref()),
+            }
+        }
+
+        match request.grant_type() {
+            Some(ref cow) if cow == "authorization_code" => (),
+            None => return Err(Error::invalid()),
+            Some(_) => return Err(Error::invalid_with(AccessTokenErrorType::UnsupportedGrantType)),
+        };
+
+        let (client_id, passdata) = credentials.into_client().ok_or_else(Error::invalid)?;
+
+        let redirect_uri = request
+            .redirect_uri()
+            .ok_or_else(Error::invalid)?
+            .parse()
+            .map_err(|_| Error::invalid())?;
+
+        let code = request.code().ok_or_else(Error::invalid)?;
+
+        Ok(AccessTokenState::Authenticate {
+            client: client_id.to_string(),
+            passdata: passdata.map(Vec::from),
+            redirect_uri: redirect_uri,
+            code: code.into_owned(),
+        })
+    }
+
+    fn authencicated(code: String, redirect_uri: url::Url) -> AccessTokenState {
+        AccessTokenState::Recover { code, redirect_uri }
+    }
+
+    fn recovered(
+        client_id: String, redirect_uri: url::Url, grant: Option<Grant>,
+    ) -> Result<AccessTokenState> {
+        let mut saved_params = match grant {
+            None => return Err(Error::invalid()),
+            Some(v) => v,
+        };
+
+        if (saved_params.client_id.as_str(), &saved_params.redirect_uri) != (&client_id, &redirect_uri) {
+            return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
+        }
+
+        if saved_params.until < Utc::now() {
+            return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
+        }
+
+        let extensions = mem::replace(&mut saved_params.extensions, Extensions::default());
+        Ok(AccessTokenState::Extend {
+            saved_params,
+            extensions,
+        })
+    }
+
+    fn issue(grant: Grant, extensions: Extensions) -> AccessTokenState {
+        AccessTokenState::Issue {
+            grant: Grant { extensions, ..grant },
+        }
+    }
+
+    fn finish(grant: Grant, token: IssuedToken) -> BearerToken {
+        BearerToken(token, grant.scope.to_string())
+    }
 }
 
 /// Try to redeem an authorization code.
@@ -270,6 +474,7 @@ impl<'a> Credentials<'a> {
 }
 
 /// Defines actions for the response to an access token request.
+#[derive(Clone)]
 pub enum Error {
     /// The token did not represent a valid token.
     Invalid(ErrorDescription),
@@ -298,6 +503,7 @@ pub enum Error {
 ///
 /// Note that `token` is not included in this list, since the handler
 /// can never fail after supplying a token to the backend.
+#[derive(Clone)]
 pub struct PrimitiveError {
     /// The already extracted grant.
     ///
@@ -311,6 +517,7 @@ pub struct PrimitiveError {
 
 /// Simple wrapper around AccessTokenError to imbue the type with addtional json functionality. In
 /// addition this enforces backend specific behaviour for obtaining or handling the access error.
+#[derive(Clone)]
 pub struct ErrorDescription {
     error: AccessTokenError,
 }
@@ -359,6 +566,15 @@ impl Error {
             Error::Invalid(description) => Some(description.description()),
             Error::Unauthorized(description, _) => Some(description.description()),
             Error::Primitive(_) => None,
+        }
+    }
+}
+
+impl PrimitiveError {
+    fn empty() -> Self {
+        PrimitiveError {
+            grant: None,
+            extensions: None,
         }
     }
 }
