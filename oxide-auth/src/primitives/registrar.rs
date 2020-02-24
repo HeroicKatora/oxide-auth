@@ -121,7 +121,7 @@ pub enum RegistrarError {
 #[derive(Clone, Debug)]
 pub struct Client {
     client_id: String,
-    redirect_uri: Url,
+    redirect_uri: Vec<Url>,
     default_scope: Scope,
     client_type: ClientType,
 }
@@ -137,7 +137,7 @@ pub struct EncodedClient {
     pub client_id: String,
 
     /// The registered redirect uri.
-    pub redirect_uri: Url,
+    pub redirect_uri: Vec<Url>,
 
     /// The scope the client gets if none was given.
     pub default_scope: Scope,
@@ -189,12 +189,12 @@ impl RegistrarError {
 
 impl Client {
     /// Create a public client.
-    pub fn public(client_id: &str, redirect_uri: Url, default_scope: Scope) -> Client {
+    pub fn public(client_id: &str, redirect_uri: Vec<Url>, default_scope: Scope) -> Client {
         Client { client_id: client_id.to_string(), redirect_uri, default_scope, client_type: ClientType::Public }
     }
 
     /// Create a confidential client.
-    pub fn confidential(client_id: &str, redirect_uri: Url, default_scope: Scope, passphrase: &[u8]) -> Client {
+    pub fn confidential(client_id: &str, redirect_uri: Vec<Url>, default_scope: Scope, passphrase: &[u8]) -> Client {
         Client {
             client_id: client_id.to_string(),
             redirect_uri,
@@ -573,7 +573,7 @@ mod tests {
         let private_id = "PublicClientId";
         let private_passphrase = b"WOJJCcS8WyS2aGmJK6ZADg==";
 
-        let public_client = Client::public(public_id, client_url.parse().unwrap(),
+        let public_client = Client::public(public_id, vec![client_url.parse().unwrap()],
             "default".parse().unwrap());
 
         register(registrar, public_client);
@@ -585,7 +585,7 @@ mod tests {
                 .err().expect("Authorization with password succeeded");
         }
 
-        let private_client = Client::confidential(private_id, client_url.parse().unwrap(),
+        let private_client = Client::confidential(private_id, vec![client_url.parse().unwrap()],
             "default".parse().unwrap(), private_passphrase);
 
         register(registrar, private_client);
@@ -603,7 +603,7 @@ mod tests {
         let policy = Pbkdf2::default();
         let client = Client::public(
             "ClientId",
-            "https://example.com".parse().unwrap(),
+            vec!["https://example.com".parse().unwrap()],
             "default".parse().unwrap()
         ).encode(&policy);
         let client = RegisteredClient::new(&client, &policy);
@@ -620,7 +620,7 @@ mod tests {
         let pass = b"AB3fAj6GJpdxmEVeNCyPoA==";
         let client = Client::confidential(
             "ClientId",
-            "https://example.com".parse().unwrap(),
+            vec!["https://example.com".parse().unwrap()],
             "default".parse().unwrap(),
             pass
         ).encode(&policy);

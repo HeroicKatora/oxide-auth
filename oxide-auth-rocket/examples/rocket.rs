@@ -118,7 +118,7 @@ impl MyState {
         MyState {
             registrar: Mutex::new(vec![
                 Client::public("LocalClient",
-                    "http://localhost:8000/clientside/endpoint".parse().unwrap(),
+                    vec!["http://localhost:8000/clientside/endpoint".parse().unwrap()],
                     "default-scope".parse().unwrap())
             ].into_iter().collect()),
             // Authorization tokens are 16 byte random keys to a memory hash map.

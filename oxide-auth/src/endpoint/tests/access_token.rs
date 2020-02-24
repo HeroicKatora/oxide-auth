@@ -30,7 +30,7 @@ impl AccessTokenSetup {
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            vec![EXAMPLE_REDIRECT_URI.parse().unwrap()],
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
 
@@ -64,7 +64,7 @@ impl AccessTokenSetup {
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
         let client = Client::public(EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            vec![EXAMPLE_REDIRECT_URI.parse().unwrap()],
             EXAMPLE_SCOPE.parse().unwrap());
 
         let authrequest = Grant {
@@ -189,7 +189,7 @@ fn access_equivalent_url() {
     let mut setup = AccessTokenSetup::public_client();
 
     let confusing_client = Client::public(CLIENT_ID,
-        REDIRECT_URL.parse().unwrap(),
+        vec![REDIRECT_URL.parse().unwrap()],
         EXAMPLE_SCOPE.parse().unwrap());
 
     setup.registrar.register_client(confusing_client);

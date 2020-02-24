@@ -31,7 +31,7 @@ impl RefreshTokenSetup {
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            vec![EXAMPLE_REDIRECT_URI.parse().unwrap()],
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
 
@@ -67,7 +67,7 @@ impl RefreshTokenSetup {
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::public(EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            vec![EXAMPLE_REDIRECT_URI.parse().unwrap()],
             EXAMPLE_SCOPE.parse().unwrap());
 
         let grant = Grant {
@@ -239,7 +239,7 @@ fn access_valid_private() {
 fn public_private_invalid_grant() {
     let mut setup = RefreshTokenSetup::public_client();
     let client = Client::confidential("PrivateClient".into(),
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            vec![EXAMPLE_REDIRECT_URI.parse().unwrap()],
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
     setup.registrar.register_client(client);
