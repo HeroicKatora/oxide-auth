@@ -294,7 +294,7 @@ fn recovered<'req>(grant: Option<Grant>, mut scopes: Vec<Scope>) -> Result<Grant
                     // TODO. Don't drop the other scopes?
                     scope: scopes.drain(..).next(),
                 },
-            })
+            });
         }
     };
 
