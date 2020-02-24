@@ -121,7 +121,7 @@ pub enum RegistrarError {
 #[derive(Clone, Debug)]
 pub struct Client {
     client_id: String,
-    redirect_uri: Vec<Url>,
+    redirect_uris: Vec<Url>,
     default_scope: Scope,
     client_type: ClientType,
 }
@@ -137,7 +137,7 @@ pub struct EncodedClient {
     pub client_id: String,
 
     /// The registered redirect uri.
-    pub redirect_uri: Vec<Url>,
+    pub redirect_uris: Vec<Url>,
 
     /// The scope the client gets if none was given.
     pub default_scope: Scope,
@@ -189,15 +189,15 @@ impl RegistrarError {
 
 impl Client {
     /// Create a public client.
-    pub fn public(client_id: &str, redirect_uri: Vec<Url>, default_scope: Scope) -> Client {
-        Client { client_id: client_id.to_string(), redirect_uri, default_scope, client_type: ClientType::Public }
+    pub fn public(client_id: &str, redirect_uris: Vec<Url>, default_scope: Scope) -> Client {
+        Client { client_id: client_id.to_string(), redirect_uris, default_scope, client_type: ClientType::Public }
     }
 
     /// Create a confidential client.
-    pub fn confidential(client_id: &str, redirect_uri: Vec<Url>, default_scope: Scope, passphrase: &[u8]) -> Client {
+    pub fn confidential(client_id: &str, redirect_uris: Vec<Url>, default_scope: Scope, passphrase: &[u8]) -> Client {
         Client {
             client_id: client_id.to_string(),
-            redirect_uri,
+            redirect_uris,
             default_scope,
             client_type: ClientType::Confidential {
                 passdata: passphrase.to_owned()
@@ -221,7 +221,7 @@ impl Client {
 
         EncodedClient {
             client_id: self.client_id,
-            redirect_uri: self.redirect_uri,
+            redirect_uris: self.redirect_uris,
             default_scope: self.default_scope,
             encoded_client
         }
@@ -523,8 +523,8 @@ impl Registrar for ClientMap {
 
         // Perform exact matching as motivated in the rfc
         let redirect_uri = match bound.redirect_uri {
-            None if client.redirect_uri.len() == 1 => Cow::Owned(client.redirect_uri.first().unwrap().clone()),
-            Some(url) if client.redirect_uri.contains(url.as_ref()) => url,
+            None if client.redirect_uris.len() == 1 => Cow::Owned(client.redirect_uris.first().unwrap().clone()),
+            Some(url) if client.redirect_uris.contains(url.as_ref()) => url,
             _ => return Err(RegistrarError::Unspecified),
         };
 
