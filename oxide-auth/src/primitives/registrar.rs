@@ -524,7 +524,7 @@ impl Registrar for ClientMap {
         // Perform exact matching as motivated in the rfc
         let redirect_uri = match bound.redirect_uri {
             None => Cow::Owned(client.redirect_uri.clone()),
-            Some(url) if url.as_ref().as_str() == client.redirect_uri.as_str() => url,
+            Some(url) if client.redirect_uri.contains(url.as_ref()) => url,
             _ => return Err(RegistrarError::Unspecified),
         };
 
