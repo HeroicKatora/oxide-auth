@@ -522,15 +522,16 @@ impl Registrar for ClientMap {
         };
 
         // Perform exact matching as motivated in the rfc
-        let redirect_uri = match bound.redirect_uri {
-            None => Cow::Owned(client.redirect_uri.clone()),
-            Some(url) if url.as_ref().as_str() == client.redirect_uri.as_str() => url,
+        match bound.redirect_uri {
+            None => (),
+            Some(ref url) if url.as_ref().as_str() == client.redirect_uri.as_str() => (),
             _ => return Err(RegistrarError::Unspecified),
-        };
+        }
 
         Ok(BoundClient {
             client_id: bound.client_id,
-            redirect_uri,
+            redirect_uri: bound.redirect_uri.unwrap_or_else(
+                || Cow::Owned(client.redirect_uri.clone())),
         })
     }
 
