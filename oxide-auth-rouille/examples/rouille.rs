@@ -20,7 +20,7 @@ pub fn main() {
         let mut clients = ClientMap::new();
         // Register a dummy client instance
         let client = Client::public("LocalClient", // Client id
-            vec!["http://localhost:8021/endpoint".parse().unwrap()], // Redirection url
+            "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
             "default".parse().unwrap()); // Allowed client scope
         clients.register_client(client);
         clients

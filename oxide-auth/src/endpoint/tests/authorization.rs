@@ -23,7 +23,7 @@ impl AuthorizationSetup {
         let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
 
         let client = Client::confidential(EXAMPLE_CLIENT_ID,
-            vec![EXAMPLE_REDIRECT_URI.parse().unwrap()],
+            EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes());
         registrar.register_client(client);

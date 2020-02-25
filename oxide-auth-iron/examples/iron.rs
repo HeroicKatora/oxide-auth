@@ -126,7 +126,7 @@ here</a> to begin the authorization process.
         EndpointState {
             registrar: Mutex::new(vec![
                 Client::public("LocalClient",
-                    vec!["http://localhost:8021/endpoint".parse().unwrap()],
+                    "http://localhost:8021/endpoint".parse().unwrap(),
                     "default-scope".parse().unwrap())
             ].into_iter().collect()),
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
