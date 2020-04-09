@@ -65,8 +65,10 @@
 //! [`Scopes`]: endpoint/trait.Scopes.html
 #![warn(missing_docs)]
 
+extern crate argonautica;
 extern crate base64;
 extern crate chrono;
+extern crate lazy_static;
 extern crate url;
 extern crate ring;
 extern crate rmp_serde;
