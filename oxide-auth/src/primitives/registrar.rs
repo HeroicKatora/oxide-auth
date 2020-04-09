@@ -288,11 +288,11 @@ pub trait PasswordPolicy: Send + Sync {
 
 /// Store passwords using `Argon2` to derive the stored value.
 #[derive(Debug)]
-pub struct Argon2<'a> {
-    secret_key: Option<SecretKey<'a>>
+pub struct Argon2 {
+    secret_key: Option<SecretKey<'static>>
 }
 
-impl<'a> Default for Argon2<'a> {
+impl Default for Argon2 {
     fn default() -> Self {   
         Argon2 {
             secret_key: None
@@ -300,7 +300,7 @@ impl<'a> Default for Argon2<'a> {
     }
 }
 
-impl<'a> PasswordPolicy for Argon2<'a> {
+impl PasswordPolicy for Argon2 {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
         let mut hasher = Hasher::default();
         let hasher = if let Some(secret_key) = &self.secret_key { 
@@ -343,7 +343,7 @@ impl<'a> PasswordPolicy for Argon2<'a> {
 //                             Standard Implementations of Registrars                            //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-static DEFAULT_PASSWORD_POLICY: Lazy<Argon2<'static>> = Lazy::new(|| { Argon2::default() });
+static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| { Argon2::default() });
 
 impl ClientMap {
     /// Create an empty map without any clients in it.
