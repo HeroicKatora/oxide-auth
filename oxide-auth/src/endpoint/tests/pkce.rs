@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-
 use primitives::authorizer::AuthMap;
 use primitives::issuer::TokenMap;
 use primitives::generator::RandomGenerator;
 use primitives::registrar::{Client, ClientMap};
 
+use code_grant::accesstoken::TokenResponse;
 use endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
 use frontends::simple::extensions::{AddonList, Extended, Pkce};
 use frontends::simple::endpoint::{Generic, Error, Vacant};
@@ -83,9 +82,9 @@ impl PkceSetup {
                 .expect("Expected no flow execution error");
             assert_eq!(response.status, Status::Ok, "Expected access token in response");
             assert!(response.www_authenticate.is_none());
-            
+
             let body = Self::json_response(response.body);
-            assert!(!body.contains_key("error"));
+            assert!(body.error.is_none());
         }
     }
 
@@ -107,10 +106,10 @@ impl PkceSetup {
                 .expect("Expected no flow execution error");
             assert_eq!(response.status, Status::BadRequest, "Expected failed request");
             assert!(response.www_authenticate.is_none());
-            
+
             let body = Self::json_response(response.body);
             // https://tools.ietf.org/html/rfc7636#section-4.6
-            assert_eq!(body.get("error"), Some(&"invalid_request".into()));
+            assert_eq!(body.error, Some("invalid_request".to_owned()));
         }
     }
 
@@ -119,7 +118,7 @@ impl PkceSetup {
         assert!(response.location.unwrap().as_str().find("error").is_none());
     }
 
-    fn json_response(body: Option<Body>) -> HashMap<String, String> {
+    fn json_response(body: Option<Body>) -> TokenResponse {
         let body = match body {
             Some(Body::Json(content)) => content,
             other => panic!("Expected json formated credentials, got {:?}", other),

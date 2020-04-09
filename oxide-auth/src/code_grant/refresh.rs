@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
 
-use code_grant::error::{AccessTokenError, AccessTokenErrorType};
+use code_grant::{accesstoken::TokenResponse, error::{AccessTokenError, AccessTokenErrorType}};
 use primitives::issuer::{RefreshedToken, Issuer};
 use primitives::registrar::{Registrar, RegistrarError};
 
@@ -252,21 +252,16 @@ impl BearerToken {
     /// Convert the token into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(&self) -> String {
-        let remaining = self.0.until
-            .signed_duration_since(Utc::now())
-            .num_seconds()
-            .to_string();
-        let mut kvmap: HashMap<_, _> = vec![
-            ("access_token", self.0.token.as_str()),
-            ("token_type", "bearer"),
-            ("expires_in", remaining.as_str()),
-            ("scope", self.1.as_str())
-        ].into_iter().collect();
+        let remaining = self.0.until.signed_duration_since(Utc::now());
+        let token_response = TokenResponse {
+            access_token: Some(self.0.token.clone()),
+            refresh_token: self.0.refresh.clone(),
+            token_type: Some("bearer".to_owned()),
+            expires_in: Some(remaining.num_seconds()),
+            scope: Some(self.1.clone()),
+            error: None,
+        };
 
-        if let Some(refresh) = &self.0.refresh {
-            kvmap.insert("refresh_token", refresh.as_str());
-        }
-
-        serde_json::to_string(&kvmap).unwrap()
+        serde_json::to_string(&token_response).unwrap()
     }
 }
