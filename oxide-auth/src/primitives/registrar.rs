@@ -18,7 +18,7 @@ use argonautica::{
     input::SecretKey,
     Verifier
 };
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use url::Url;
 
 /// Registrars provie a way to interact with clients.
@@ -289,34 +289,27 @@ pub trait PasswordPolicy: Send + Sync {
 /// Store passwords using `Argon2` to derive the stored value.
 #[derive(Debug)]
 pub struct Argon2<'a> {
-    secret_key: SecretKey<'a>
+    secret_key: Option<SecretKey<'a>>
 }
 
 impl<'a> Default for Argon2<'a> {
     fn default() -> Self {   
         Argon2 {
-            secret_key: "Please provide a SecretKey! This is for your own protection.".into()
+            secret_key: None
         }
-    }
-}
-
-impl From<std::string::FromUtf8Error> for RegistrarError {
-    fn from(_err: std::string::FromUtf8Error) -> Self {
-        RegistrarError::PrimitiveError
-    }
-}
-
-impl From<argonautica::Error> for RegistrarError {
-    fn from(_err: argonautica::Error) -> Self {
-        RegistrarError::Unspecified
     }
 }
 
 impl<'a> PasswordPolicy for Argon2<'a> {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
         let mut hasher = Hasher::default();
+        let hasher = if let Some(secret_key) = &self.secret_key { 
+            hasher.with_secret_key(secret_key) 
+        } else { 
+            hasher.opt_out_of_secret_key(true) 
+        };
+
         hasher
-            .with_secret_key(&self.secret_key)
             .with_salt(client_id)
             .with_password(passphrase)
             .hash()
@@ -328,15 +321,20 @@ impl<'a> PasswordPolicy for Argon2<'a> {
         -> Result<(), RegistrarError>
     {
         let mut verifier = Verifier::default();
+        let verifier = if let Some(secret_key) = &self.secret_key { 
+            verifier.with_secret_key(secret_key)
+        } else {
+            &mut verifier
+        };
+
         String::from_utf8(stored.to_vec())
-            .map_err(RegistrarError::from)
+            .map_err(|_| RegistrarError::PrimitiveError)
             .and_then(|hash| 
                 verifier
-                .with_hash(hash)
-                .with_password(passphrase)
-                .with_secret_key(&self.secret_key)
-                .verify()
-                .map_err(RegistrarError::from))
+                    .with_hash(hash)
+                    .with_password(passphrase)
+                    .verify()
+                    .map_err(|_| RegistrarError::Unspecified ))
             .and_then(|valid| if valid { Ok(()) } else { Err(RegistrarError::Unspecified) } )
     }
 }
@@ -345,9 +343,7 @@ impl<'a> PasswordPolicy for Argon2<'a> {
 //                             Standard Implementations of Registrars                            //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-lazy_static! {
-    static ref DEFAULT_PASSWORD_POLICY: Argon2<'static> = { Argon2::default() };
-}
+static DEFAULT_PASSWORD_POLICY: Lazy<Argon2<'static>> = Lazy::new(|| { Argon2::default() });
 
 impl ClientMap {
     /// Create an empty map without any clients in it.

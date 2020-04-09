@@ -68,14 +68,14 @@
 extern crate argonautica;
 extern crate base64;
 extern crate chrono;
-extern crate lazy_static;
-extern crate url;
+extern crate once_cell;
 extern crate ring;
 extern crate rmp_serde;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate url;
 
 pub mod code_grant;
 pub mod endpoint;
