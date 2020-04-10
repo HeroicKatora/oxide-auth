@@ -1,6 +1,9 @@
 stable_task:
   container:
     image: rust:latest
+  packages_script: 
+    - apt-get update
+    - apt-get install -y clang libclang-dev
   cargo_cache:
     folder: $CARGO_HOME/registry
     fingerprint_script: cargo update && cat Cargo.lock
@@ -18,6 +21,9 @@ stable_task:
 nightly_task:
   container:
     image: rustlang/rust:nightly
+  packages_script: 
+    - apt-get update
+    - apt-get install -y clang libclang-dev
   cargo_cache:
     folder: $CARGO_HOME/registry
     fingerprint_script: cargo update && cat Cargo.lock
@@ -36,6 +42,9 @@ nightly_task:
 ring_task:
   container:
     image: rust:latest
+  packages_script: 
+    - apt-get update
+    - apt-get install -y clang libclang-dev
   ring_013_script: pushd tests/ring-0.13 && cargo build -v && popd
   ring_014_script: pushd tests/ring-0.14 && cargo build -v && popd
 
@@ -48,4 +57,7 @@ release_task:
 doc_task:
   container:
     image: rustlang/rust:nightly
+  packages_script: 
+    - apt-get update
+    - apt-get install -y clang libclang-dev
   script: cargo doc --no-deps --document-private-items --all-features
