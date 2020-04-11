@@ -67,13 +67,16 @@
 
 extern crate base64;
 extern crate chrono;
-extern crate url;
+extern crate hmac;
+extern crate rand;
 extern crate ring;
 extern crate rmp_serde;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate sha2;
+extern crate url;
 
 pub mod code_grant;
 pub mod endpoint;

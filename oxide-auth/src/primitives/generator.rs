@@ -9,6 +9,7 @@
 //!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
 //!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
 //!     is not currently expressed in the type system or with traits.
+
 use super::grant::{Value, Extensions, Grant};
 use super::{Url, Time};
 use super::scope::Scope;
@@ -18,9 +19,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use base64::{encode, decode};
-use ring::digest::SHA256;
-use ring::rand::{SystemRandom, SecureRandom};
-use ring::hmac::SigningKey;
+use hmac::{crypto_mac::MacResult, Mac, Hmac};
+use rand::{rngs::OsRng, RngCore, thread_rng};
 use rmp_serde;
 
 /// Generic token for a specific grant.
@@ -49,7 +49,7 @@ pub trait TagGrant {
 /// Each byte is chosen randomly from the basic `rand::thread_rng`. This generator will always
 /// succeed.
 pub struct RandomGenerator {
-    random: SystemRandom,
+    random: OsRng,
     len: usize
 }
 
@@ -57,14 +57,14 @@ impl RandomGenerator {
     /// Generates tokens with a specific byte length.
     pub fn new(length: usize) -> RandomGenerator {
         RandomGenerator {
-            random: SystemRandom::new(),
+            random: OsRng {},
             len: length
         }
     }
 
-    fn generate(&self) -> String {
+    fn generate(&mut self) -> String {
         let mut result = vec![0; self.len];
-        self.random.fill(result.as_mut_slice())
+        self.random.try_fill_bytes(result.as_mut_slice())
             .expect("Failed to generate random token");
         encode(&result)
     }
@@ -80,7 +80,7 @@ impl RandomGenerator {
 /// signing the same grant for different uses, i.e. separating authorization from bearer grants and
 /// refresh tokens.
 pub struct Assertion {
-    secret: SigningKey,
+    key: Vec<u8>
 }
 
 /// The cryptographic suite ensuring integrity of tokens.
@@ -132,24 +132,24 @@ impl Assertion {
     /// padding or shortening of the supplied key material may be applied in the form dictated by
     /// the signature type. See the respective standards.
     ///
-    /// If future suites are added where this is not possible, his function may panic when supplied
+    /// If future suites are added where this is not possible, this function may panic when supplied
     /// with an incorrect key length.
+    /// 
+    /// Currently, the implementation lacks the ability to really make use of another hasing mechanism than
+    /// hmac + sha256.
     pub fn new(kind: AssertionKind, key: &[u8]) -> Self {
-        let key = match kind {
-            AssertionKind::HmacSha256 => SigningKey::new(&SHA256, key),
+        match kind {
+            AssertionKind::HmacSha256 => Assertion { key: key.to_vec() },
             AssertionKind::__NonExhaustive => unreachable!(),
-        };
-
-        Assertion {
-            secret: key,
         }
     }
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
     pub fn ephemeral() -> Self {
-        Assertion {
-            secret: SigningKey::generate(&SHA256, &SystemRandom::new()).unwrap(),
-        }
+        // XXX Why 64?
+        let mut rand_bytes: [u8; 64] = [0;64];                
+        thread_rng().fill_bytes(&mut rand_bytes);
+        Assertion { key: rand_bytes.to_vec() }
     }
 
     /// Get a reference to generator for the given tag.
@@ -160,14 +160,21 @@ impl Assertion {
     fn extract<'a>(&self, token: &'a str) -> Result<(Grant, String), ()> {
         let decoded = decode(token).map_err(|_| ())?;
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
-        ring::hmac::verify_with_own_key(&self.secret, &assertion.0, &assertion.1).map_err(|_| ())?;
+
+        let mut hmac = Hmac::<sha2::Sha256>::new_varkey(&self.key).unwrap();
+        hmac.input(&assertion.0);
+        hmac.verify(assertion.1.as_slice()).map_err(|_| ())?;
+        
         let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String)
             = rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
+
         Ok((serde_grant.grant(), tag))
     }
 
-    fn signature(&self, data: &[u8]) -> ring::hmac::Signature {
-        ring::hmac::sign(&self.secret, data)
+    fn signature(&self, data: &[u8]) -> MacResult<<hmac::Hmac<sha2::Sha256> as Mac>::OutputSize> {
+        let mut hmac = Hmac::<sha2::Sha256>::new_varkey(&self.key).unwrap();
+        hmac.input(data);
+        hmac.result()
     }
 
     fn counted_signature(&self, counter: u64, grant: &Grant) 
@@ -176,14 +183,16 @@ impl Assertion {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
         let signature = self.signature(&tosign);
-        Ok(base64::encode(&signature))
+        Ok(base64::encode(&signature.code()))
     }
 
     fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(counter, serde_grant, tag)).unwrap();
-        let signature = self.signature(&tosign);
-        Ok(encode(&rmp_serde::to_vec(&AssertGrant(tosign, signature.as_ref().to_vec())).unwrap()))
+        let signature = self.signature(&tosign);        
+        let assert = AssertGrant(tosign, signature.code().to_vec());
+
+        Ok(encode(&rmp_serde::to_vec(&assert).unwrap()))
     }
 }
 
@@ -232,21 +241,30 @@ impl TagGrant for RandomGenerator {
     }
 }
 
-impl<'a> TagGrant for &'a RandomGenerator {
-    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
-        Ok(self.generate())
-    }
-}
+// impl<'a> TagGrant for &'a RandomGenerator {
+//     fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
+//         // Ok(self.generate())
+//         Err(())
+//     }
+// }
 
 impl TagGrant for Rc<RandomGenerator> {
     fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
-        Ok(self.generate())
+        if let Some(rng) = Rc::get_mut(self) {
+            Ok(rng.generate())
+        } else {
+            Err(())
+        }
     }
 }
 
 impl TagGrant for Arc<RandomGenerator> {
     fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
-        Ok(self.generate())
+        if let Some(rng) = Arc::get_mut(self) {
+            Ok(rng.generate())
+        } else {
+            Err(())
+        }
     }
 }
 
