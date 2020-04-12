@@ -3,8 +3,7 @@ use std::borrow::Cow;
 use primitives::grant::{GrantExtension, Value};
 
 use base64;
-use ring::digest::{SHA256, digest};
-use ring::constant_time::verify_slices_are_equal;
+use sha2::{Digest, Sha256};
 
 /// Proof Key for Code Exchange by OAuth Public Clients
 ///
@@ -166,13 +165,12 @@ impl Method {
     fn verify(&self, verifier: &str) -> Result<(), ()> {
         match self {
             Method::Plain(encoded) =>
-                verify_slices_are_equal(encoded.as_bytes(), verifier.as_bytes())
-                    .map_err(|_| ()),
+               if encoded.as_bytes() == verifier.as_bytes() { Ok(()) } else { Err(()) },
             Method::Sha256(encoded) => {
-                let digest = digest(&SHA256, verifier.as_bytes());
-                let b64digest = b64encode(digest.as_ref());
-                verify_slices_are_equal(encoded.as_bytes(), b64digest.as_bytes())
-                    .map_err(|_| ())
+                let mut hasher = Sha256::new();
+                hasher.input(verifier.as_bytes());
+                let b64digest = b64encode(&hasher.result());
+                if encoded.as_bytes() == b64digest.as_bytes() { Ok(()) } else { Err(()) }
             }
         }
     }
