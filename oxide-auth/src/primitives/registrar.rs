@@ -291,7 +291,9 @@ pub trait PasswordPolicy: Send + Sync {
 
 /// Store passwords using `Argon2` to derive the stored value.
 #[derive(Clone, Debug, Default)]
-pub struct Argon2 {}
+pub struct Argon2 {
+    _private: ()
+}
 
 impl PasswordPolicy for Argon2 {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
@@ -313,8 +315,8 @@ impl PasswordPolicy for Argon2 {
         let hash = String::from_utf8(stored.to_vec());        
         let valid = match hash {
             Ok(hash) => argon2::verify_encoded_ext(&hash, passphrase, &[], client_id.as_bytes())
-                    .map_err(|_| RegistrarError::Unspecified),
-            _ => Err(RegistrarError::Unspecified),
+                    .map_err(|_| RegistrarError::PrimitiveError),
+            _ => Err(RegistrarError::PrimitiveError),
         };
 
         match valid {
