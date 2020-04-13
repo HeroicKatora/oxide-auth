@@ -10,8 +10,8 @@ use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::{Extend, FromIterator};
-use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::rc::Rc;
+use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 
 use argon2::{self, Config};
 use once_cell::sync::Lazy;
@@ -312,17 +312,13 @@ impl PasswordPolicy for Argon2 {
     fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8])
         -> Result<(), RegistrarError>
     {
-        let hash = String::from_utf8(stored.to_vec());        
-        let valid = match hash {
-            Ok(hash) => argon2::verify_encoded_ext(&hash, passphrase, &[], client_id.as_bytes())
-                    .map_err(|_| RegistrarError::PrimitiveError),
-            _ => Err(RegistrarError::PrimitiveError),
-        };
-
+        let hash = String::from_utf8(stored.to_vec())
+            .map_err(|_| RegistrarError::PrimitiveError)?;
+        let valid = argon2::verify_encoded_ext(&hash, passphrase, &[], client_id.as_bytes())
+            .map_err(|_| RegistrarError::PrimitiveError)?;
         match valid {
-            Ok(true) => Ok(()),
-            Ok(false) => Err(RegistrarError::Unspecified),
-            Err(err) => Err(err),
+            true => Ok(()),
+            false => Err(RegistrarError::Unspecified),
         }
     }
 }
