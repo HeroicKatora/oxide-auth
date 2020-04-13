@@ -4,6 +4,7 @@ use primitives::grant::{GrantExtension, Value};
 
 use base64;
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 /// Proof Key for Code Exchange by OAuth Public Clients
 ///
@@ -165,12 +166,12 @@ impl Method {
     fn verify(&self, verifier: &str) -> Result<(), ()> {
         match self {
             Method::Plain(encoded) =>
-               if encoded.as_bytes() == verifier.as_bytes() { Ok(()) } else { Err(()) },
+               if encoded.as_bytes().ct_eq(verifier.as_bytes()).into() { Ok(()) } else { Err(()) },
             Method::Sha256(encoded) => {
                 let mut hasher = Sha256::new();
                 hasher.input(verifier.as_bytes());
                 let b64digest = b64encode(&hasher.result());
-                if encoded.as_bytes() == b64digest.as_bytes() { Ok(()) } else { Err(()) }
+                if encoded.as_bytes().ct_eq(b64digest.as_bytes()).into()  { Ok(()) } else { Err(()) }
             }
         }
     }

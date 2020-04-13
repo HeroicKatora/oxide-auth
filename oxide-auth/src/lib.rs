@@ -77,6 +77,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate sha2;
+extern crate subtle;
 extern crate url;
 
 pub mod code_grant;
