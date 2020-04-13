@@ -15,6 +15,7 @@ use std::rc::Rc;
 
 use argon2::{self, Config};
 use once_cell::sync::Lazy;
+use rand::{RngCore, thread_rng};
 use url::Url;
 
 /// Registrars provie a way to interact with clients.
@@ -189,7 +190,13 @@ impl fmt::Debug for ClientType {
 impl Client {
     /// Create a public client.
     pub fn public(client_id: &str, redirect_uri: Url, default_scope: Scope) -> Client {
-        Client { client_id: client_id.to_string(), redirect_uri, additional_redirect_uris: vec![], default_scope, client_type: ClientType::Public }
+        Client { 
+            client_id: client_id.to_string(), 
+            redirect_uri, 
+            additional_redirect_uris: vec![], 
+            default_scope, 
+            client_type: ClientType::Public 
+        }
     }
 
     /// Create a confidential client.
@@ -288,20 +295,32 @@ pub struct Argon2 {}
 
 impl PasswordPolicy for Argon2 {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
-        let config = Config::default();
-        let encoded = argon2::hash_encoded(passphrase, client_id.as_bytes(), &config);
+        let mut config = Config::default();
+        config.ad = client_id.as_bytes();
+        config.secret = &[];
+
+        let mut salt = vec![0; 32];
+        thread_rng().try_fill_bytes(salt.as_mut_slice())
+            .expect("Failed to generate password salt");
+
+        let encoded = argon2::hash_encoded(passphrase, &salt, &config);
         encoded.unwrap().as_bytes().to_vec()
     }
 
-    fn check(&self, _client_id: &str /* Was interned */, passphrase: &[u8], stored: &[u8])
+    fn check(&self, client_id: &str /* Was interned */, passphrase: &[u8], stored: &[u8])
         -> Result<(), RegistrarError>
     {
-        String::from_utf8(stored.to_vec())
-            .map_err(|_| RegistrarError::PrimitiveError)
-            .and_then(|hash| 
-                argon2::verify_encoded(&hash, passphrase)
-                    .map_err(|_| RegistrarError::Unspecified ))
-            .and_then(|valid| if valid { Ok(()) } else { Err(RegistrarError::Unspecified) } )
+        let hash = String::from_utf8(stored.to_vec());        
+        let valid = match hash {
+            Ok(hash) => argon2::verify_encoded_ext(&hash, passphrase, &[], client_id.as_bytes())
+                    .map_err(|_| RegistrarError::Unspecified),
+            _ => Err(RegistrarError::Unspecified),
+        };
+
+        match valid {
+            Ok(true) => Ok(()),
+            _ => Err(RegistrarError::Unspecified),
+        }
     }
 }
 
