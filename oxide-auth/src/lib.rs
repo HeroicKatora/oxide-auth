@@ -71,7 +71,6 @@ extern crate chrono;
 extern crate hmac;
 extern crate rand;
 extern crate once_cell;
-extern crate ring;
 extern crate rmp_serde;
 extern crate serde;
 #[macro_use]
