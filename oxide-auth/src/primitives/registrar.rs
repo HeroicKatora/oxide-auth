@@ -321,7 +321,8 @@ impl PasswordPolicy for Argon2 {
 
         match valid {
             Ok(true) => Ok(()),
-            _ => Err(RegistrarError::Unspecified),
+            Ok(false) => Err(RegistrarError::Unspecified),
+            Err(err) => Err(err),
         }
     }
 }
