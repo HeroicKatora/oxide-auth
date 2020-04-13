@@ -309,7 +309,7 @@ impl PasswordPolicy for Argon2 {
         encoded.unwrap().as_bytes().to_vec()
     }
 
-    fn check(&self, client_id: &str /* Was interned */, passphrase: &[u8], stored: &[u8])
+    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8])
         -> Result<(), RegistrarError>
     {
         let hash = String::from_utf8(stored.to_vec());        
