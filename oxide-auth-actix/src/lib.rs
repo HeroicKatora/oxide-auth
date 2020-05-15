@@ -130,12 +130,9 @@ pub struct OAuthResource {
 #[derive(Clone, Debug)]
 /// Type implementing `WebResponse` and `Responder` for use in route handlers
 pub struct OAuthResponse {
-    /// HTTP status code
-    pub status: StatusCode,
-    /// Set of HTTP headers
-    pub headers: HeaderMap,
-    /// The body of the response
-    pub body: Option<String>,
+    status: StatusCode,
+    headers: HeaderMap,
+    body: Option<String>,
 }
 
 #[derive(Debug)]
