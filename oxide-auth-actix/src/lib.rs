@@ -444,21 +444,6 @@ impl fmt::Display for WebError {
 }
 
 impl error::Error for WebError {
-    fn description(&self) -> &str {
-        match *self {
-            WebError::Endpoint(ref e) => e.description(),
-            WebError::Header(ref e) => e.description(),
-            WebError::Encoding => "Error decoding request",
-            WebError::Form => "Request is not a form",
-            WebError::Query => "No query present",
-            WebError::Body => "No body present",
-            WebError::Authorization => "Request has invalid Authorization headers",
-            WebError::Canceled => "Operation canceled",
-            WebError::Mailbox => "An actor's mailbox was full",
-            WebError::InternalError(_) => "An internal server error occured",
-        }
-    }
-
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
             WebError::Endpoint(ref e) => e.source(),
