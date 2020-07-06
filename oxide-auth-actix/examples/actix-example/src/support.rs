@@ -76,7 +76,5 @@ fn get_with_token(state: web::Data<Client>) -> HttpResponse {
         <form action=\"refresh\" method=\"post\"><button>Refresh token</button></form>
         </main></html>", state.as_html(), protected_page);
 
-    HttpResponse::Ok()
-        .content_type("text/html")
-        .body(display_page)
+    HttpResponse::Ok().content_type("text/html").body(display_page)
 }

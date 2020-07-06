@@ -50,7 +50,7 @@ pub trait TagGrant {
 /// succeed.
 pub struct RandomGenerator {
     random: SystemRandom,
-    len: usize
+    len: usize,
 }
 
 impl RandomGenerator {
@@ -58,13 +58,14 @@ impl RandomGenerator {
     pub fn new(length: usize) -> RandomGenerator {
         RandomGenerator {
             random: SystemRandom::new(),
-            len: length
+            len: length,
         }
     }
 
     fn generate(&self) -> String {
         let mut result = vec![0; self.len];
-        self.random.fill(result.as_mut_slice())
+        self.random
+            .fill(result.as_mut_slice())
             .expect("Failed to generate random token");
         encode(&result)
     }
@@ -140,9 +141,7 @@ impl Assertion {
             AssertionKind::__NonExhaustive => unreachable!(),
         };
 
-        Assertion {
-            secret: key,
-        }
+        Assertion { secret: key }
     }
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
@@ -168,8 +167,8 @@ impl Assertion {
         let decoded = decode(token).map_err(|_| ())?;
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
         ring::hmac::verify_with_own_key(&self.secret, &assertion.0, &assertion.1).map_err(|_| ())?;
-        let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String)
-            = rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
+        let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String) =
+            rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
         Ok((serde_grant.grant(), tag))
     }
 
@@ -177,9 +176,7 @@ impl Assertion {
         ring::hmac::sign(&self.secret, data)
     }
 
-    fn counted_signature(&self, counter: u64, grant: &Grant) 
-        -> Result<String, ()>
-    {
+    fn counted_signature(&self, counter: u64, grant: &Grant) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
         let signature = self.signature(&tosign);
@@ -190,7 +187,9 @@ impl Assertion {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(counter, serde_grant, tag)).unwrap();
         let signature = self.signature(&tosign);
-        Ok(encode(&rmp_serde::to_vec(&AssertGrant(tosign, signature.as_ref().to_vec())).unwrap()))
+        Ok(encode(
+            &rmp_serde::to_vec(&AssertGrant(tosign, signature.as_ref().to_vec())).unwrap(),
+        ))
     }
 }
 
@@ -211,13 +210,9 @@ impl<'a> TaggedAssertion<'a> {
     /// Result in an Err if either the signature is invalid or if the tag does not match the
     /// expected usage tag given to this assertion.
     pub fn extract<'b>(&self, token: &'b str) -> Result<Grant, ()> {
-        self.0.extract(token).and_then(|(token, tag)| {
-            if tag == self.1 {
-                Ok(token)
-            } else {
-                Err(())
-            }
-        })
+        self.0
+            .extract(token)
+            .and_then(|(token, tag)| if tag == self.1 { Ok(token) } else { Err(()) })
     }
 }
 
@@ -257,7 +252,6 @@ impl TagGrant for Arc<RandomGenerator> {
     }
 }
 
-
 impl TagGrant for Assertion {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
@@ -281,7 +275,6 @@ impl TagGrant for Arc<Assertion> {
         self.counted_signature(counter, grant)
     }
 }
-
 
 mod scope_serde {
     use primitives::scope::Scope;
@@ -337,7 +330,7 @@ impl SerdeAssertionGrant {
         let mut public_extensions: HashMap<String, Option<String>> = HashMap::new();
 
         if grant.extensions.private().any(|_| true) {
-            return Err(())
+            return Err(());
         }
 
         for (name, content) in grant.extensions.public() {
@@ -377,7 +370,7 @@ mod tests {
     #[test]
     #[allow(dead_code, unused)]
     fn assert_send_sync_static() {
-        fn uses<T: Send + Sync + 'static>(arg: T) { }
+        fn uses<T: Send + Sync + 'static>(arg: T) {}
         let _ = uses(RandomGenerator::new(16));
         let fake_key = [0u8; 16];
         let _ = uses(Assertion::new(AssertionKind::HmacSha256, &fake_key));

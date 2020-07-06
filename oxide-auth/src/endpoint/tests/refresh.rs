@@ -25,10 +25,12 @@ impl RefreshTokenSetup {
         let mut registrar = ClientMap::new();
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
-        let client = Client::confidential(EXAMPLE_CLIENT_ID,
+        let client = Client::confidential(
+            EXAMPLE_CLIENT_ID,
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
             EXAMPLE_SCOPE.parse().unwrap(),
-            EXAMPLE_PASSPHRASE.as_bytes());
+            EXAMPLE_PASSPHRASE.as_bytes(),
+        );
 
         let grant = Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
@@ -43,8 +45,8 @@ impl RefreshTokenSetup {
         let issued = issuer.issue(grant).unwrap();
         assert!(!issued.refresh.is_empty());
 
-        let basic_authorization = base64::encode(&format!("{}:{}",
-            EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+        let basic_authorization =
+            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         let basic_authorization = format!("Basic {}", basic_authorization);
 
         RefreshTokenSetup {
@@ -59,9 +61,11 @@ impl RefreshTokenSetup {
         let mut registrar = ClientMap::new();
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
-        let client = Client::public(EXAMPLE_CLIENT_ID,
+        let client = Client::public(
+            EXAMPLE_CLIENT_ID,
             EXAMPLE_REDIRECT_URI.parse().unwrap(),
-            EXAMPLE_SCOPE.parse().unwrap());
+            EXAMPLE_SCOPE.parse().unwrap(),
+        );
 
         let grant = Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
@@ -95,12 +99,9 @@ impl RefreshTokenSetup {
             Some(Body::Json(body)) => body,
             _ => panic!("Expect json body"),
         };
-        let mut body: HashMap<String, String> = serde_json::from_str(&body)
-            .expect("Expected valid json body");
-        let duration: i64 = body.remove("expires_in")
-            .unwrap()
-            .parse()
-            .unwrap();
+        let mut body: HashMap<String, String> =
+            serde_json::from_str(&body).expect("Expected valid json body");
+        let duration: i64 = body.remove("expires_in").unwrap().parse().unwrap();
         RefreshedToken {
             token: body.remove("access_token").expect("Expected a token"),
             refresh: body.remove("refresh_token"),
@@ -160,15 +161,13 @@ impl RefreshTokenSetup {
         self.assert_only_error(body);
     }
 
-    fn assert_json_body(&mut self, response: &CraftedResponse)
-        -> HashMap<String, String>
-    {
+    fn assert_json_body(&mut self, response: &CraftedResponse) -> HashMap<String, String> {
         let body = match &response.body {
             Some(Body::Json(body)) => body,
             _ => panic!("Expect json body"),
         };
-        let body: HashMap<String, String> = serde_json::from_str(body)
-            .expect("Expected valid json body");
+        let body: HashMap<String, String> =
+            serde_json::from_str(body).expect("Expected valid json body");
         body
     }
 
@@ -198,10 +197,14 @@ fn access_valid_public() {
 
     let valid_public = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.issued.refresh),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -215,10 +218,14 @@ fn access_valid_private() {
 
     let valid_private = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.issued.refresh),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(setup.basic_authorization.clone()),
     };
 
@@ -229,22 +236,27 @@ fn access_valid_private() {
 #[test]
 fn public_private_invalid_grant() {
     let mut setup = RefreshTokenSetup::public_client();
-    let client = Client::confidential("PrivateClient".into(),
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
-            EXAMPLE_SCOPE.parse().unwrap(),
-            EXAMPLE_PASSPHRASE.as_bytes());
+    let client = Client::confidential(
+        "PrivateClient".into(),
+        EXAMPLE_REDIRECT_URI.parse().unwrap(),
+        EXAMPLE_SCOPE.parse().unwrap(),
+        EXAMPLE_PASSPHRASE.as_bytes(),
+    );
     setup.registrar.register_client(client);
 
-    let basic_authorization = base64::encode(&format!("{}:{}",
-        "PrivateClient", EXAMPLE_PASSPHRASE));
+    let basic_authorization = base64::encode(&format!("{}:{}", "PrivateClient", EXAMPLE_PASSPHRASE));
     let basic_authorization = format!("Basic {}", basic_authorization);
 
     let authenticated = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.issued.refresh),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(basic_authorization),
     };
 
@@ -257,10 +269,14 @@ fn private_wrong_client_fails() {
 
     let valid_public = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.issued.refresh),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -268,10 +284,14 @@ fn private_wrong_client_fails() {
 
     let wrong_authentication = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.issued.refresh),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(format!("Basic {}", base64::encode("Wrong:AndWrong"))),
     };
 
@@ -284,10 +304,14 @@ fn invalid_request() {
 
     let bad_base64 = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.issued.refresh),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(setup.basic_authorization.clone() + "=/"),
     };
 
@@ -295,9 +319,11 @@ fn invalid_request() {
 
     let no_token = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
-                ("grant_type", "refresh_token")]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![("grant_type", "refresh_token")]
+                .iter()
+                .to_single_value_query(),
+        ),
         auth: Some(setup.basic_authorization.clone()),
     };
 
@@ -310,10 +336,14 @@ fn public_invalid_token() {
 
     let valid_public = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", "not_the_issued_token")]
-            .iter().to_single_value_query()),
+                ("refresh_token", "not_the_issued_token"),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -326,10 +356,14 @@ fn private_invalid_token() {
 
     let valid_private = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", "not_the_issued_token")]
-            .iter().to_single_value_query()),
+                ("refresh_token", "not_the_issued_token"),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(setup.basic_authorization.clone()),
     };
 

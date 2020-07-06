@@ -113,14 +113,9 @@ enum ResourceState {
     /// The initial state.
     New,
     /// State after request has been validated.
-    Internalized {
-        token: String,
-    },
+    Internalized { token: String },
     /// State after scopes have been determined.
-    Recovering {
-        token: String,
-        scopes: Vec<Scope>,
-    },
+    Recovering { token: String, scopes: Vec<Scope> },
     /// State after an error occurred.
     Err(Error),
 }
@@ -133,9 +128,7 @@ pub enum Input<'req> {
     /// Determine the scopes of requested resource.
     Scopes(&'req [Scope]),
     /// Provides simply the original request.
-    Request {
-        request: &'req dyn Request,
-    },
+    Request { request: &'req dyn Request },
     /// Advance without input as far as possible, or just retrieve the output again.
     None,
 }
@@ -179,7 +172,9 @@ pub enum Output<'machine> {
 
 impl Resource {
     pub fn new() -> Self {
-        Resource { state: ResourceState::New }
+        Resource {
+            state: ResourceState::New,
+        }
     }
 
     pub fn advance(&mut self, input: Input) -> Output<'_> {
@@ -187,16 +182,14 @@ impl Resource {
             (any, Input::None) => any,
             (ResourceState::New, Input::Request { request }) => {
                 validate(request).unwrap_or_else(ResourceState::Err)
-            },
-            (ResourceState::Internalized { token }, Input::Scopes(scopes)) => {
-                get_scopes(token, scopes)
-            },
+            }
+            (ResourceState::Internalized { token }, Input::Scopes(scopes)) => get_scopes(token, scopes),
             (ResourceState::Recovering { token: _, scopes }, Input::Recovered(grant)) => {
                 match recovered(grant, scopes) {
                     Ok(grant) => return Output::Ok(grant),
                     Err(err) => ResourceState::Err(err),
                 }
-            },
+            }
             _ => return Output::Err(Error::PrimitiveError),
         };
 
@@ -238,7 +231,7 @@ pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
                     .recover_token(&token)
                     .map_err(|_| Error::PrimitiveError)?;
                 Input::Recovered(grant)
-            },
+            }
         };
 
         requested = match resource.advance(input) {
@@ -251,9 +244,7 @@ pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
     }
 }
 
-fn validate<'req>(
-    request: &'req dyn Request,
-) -> Result<ResourceState> {
+fn validate<'req>(request: &'req dyn Request) -> Result<ResourceState> {
     if !request.valid() {
         return Err(Error::InvalidRequest {
             authenticate: Authenticate::empty(),
@@ -262,9 +253,11 @@ fn validate<'req>(
 
     let client_token = match request.token() {
         Some(token) => token,
-        None => return Err(Error::NoAuthentication {
-            authenticate: Authenticate::empty(),
-        }),
+        None => {
+            return Err(Error::NoAuthentication {
+                authenticate: Authenticate::empty(),
+            })
+        }
     };
 
     if !client_token.starts_with(BEARER_START) {
@@ -281,32 +274,28 @@ fn validate<'req>(
     Ok(ResourceState::Internalized { token })
 }
 
-fn get_scopes<'req>(
-    token: String,
-    scopes: &'req [Scope],
-) -> ResourceState {
+fn get_scopes<'req>(token: String, scopes: &'req [Scope]) -> ResourceState {
     ResourceState::Recovering {
         token,
         scopes: scopes.to_owned(),
     }
 }
 
-fn recovered<'req>(
-    grant: Option<Grant>,
-    mut scopes: Vec<Scope>,
-) -> Result<Grant> {
+fn recovered<'req>(grant: Option<Grant>, mut scopes: Vec<Scope>) -> Result<Grant> {
     let grant = match grant {
         Some(grant) => grant,
-        None => return Err(Error::AccessDenied {
-            failure: AccessFailure {
-                code: Some(ErrorCode::InvalidRequest),
-            },
-            authenticate: Authenticate {
-                realm: None,
-                // TODO. Don't drop the other scopes?
-                scope: scopes.drain(..).next(),
-            },
-        }),
+        None => {
+            return Err(Error::AccessDenied {
+                failure: AccessFailure {
+                    code: Some(ErrorCode::InvalidRequest),
+                },
+                authenticate: Authenticate {
+                    realm: None,
+                    // TODO. Don't drop the other scopes?
+                    scope: scopes.drain(..).next(),
+                },
+            })
+        }
     };
 
     if grant.until < Utc::now() {
@@ -384,14 +373,17 @@ impl Authenticate {
     }
 
     fn extend_header(self, header: &mut BearerHeader) {
-        self.realm.map(|realm| header.add_option(format_args!("realm=\"{}\"", realm)));
-        self.scope.map(|scope| header.add_option(format_args!("scope=\"{}\"", scope)));
+        self.realm
+            .map(|realm| header.add_option(format_args!("realm=\"{}\"", realm)));
+        self.scope
+            .map(|scope| header.add_option(format_args!("scope=\"{}\"", scope)));
     }
 }
 
 impl AccessFailure {
     fn extend_header(self, header: &mut BearerHeader) {
-        self.code.map(|code| header.add_option(format_args!("error=\"{}\"", code.description())));
+        self.code
+            .map(|code| header.add_option(format_args!("error=\"{}\"", code.description())));
     }
 }
 
@@ -400,16 +392,19 @@ impl Error {
     pub(crate) fn www_authenticate(self) -> String {
         let mut header = BearerHeader::new();
         match self {
-            Error::AccessDenied { failure, authenticate, } => {
+            Error::AccessDenied {
+                failure,
+                authenticate,
+            } => {
                 failure.extend_header(&mut header);
                 authenticate.extend_header(&mut header);
-            },
-            Error::NoAuthentication { authenticate, } => {
+            }
+            Error::NoAuthentication { authenticate } => {
                 authenticate.extend_header(&mut header);
-            },
-            Error::InvalidRequest { authenticate, } => {
+            }
+            Error::InvalidRequest { authenticate } => {
                 authenticate.extend_header(&mut header);
-            },
+            }
             Error::PrimitiveError => (),
         }
         header.finalize()

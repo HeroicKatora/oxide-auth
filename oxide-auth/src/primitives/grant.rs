@@ -31,7 +31,6 @@ pub enum Value {
 
     /// Identifies an extenion whose content and/or existance MUST be kept secret.
     Private(Option<String>),
-
     // Content which is not saved on the server but initialized/interpreted from other sources.
     // foreign_content: String,
 }
@@ -92,7 +91,7 @@ impl Value {
     pub fn as_public(self) -> Result<Option<String>, ()> {
         match self {
             Value::Public(content) => Ok(content),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
@@ -100,7 +99,7 @@ impl Value {
     pub fn as_private(self) -> Result<Option<String>, ()> {
         match self {
             Value::Private(content) => Ok(content),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -113,7 +112,8 @@ impl Extensions {
 
     /// Set the stored content for a `GrantExtension` instance.
     pub fn set(&mut self, extension: &dyn GrantExtension, content: Value) {
-        self.extensions.insert(extension.identifier().to_string(), content);
+        self.extensions
+            .insert(extension.identifier().to_string(), content);
     }
 
     /// Set content for an extension without a corresponding instance.
@@ -137,7 +137,10 @@ impl Extensions {
 
     /// Iterate of the public extensions whose presence and content is not secret.
     pub fn public(&self) -> PublicExtensions {
-        PublicExtensions { iter: self.extensions.iter(), private: false }
+        PublicExtensions {
+            iter: self.extensions.iter(),
+            private: false,
+        }
     }
 
     /// Iterate of the private extensions whose presence and content must not be revealed.
@@ -148,7 +151,10 @@ impl Extensions {
     #[deprecated = "The method return type is incorrect. Use the `private` method instead,
         or `public` if you actually intended to iterate public extensions."]
     pub fn iter_private(&self) -> PublicExtensions {
-        PublicExtensions { iter: self.extensions.iter(), private: true }
+        PublicExtensions {
+            iter: self.extensions.iter(),
+            private: true,
+        }
     }
 
     /// Iterate of the private extensions whose presence and content must not be revealed.
@@ -194,10 +200,12 @@ impl<'a> Iterator for PublicExtensions<'a> {
         loop {
             match self.iter.next() {
                 None => return None,
-                Some((key, Value::Public(content))) if !self.private
-                    => return Some((key, content.as_ref().map(String::as_str))),
-                Some((key, Value::Private(content))) if self.private
-                    => return Some((key, content.as_ref().map(String::as_str))),
+                Some((key, Value::Public(content))) if !self.private => {
+                    return Some((key, content.as_ref().map(String::as_str)))
+                }
+                Some((key, Value::Private(content))) if self.private => {
+                    return Some((key, content.as_ref().map(String::as_str)))
+                }
                 _ => (),
             }
         }
@@ -211,8 +219,9 @@ impl<'a> Iterator for PrivateExtensions<'a> {
         loop {
             match self.0.next() {
                 None => return None,
-                Some((key, Value::Private(content)))
-                    => return Some((key, content.as_ref().map(String::as_str))),
+                Some((key, Value::Private(content))) => {
+                    return Some((key, content.as_ref().map(String::as_str)))
+                }
                 _ => (),
             }
         }
@@ -225,8 +234,9 @@ impl<'a, T: GrantExtension + ?Sized> GrantExtension for &'a T {
     }
 }
 
-impl<'a, T: GrantExtension + ?Sized> GrantExtension for Cow<'a, T> 
-    where T: Clone + ToOwned
+impl<'a, T: GrantExtension + ?Sized> GrantExtension for Cow<'a, T>
+where
+    T: Clone + ToOwned,
 {
     fn identifier(&self) -> &'static str {
         self.as_ref().identifier()
@@ -264,32 +274,64 @@ mod tests {
         extensions.set_raw("priv".into(), Value::Private(Some("private".into())));
         extensions.set_raw("priv_none".into(), Value::Private(None));
 
-        assert_eq!(extensions.public()
-            .filter(|&(name, value)| name == "pub" && value == Some("content"))
-            .count(), 1);
-        assert_eq!(extensions.iter_public()
-            .filter(|&(name, value)| name == "pub" && value == Some("content"))
-            .count(), 1);
-        assert_eq!(extensions.public()
-            .filter(|&(name, value)| name == "pub_none" && value == None)
-            .count(), 1);
-        assert_eq!(extensions.iter_public()
-            .filter(|&(name, value)| name == "pub_none" && value == None)
-            .count(), 1);
+        assert_eq!(
+            extensions
+                .public()
+                .filter(|&(name, value)| name == "pub" && value == Some("content"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            extensions
+                .iter_public()
+                .filter(|&(name, value)| name == "pub" && value == Some("content"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            extensions
+                .public()
+                .filter(|&(name, value)| name == "pub_none" && value == None)
+                .count(),
+            1
+        );
+        assert_eq!(
+            extensions
+                .iter_public()
+                .filter(|&(name, value)| name == "pub_none" && value == None)
+                .count(),
+            1
+        );
         assert_eq!(extensions.public().count(), 2);
 
-        assert_eq!(extensions.private()
-            .filter(|&(name, value)| name == "priv" && value == Some("private"))
-            .count(), 1);
-        assert_eq!(extensions.iter_private()
-            .filter(|&(name, value)| name == "priv" && value == Some("private"))
-            .count(), 1);
-        assert_eq!(extensions.private()
-            .filter(|&(name, value)| name == "priv_none" && value == None)
-            .count(), 1);
-        assert_eq!(extensions.iter_private()
-            .filter(|&(name, value)| name == "priv_none" && value == None)
-            .count(), 1);
+        assert_eq!(
+            extensions
+                .private()
+                .filter(|&(name, value)| name == "priv" && value == Some("private"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            extensions
+                .iter_private()
+                .filter(|&(name, value)| name == "priv" && value == Some("private"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            extensions
+                .private()
+                .filter(|&(name, value)| name == "priv_none" && value == None)
+                .count(),
+            1
+        );
+        assert_eq!(
+            extensions
+                .iter_private()
+                .filter(|&(name, value)| name == "priv_none" && value == None)
+                .count(),
+            1
+        );
         assert_eq!(extensions.private().count(), 2);
     }
 }

@@ -73,9 +73,9 @@ where
         self.inner.scopes()
     }
 
-    fn response(&mut self, request: &mut Request, kind: Template)
-        -> Result<Request::Response, Self::Error>
-    {
+    fn response(
+        &mut self, request: &mut Request, kind: Template,
+    ) -> Result<Request::Response, Self::Error> {
         self.inner.response(request, kind)
     }
 

@@ -94,33 +94,36 @@ impl str::FromStr for Scope {
 
     fn from_str(string: &str) -> Result<Scope, ParseScopeErr> {
         if let Some(ch) = string.chars().find(|&ch| Scope::invalid_scope_char(ch)) {
-            return Err(ParseScopeErr::InvalidCharacter(ch))
+            return Err(ParseScopeErr::InvalidCharacter(ch));
         }
         let tokens = string.split(' ').filter(|s| !s.is_empty());
-        Ok(Scope{ tokens: tokens.map(str::to_string).collect() })
+        Ok(Scope {
+            tokens: tokens.map(str::to_string).collect(),
+        })
     }
 }
 
 impl fmt::Display for ParseScopeErr {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            ParseScopeErr::InvalidCharacter(chr)
-                => write!(fmt, "Encountered invalid character in scope: {}", chr)
+            ParseScopeErr::InvalidCharacter(chr) => {
+                write!(fmt, "Encountered invalid character in scope: {}", chr)
+            }
         }
     }
 }
 
 impl fmt::Debug for Scope {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_tuple("Scope")
-            .field(&self.tokens)
-            .finish()
+        fmt.debug_tuple("Scope").field(&self.tokens).finish()
     }
 }
 
 impl fmt::Display for Scope {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        let output = self.tokens.iter()
+        let output = self
+            .tokens
+            .iter()
             .map(String::as_str)
             .collect::<Vec<_>>()
             .join(" ");
@@ -148,7 +151,12 @@ mod tests {
     use super::*;
     #[test]
     fn test_parsing() {
-        let scope = Scope { tokens: ["default", "password", "email"].iter().map(|s| s.to_string()).collect() };
+        let scope = Scope {
+            tokens: ["default", "password", "email"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+        };
         let formatted = scope.to_string();
         let parsed = formatted.parse::<Scope>().unwrap();
         assert_eq!(scope, parsed);
