@@ -16,6 +16,7 @@ use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_iron::{OAuthRequest, OAuthResponse, OAuthError};
 
+#[rustfmt::skip]
 #[path = "../../examples/support/iron.rs"]
 mod support;
 

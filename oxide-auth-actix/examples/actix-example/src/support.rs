@@ -1,3 +1,4 @@
+#[rustfmt::skip]
 #[path = "../../../../examples/support/generic.rs"]
 mod generic;
 

@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate rouille;
 
+#[rustfmt::skip]
 #[path = "../../examples/support/rouille.rs"]
 mod support;
 
