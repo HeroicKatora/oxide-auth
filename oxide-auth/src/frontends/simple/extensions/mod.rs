@@ -18,7 +18,7 @@ pub use self::list::AddonList;
 use primitives::grant::{GrantExtension, Value};
 
 /// Result of extension processing.
-#[must_use="This type is similar to std::result::Result and should not be ignored."]
+#[must_use = "This type is similar to std::result::Result and should not be ignored."]
 pub enum AddonResult {
     /// Allow the request unchanged.
     Ok,
@@ -61,8 +61,9 @@ impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for &'a T {
     }
 }
 
-impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for Cow<'a, T> 
-    where T: Clone + ToOwned
+impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for Cow<'a, T>
+where
+    T: Clone + ToOwned,
 {
     fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {
         self.as_ref().execute(request)
@@ -87,15 +88,15 @@ impl<T: AuthorizationAddon + ?Sized> AuthorizationAddon for Rc<T> {
     }
 }
 
-
 impl<'a, T: AccessTokenAddon + ?Sized> AccessTokenAddon for &'a T {
     fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         (**self).execute(request, data)
     }
 }
 
-impl<'a, T: AccessTokenAddon + ?Sized> AccessTokenAddon for Cow<'a, T> 
-    where T: Clone + ToOwned
+impl<'a, T: AccessTokenAddon + ?Sized> AccessTokenAddon for Cow<'a, T>
+where
+    T: Clone + ToOwned,
 {
     fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         self.as_ref().execute(request, data)

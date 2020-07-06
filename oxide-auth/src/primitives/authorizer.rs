@@ -29,12 +29,11 @@ pub trait Authorizer {
 /// This authorizer saves a mapping of generated strings to their associated grants. The generator
 /// is itself trait based and can be chosen during construction. It is assumed to not be possible
 /// for two different grants to generate the same token in the issuer.
-pub struct AuthMap<I: TagGrant=Box<dyn TagGrant + Send + Sync + 'static>> {
+pub struct AuthMap<I: TagGrant = Box<dyn TagGrant + Send + Sync + 'static>> {
     tagger: I,
     usage: u64,
-    tokens: HashMap<String, Grant>
+    tokens: HashMap<String, Grant>,
 }
-
 
 impl<I: TagGrant> AuthMap<I> {
     /// Create an authorizer generating tokens with the `tagger`.
@@ -131,9 +130,11 @@ pub mod tests {
             extensions: Extensions::new(),
         };
 
-        let token = authorizer.authorize(grant.clone())
+        let token = authorizer
+            .authorize(grant.clone())
             .expect("Authorization should not fail here");
-        let recovered_grant = authorizer.extract(&token)
+        let recovered_grant = authorizer
+            .extract(&token)
             .expect("Primitive failed extracting grant")
             .expect("Could not extract grant for valid token");
 
@@ -146,7 +147,8 @@ pub mod tests {
         }
 
         // Authorize the same token again.
-        let token_again = authorizer.authorize(grant.clone())
+        let token_again = authorizer
+            .authorize(grant.clone())
             .expect("Authorization should not fail here");
         // We don't produce the same token twice.
         assert_ne!(token, token_again);
@@ -161,8 +163,9 @@ pub mod tests {
     #[test]
     fn signing_test_suite() {
         let assertion = Assertion::new(
-            AssertionKind::HmacSha256, 
-            b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s=");
+            AssertionKind::HmacSha256,
+            b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s=",
+        );
         let mut storage = AuthMap::new(assertion);
         simple_test_suite(&mut storage);
     }

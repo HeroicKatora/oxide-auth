@@ -16,6 +16,7 @@ use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_iron::{OAuthRequest, OAuthResponse, OAuthError};
 
+#[rustfmt::skip]
 #[path = "../../examples/support/iron.rs"]
 mod support;
 
@@ -32,65 +33,85 @@ fn main_router() -> impl Handler + 'static {
     let (auth_get_state, auth_post_state, token_state, get_state) =
         (state.clone(), state.clone(), state.clone(), state.clone());
     let mut router = router::Router::new();
-    router.get("/authorize", move |request: &mut Request| {
-        let state = auth_get_state.clone();
-        let response = state.endpoint()
-            .with_solicitor(FnSolicitor(consent_form))
-            .to_authorization()
-            .execute(request.into())
-            .map_err(|e| {
-                let e: OAuthError = e.into();
-                e.into()
-            })?;
-        Ok(response.into())
-    }, "authorization_get");
-    router.post("/authorize", move |request: &mut Request| {
-        let state = auth_post_state.clone();
-        let response = state.endpoint()
-            .with_solicitor(FnSolicitor(consent_decision))
-            .to_authorization()
-            .execute(request.into())
-            .map_err(|e| {
-                let e: OAuthError = e.into();
-                e.into()
-            })?;
-        Ok(response.into())
-    }, "authorization_post");
-    router.post("/token", move |request: &mut Request| {
-        let state = token_state.clone();
-        let response = state.endpoint()
-            .to_access_token()
-            .execute(request.into())
-            .map_err(|e| {
-                let e: OAuthError = e.into();
-                e.into()
-            })?;
-        Ok(response.into())
-    }, "token");
-    router.get("/", move |request: &mut Request| {
-        let oauth_request: OAuthRequest = request.into();
+    router.get(
+        "/authorize",
+        move |request: &mut Request| {
+            let state = auth_get_state.clone();
+            let response = state
+                .endpoint()
+                .with_solicitor(FnSolicitor(consent_form))
+                .to_authorization()
+                .execute(request.into())
+                .map_err(|e| {
+                    let e: OAuthError = e.into();
+                    e.into()
+                })?;
+            Ok(response.into())
+        },
+        "authorization_get",
+    );
+    router.post(
+        "/authorize",
+        move |request: &mut Request| {
+            let state = auth_post_state.clone();
+            let response = state
+                .endpoint()
+                .with_solicitor(FnSolicitor(consent_decision))
+                .to_authorization()
+                .execute(request.into())
+                .map_err(|e| {
+                    let e: OAuthError = e.into();
+                    e.into()
+                })?;
+            Ok(response.into())
+        },
+        "authorization_post",
+    );
+    router.post(
+        "/token",
+        move |request: &mut Request| {
+            let state = token_state.clone();
+            let response = state
+                .endpoint()
+                .to_access_token()
+                .execute(request.into())
+                .map_err(|e| {
+                    let e: OAuthError = e.into();
+                    e.into()
+                })?;
+            Ok(response.into())
+        },
+        "token",
+    );
+    router.get(
+        "/",
+        move |request: &mut Request| {
+            let oauth_request: OAuthRequest = request.into();
 
-        let state = get_state.clone();
-        let protect = state.endpoint()
-            .with_scopes(vec!["default-scope".parse().unwrap()])
-            .to_resource()
-            .execute(oauth_request);
+            let state = get_state.clone();
+            let protect = state
+                .endpoint()
+                .with_scopes(vec!["default-scope".parse().unwrap()])
+                .to_resource()
+                .execute(oauth_request);
 
-        let _grant = match protect {
-            Ok(grant) => grant,
-            Err(Ok(mut response)) => {
-                response.set_header(ContentType::html());
-                response.set_body(EndpointState::DENY_TEXT);
-                return Ok(response.into());
-            },
-            Err(Err(error)) => {
-                let error: OAuthError = error.into();
-                return Err(error.into())
-            },
-        };
+            let _grant = match protect {
+                Ok(grant) => grant,
+                Err(Ok(mut response)) => {
+                    response.set_header(ContentType::html());
+                    response.set_body(EndpointState::DENY_TEXT);
+                    return Ok(response.into());
+                }
+                Err(Err(error)) => {
+                    let error: OAuthError = error.into();
+                    return Err(error.into());
+                }
+            };
 
-        Ok(Response::with((Status::Ok, "Hello, world!")))
-    }, "protected");
+            Ok(Response::with((Status::Ok, "Hello, world!")))
+        },
+        "protected",
+    );
 
     router
 }
@@ -124,18 +145,31 @@ here</a> to begin the authorization process.
 
     fn preconfigured() -> Self {
         EndpointState {
-            registrar: Mutex::new(vec![
-                Client::public("LocalClient",
+            registrar: Mutex::new(
+                vec![Client::public(
+                    "LocalClient",
                     "http://localhost:8021/endpoint".parse().unwrap(),
-                    "default-scope".parse().unwrap())
-            ].into_iter().collect()),
+                    "default-scope".parse().unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            ),
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
             issuer: Mutex::new(TokenSigner::ephemeral()),
         }
     }
 
     /// In larger app, you'd likey wrap it in your own Endpoint instead of `Generic`.
-    pub fn endpoint(&self) -> Generic<impl Registrar + '_, impl Authorizer + '_, impl Issuer + '_, Vacant, Vacant, fn() -> OAuthResponse> {
+    pub fn endpoint(
+        &self,
+    ) -> Generic<
+        impl Registrar + '_,
+        impl Authorizer + '_,
+        impl Issuer + '_,
+        Vacant,
+        Vacant,
+        fn() -> OAuthResponse,
+    > {
         Generic {
             registrar: self.registrar.lock().unwrap(),
             authorizer: self.authorizer.lock().unwrap(),
@@ -160,13 +194,10 @@ fn consent_form(_: &mut OAuthRequest, grant: &PreGrant) -> OwnerConsent<OAuthRes
 
 fn consent_decision(request: &mut OAuthRequest, _: &PreGrant) -> OwnerConsent<OAuthResponse> {
     // Authenticate the request better in a real app!
-    let allowed = request
-        .url()
-        .query_pairs()
-        .any(|(key, _)| key == "allow");
-    if allowed { 
-        OwnerConsent::Authorized("dummy user".into()) 
+    let allowed = request.url().query_pairs().any(|(key, _)| key == "allow");
+    if allowed {
+        OwnerConsent::Authorized("dummy user".into())
     } else {
-        OwnerConsent::Denied 
+        OwnerConsent::Denied
     }
 }

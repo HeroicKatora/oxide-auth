@@ -10,9 +10,9 @@ pub mod refresh {
         fn issuer(&mut self) -> &mut dyn crate::primitives::Issuer;
     }
 
-    pub async fn refresh(handler: &mut dyn Endpoint, request: &dyn Request)
-        -> Result<BearerToken, Error>
-    {
+    pub async fn refresh(
+        handler: &mut dyn Endpoint, request: &dyn Request,
+    ) -> Result<BearerToken, Error> {
         let mut refresh = Refresh::new(request);
         let mut input = Input::None;
         loop {
@@ -26,7 +26,7 @@ pub mod refresh {
                         .await
                         .map_err(|()| Error::Primitive)?;
                     input = Input::Refreshed(refreshed);
-                },
+                }
                 Output::RecoverRefresh { token } => {
                     let recovered = handler
                         .issuer()
@@ -34,18 +34,19 @@ pub mod refresh {
                         .await
                         .map_err(|()| Error::Primitive)?;
                     input = Input::Recovered(recovered);
-                },
+                }
                 Output::Unauthenticated { client, pass } => {
-                    let _: () = handler
-                        .registrar()
-                        .check(client, pass)
-                        .await
-                        .map_err(|err| match err {
-                            RegistrarError::PrimitiveError => Error::Primitive,
-                            RegistrarError::Unspecified => Error::unauthorized("basic"),
-                        })?;
+                    let _: () =
+                        handler
+                            .registrar()
+                            .check(client, pass)
+                            .await
+                            .map_err(|err| match err {
+                                RegistrarError::PrimitiveError => Error::Primitive,
+                                RegistrarError::Unspecified => Error::unauthorized("basic"),
+                            })?;
                     input = Input::Authenticated;
-                },
+                }
             }
         }
     }

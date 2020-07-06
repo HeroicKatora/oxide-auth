@@ -130,7 +130,7 @@ impl<'r> WebRequest for OAuthRequest<'r> {
         }
     }
 
-    fn urlbody(&mut self) ->  Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
+    fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         match self.body.as_ref() {
             Ok(None) => Err(WebError::BodyNeeded),
             Ok(Some(body)) => Ok(Cow::Borrowed(body as &dyn QueryParameter)),

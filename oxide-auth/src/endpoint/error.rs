@@ -39,5 +39,4 @@ impl fmt::Display for OAuthError {
     }
 }
 
-impl error::Error for OAuthError {
-}
+impl error::Error for OAuthError {}

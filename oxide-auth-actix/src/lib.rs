@@ -18,9 +18,7 @@ use actix_web::{
 };
 use futures::Future;
 use oxide_auth::{
-    endpoint::{
-        Endpoint, NormalizedParameter, OAuthError, QueryParameter, WebRequest, WebResponse,
-    },
+    endpoint::{Endpoint, NormalizedParameter, OAuthError, QueryParameter, WebRequest, WebResponse},
     frontends::simple::endpoint::Error,
 };
 use std::{borrow::Cow, error, fmt};
@@ -172,22 +170,15 @@ pub enum WebError {
 
 impl OAuthRequest {
     /// Create a new OAuthRequest from an HttpRequest and Payload
-    pub fn new(
-        req: &HttpRequest,
-        payload: &mut Payload,
-    ) -> impl Future<Item = Self, Error = WebError> {
+    pub fn new(req: &HttpRequest, payload: &mut Payload) -> impl Future<Item = Self, Error = WebError> {
         let query_res = Query::extract(req);
         let form_fut = Form::from_request(&req, payload);
 
         let req = req.clone();
 
         form_fut.then(move |form_res| {
-            let body = form_res
-                .ok()
-                .map(|b: Form<NormalizedParameter>| b.into_inner());
-            let query = query_res
-                .ok()
-                .map(|q: Query<NormalizedParameter>| q.into_inner());
+            let body = form_res.ok().map(|b: Form<NormalizedParameter>| b.into_inner());
+            let query = query_res.ok().map(|q: Query<NormalizedParameter>| q.into_inner());
 
             let mut all_auth = req.headers().get_all(header::AUTHORIZATION);
             let optional = all_auth.next();
@@ -338,10 +329,8 @@ impl WebResponse for OAuthResponse {
 
     fn body_json(&mut self, json: &str) -> Result<(), Self::Error> {
         self.body = Some(json.to_owned());
-        self.headers.insert(
-            header::CONTENT_TYPE,
-            HttpTryFrom::try_from("application/json")?,
-        );
+        self.headers
+            .insert(header::CONTENT_TYPE, HttpTryFrom::try_from("application/json")?);
         Ok(())
     }
 }

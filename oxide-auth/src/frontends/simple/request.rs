@@ -58,7 +58,7 @@ pub enum Status {
 }
 
 /// Models the necessary body contents.
-/// 
+///
 /// Real HTTP protocols should set a content type header for each of the body variants.
 #[derive(Clone, Debug)]
 pub enum Body {
@@ -74,7 +74,7 @@ pub enum Body {
 /// Since these types are built to never error on their operation, and `!` is not the stable unique
 /// representation for uninhabited types, this simple enum without variants is used instead.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum NoError { }
+pub enum NoError {}
 
 /// Changes the error type of a web request and response.
 pub struct MapErr<W, F, T>(W, F, PhantomData<T>);
@@ -91,15 +91,19 @@ impl Body {
 
 impl<W, F, T> MapErr<W, F, T> {
     /// Map all errors in request methods using the given function.
-    pub fn request(request: W, f: F) -> Self 
-        where W: WebRequest, F: FnMut(W::Error) -> T 
+    pub fn request(request: W, f: F) -> Self
+    where
+        W: WebRequest,
+        F: FnMut(W::Error) -> T,
     {
         MapErr(request, f, PhantomData)
     }
 
     /// Map all errors in response methods using the given function.
     pub fn response(response: W, f: F) -> Self
-        where W: WebResponse, F: FnMut(W::Error) -> T
+    where
+        W: WebResponse,
+        F: FnMut(W::Error) -> T,
     {
         MapErr(response, f, PhantomData)
     }
@@ -179,7 +183,7 @@ impl NoError {
     ///
     /// Since `NoError` is uninhabited, this always works but is never executed.
     pub fn into<T>(self) -> T {
-        match self { }
+        match self {}
     }
 }
 
@@ -189,7 +193,10 @@ impl Default for Status {
     }
 }
 
-impl<W: WebRequest, F, T> WebRequest for MapErr<W, F, T> where F: FnMut(W::Error) -> T {
+impl<W: WebRequest, F, T> WebRequest for MapErr<W, F, T>
+where
+    F: FnMut(W::Error) -> T,
+{
     type Error = T;
     type Response = MapErr<W::Response, F, T>;
 
@@ -206,7 +213,10 @@ impl<W: WebRequest, F, T> WebRequest for MapErr<W, F, T> where F: FnMut(W::Error
     }
 }
 
-impl<W: WebResponse, F, T> WebResponse for MapErr<W, F, T> where F: FnMut(W::Error) -> T {
+impl<W: WebResponse, F, T> WebResponse for MapErr<W, F, T>
+where
+    F: FnMut(W::Error) -> T,
+{
     type Error = T;
 
     fn ok(&mut self) -> Result<(), Self::Error> {
