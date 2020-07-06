@@ -65,7 +65,7 @@ pub trait Request {
     /// Retrieve an additional parameter used in an extension
     fn extension(&self, key: &str) -> Option<Cow<str>>;
 
-    /// Credentials in body should only be enabled if use of HTTP Basic is not possible. 
+    /// Credentials in body should only be enabled if use of HTTP Basic is not possible.
     ///
     /// Allows the request body to contain the `client_secret` as a form parameter. This is NOT
     /// RECOMMENDED and need not be supported. The parameters MUST NOT appear in the request URI
@@ -85,7 +85,8 @@ pub trait Extension {
     ///
     /// The input data comes from the extension data produced in the handling of the
     /// authorization code request.
-    fn extend(&mut self, request: &dyn Request, data: Extensions) -> std::result::Result<Extensions, ()>;
+    fn extend(&mut self, request: &dyn Request, data: Extensions)
+        -> std::result::Result<Extensions, ()>;
 }
 
 impl Extension for () {
@@ -112,7 +113,7 @@ pub trait Endpoint {
     /// The system of used extension, extending responses.
     ///
     /// It is possible to use `&mut ()`.
-    fn extension(&mut self) -> & mut dyn Extension;
+    fn extension(&mut self) -> &mut dyn Extension;
 }
 
 enum Credentials<'a> {
@@ -127,9 +128,7 @@ enum Credentials<'a> {
     ///
     /// This must happen only when the credentials were part of the request body but used to
     /// indicate the name of a public client.
-    Unauthenticated {
-        client_id: &'a str,
-    },
+    Unauthenticated { client_id: &'a str },
     /// Multiple possible credentials were offered.
     ///
     /// This is a security issue, only one attempt must be made per request.
@@ -139,7 +138,7 @@ enum Credentials<'a> {
 /// Try to redeem an authorization code.
 pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
     if !request.valid() {
-        return Err(Error::invalid())
+        return Err(Error::invalid());
     }
 
     let authorization = request.authorization();
@@ -155,11 +154,9 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
         match &client_secret {
             Some(auth) if request.allow_credentials_in_body() => {
                 credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes())
-            },
+            }
             // Ignore parameter if not allowed.
-            Some(_) | None => {
-                credentials.unauthenticated(client_id.as_ref())
-            },
+            Some(_) | None => credentials.unauthenticated(client_id.as_ref()),
         }
     }
 
@@ -169,11 +166,10 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
         Some(_) => return Err(Error::invalid_with(AccessTokenErrorType::UnsupportedGrantType)),
     };
 
-    let (client_id, auth) = credentials
-        .into_client()
-        .ok_or_else(Error::invalid)?;
+    let (client_id, auth) = credentials.into_client().ok_or_else(Error::invalid)?;
 
-    handler.registrar()
+    handler
+        .registrar()
         .check(&client_id, auth)
         .map_err(|err| match err {
             RegistrarError::Unspecified => Error::unauthorized("basic"),
@@ -183,62 +179,68 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
             }),
         })?;
 
-    let code = request
-        .code()
-        .ok_or_else(Error::invalid)?;
+    let code = request.code().ok_or_else(Error::invalid)?;
     let code = code.as_ref();
 
     let saved_params = match handler.authorizer().extract(code) {
-        Err(()) => return Err(Error::Primitive(PrimitiveError {
-            grant: None,
-            extensions: None,
-        })),
+        Err(()) => {
+            return Err(Error::Primitive(PrimitiveError {
+                grant: None,
+                extensions: None,
+            }))
+        }
         Ok(None) => return Err(Error::invalid()),
         Ok(Some(v)) => v,
     };
 
-    let redirect_uri = request
-        .redirect_uri()
-        .ok_or_else(Error::invalid)?;
-    let redirect_uri = redirect_uri
-        .as_ref()
-        .parse()
-        .map_err(|_| Error::invalid())?;
+    let redirect_uri = request.redirect_uri().ok_or_else(Error::invalid)?;
+    let redirect_uri = redirect_uri.as_ref().parse().map_err(|_| Error::invalid())?;
 
     if (saved_params.client_id.as_ref(), &saved_params.redirect_uri) != (client_id, &redirect_uri) {
-        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant))
+        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
     }
 
     if saved_params.until < Utc::now() {
-        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant))
+        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
     }
 
     let code_extensions = saved_params.extensions;
     let access_extensions = handler.extension().extend(request, code_extensions);
     let access_extensions = match access_extensions {
         Ok(extensions) => extensions,
-        Err(_) =>  return Err(Error::invalid()),
+        Err(_) => return Err(Error::invalid()),
     };
 
-    let token = handler.issuer().issue(Grant {
-        client_id: saved_params.client_id,
-        owner_id: saved_params.owner_id,
-        redirect_uri: saved_params.redirect_uri,
-        scope: saved_params.scope.clone(),
-        until: Utc::now() + Duration::hours(1),
-        extensions: access_extensions,
-    }).map_err(|()| Error::Primitive(PrimitiveError {
-        // FIXME: endpoint should get and handle these.
-        grant: None,
-        extensions: None,
-    }))?;
+    let token = handler
+        .issuer()
+        .issue(Grant {
+            client_id: saved_params.client_id,
+            owner_id: saved_params.owner_id,
+            redirect_uri: saved_params.redirect_uri,
+            scope: saved_params.scope.clone(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: access_extensions,
+        })
+        .map_err(|()| {
+            Error::Primitive(PrimitiveError {
+                // FIXME: endpoint should get and handle these.
+                grant: None,
+                extensions: None,
+            })
+        })?;
 
-    Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
+    Ok(BearerToken {
+        0: token,
+        1: saved_params.scope.to_string(),
+    })
 }
 
 impl<'a> Credentials<'a> {
     pub fn authenticate(&mut self, client_id: &'a str, passphrase: &'a [u8]) {
-        self.add(Credentials::Authenticated { client_id, passphrase })
+        self.add(Credentials::Authenticated {
+            client_id,
+            passphrase,
+        })
     }
 
     pub fn unauthenticated(&mut self, client_id: &'a str) {
@@ -247,10 +249,11 @@ impl<'a> Credentials<'a> {
 
     pub fn into_client(self) -> Option<(&'a str, Option<&'a [u8]>)> {
         match self {
-            Credentials::Authenticated { client_id, passphrase, }
-                => Some((client_id, Some(passphrase))),
-            Credentials::Unauthenticated { client_id }
-                => Some((client_id, None)),
+            Credentials::Authenticated {
+                client_id,
+                passphrase,
+            } => Some((client_id, Some(passphrase))),
+            Credentials::Unauthenticated { client_id } => Some((client_id, None)),
             _ => None,
         }
     }
@@ -282,9 +285,9 @@ pub enum Error {
 }
 
 /// The endpoint should have enough control over its primitives to find
-/// out what has gone wrong, e.g. they may externall supply error 
+/// out what has gone wrong, e.g. they may externall supply error
 /// information.
-/// 
+///
 /// In this case, all previous results returned by the primitives are
 /// included in the return value. Through this mechanism, one can
 /// accomodate async handlers by implementing a sync-based result cache
@@ -320,7 +323,7 @@ pub struct BearerToken(IssuedToken, String);
 impl Error {
     fn invalid() -> Self {
         Error::Invalid(ErrorDescription {
-            error: AccessTokenError::default()
+            error: AccessTokenError::default(),
         })
     }
 
@@ -335,14 +338,16 @@ impl Error {
     }
 
     fn unauthorized(authtype: &str) -> Error {
-        Error::Unauthorized(ErrorDescription {
+        Error::Unauthorized(
+            ErrorDescription {
                 error: {
                     let mut error = AccessTokenError::default();
                     error.set_type(AccessTokenErrorType::InvalidClient);
                     error
                 },
             },
-            authtype.to_string())
+            authtype.to_string(),
+        )
     }
 
     /// Get a handle to the description the client will receive.
@@ -418,10 +423,10 @@ mod tests {
 
     #[test]
     fn no_refresh_encoding() {
-        let token = BearerToken(IssuedToken::without_refresh(
-            "access".into(),
-            Utc::now(),
-        ), "scope".into());
+        let token = BearerToken(
+            IssuedToken::without_refresh("access".into(), Utc::now()),
+            "scope".into(),
+        );
 
         let json = token.to_json();
         let token = serde_json::from_str::<TokenResponse>(&json).unwrap();

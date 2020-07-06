@@ -159,8 +159,7 @@ impl State {
     }
 
     pub fn with_solicitor<'a, S>(
-        &'a mut self,
-        solicitor: S,
+        &'a mut self, solicitor: S,
     ) -> impl Endpoint<OAuthRequest, Error = WebError> + 'a
     where
         S: OwnerSolicitor<OAuthRequest> + 'static,
@@ -195,9 +194,10 @@ where
                     // This will display a page to the user asking for his permission to proceed. The submitted form
                     // will then trigger the other authorization handler which actually completes the flow.
                     OwnerConsent::InProgress(
-                        OAuthResponse::ok().content_type("text/html").unwrap().body(
-                            &crate::support::consent_page_html("/authorize".into(), pre_grant),
-                        ),
+                        OAuthResponse::ok()
+                            .content_type("text/html")
+                            .unwrap()
+                            .body(&crate::support::consent_page_html("/authorize".into(), pre_grant)),
                     )
                 });
 

@@ -125,18 +125,31 @@ here</a> to begin the authorization process.
 
     fn preconfigured() -> Self {
         EndpointState {
-            registrar: Mutex::new(vec![
-                Client::public("LocalClient",
+            registrar: Mutex::new(
+                vec![Client::public(
+                    "LocalClient",
                     "http://localhost:8021/endpoint".parse().unwrap(),
-                    "default-scope".parse().unwrap())
-            ].into_iter().collect()),
+                    "default-scope".parse().unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            ),
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
             issuer: Mutex::new(TokenSigner::ephemeral()),
         }
     }
 
     /// In larger app, you'd likey wrap it in your own Endpoint instead of `Generic`.
-    pub fn endpoint(&self) -> Generic<impl Registrar + '_, impl Authorizer + '_, impl Issuer + '_, Vacant, Vacant, fn() -> OAuthResponse> {
+    pub fn endpoint(
+        &self,
+    ) -> Generic<
+        impl Registrar + '_,
+        impl Authorizer + '_,
+        impl Issuer + '_,
+        Vacant,
+        Vacant,
+        fn() -> OAuthResponse,
+    > {
         Generic {
             registrar: self.registrar.lock().unwrap(),
             authorizer: self.authorizer.lock().unwrap(),
@@ -161,13 +174,10 @@ fn consent_form(_: &mut OAuthRequest, grant: &PreGrant) -> OwnerConsent<OAuthRes
 
 fn consent_decision(request: &mut OAuthRequest, _: &PreGrant) -> OwnerConsent<OAuthResponse> {
     // Authenticate the request better in a real app!
-    let allowed = request
-        .url()
-        .query_pairs()
-        .any(|(key, _)| key == "allow");
-    if allowed { 
-        OwnerConsent::Authorized("dummy user".into()) 
+    let allowed = request.url().query_pairs().any(|(key, _)| key == "allow");
+    if allowed {
+        OwnerConsent::Authorized("dummy user".into())
     } else {
-        OwnerConsent::Denied 
+        OwnerConsent::Denied
     }
 }

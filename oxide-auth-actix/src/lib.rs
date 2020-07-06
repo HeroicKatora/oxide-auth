@@ -17,9 +17,7 @@ use actix_web::{
 };
 use futures::future::{self, FutureExt, LocalBoxFuture, Ready};
 use oxide_auth::{
-    endpoint::{
-        Endpoint, NormalizedParameter, OAuthError, QueryParameter, WebRequest, WebResponse,
-    },
+    endpoint::{Endpoint, NormalizedParameter, OAuthError, QueryParameter, WebRequest, WebResponse},
     frontends::simple::endpoint::Error,
 };
 use std::{borrow::Cow, error, fmt, convert::TryFrom};

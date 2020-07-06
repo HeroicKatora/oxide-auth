@@ -71,9 +71,9 @@ impl Pkce {
     /// The resulting string MUST NOT be publicly available to the client. Otherwise, it would be
     /// trivial for a third party to impersonate the client in the access token request phase. For
     /// a SHA256 methods the results would not be quite as severe but still bad practice.
-    pub fn challenge(&self, method: Option<Cow<str>>, challenge: Option<Cow<str>>)
-        -> Result<Option<Value>, ()>
-    {
+    pub fn challenge(
+        &self, method: Option<Cow<str>>, challenge: Option<Cow<str>>,
+    ) -> Result<Option<Value>, ()> {
         let method = method.unwrap_or(Cow::Borrowed("plain"));
 
         let challenge = match challenge {
@@ -96,8 +96,7 @@ impl Pkce {
     ///
     /// When a challenge was agreed upon but no verifier is present, this method will return an
     /// error.
-    pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), ()>
-    {
+    pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), ()> {
         let (method, verifier) = match (method, verifier) {
             (None, _) if self.required => return Err(()),
             (None, _) => return Ok(()),
@@ -159,7 +158,7 @@ impl Method {
             None => Err(()),
             Some('p') => Ok(Method::Plain(encoded)),
             Some('S') => Ok(Method::Sha256(encoded)),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 

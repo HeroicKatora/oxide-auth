@@ -10,7 +10,7 @@ pub trait Endpoint<Request: WebRequest> {
     /// Returning `None` will implicate failing any flow that requires a registrar but does not
     /// have any effect on flows that do not require one.
     fn registrar(&self) -> Option<&dyn Registrar>;
-    
+
     /// An authorizer if this endpoint can access one.
     ///
     /// Returning `None` will implicate failing any flow that requires an authorizer but does not
@@ -39,8 +39,9 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// The endpoint can rely on this being called at most once for each flow, if it wants
     /// to preallocate the response or return a handle on an existing prototype.
-    fn response(&mut self, request: &mut Request, kind: Template) 
-        -> Result<Request::Response, Self::Error>;
+    fn response(
+        &mut self, request: &mut Request, kind: Template,
+    ) -> Result<Request::Response, Self::Error>;
 
     /// Wrap an error.
     fn error(&mut self, err: OAuthError) -> Self::Error;

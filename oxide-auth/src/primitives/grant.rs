@@ -31,7 +31,6 @@ pub enum Value {
 
     /// Identifies an extenion whose content and/or existance MUST be kept secret.
     Private(Option<String>),
-
     // Content which is not saved on the server but initialized/interpreted from other sources.
     // foreign_content: String,
 }
@@ -107,7 +106,7 @@ impl Value {
     pub fn into_public_value(self) -> Result<Option<String>, ()> {
         match self {
             Value::Public(content) => Ok(content),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
@@ -130,7 +129,7 @@ impl Value {
     pub fn into_private_value(self) -> Result<Option<String>, ()> {
         match self {
             Value::Private(content) => Ok(content),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -143,7 +142,8 @@ impl Extensions {
 
     /// Set the stored content for a `GrantExtension` instance.
     pub fn set(&mut self, extension: &dyn GrantExtension, content: Value) {
-        self.extensions.insert(extension.identifier().to_string(), content);
+        self.extensions
+            .insert(extension.identifier().to_string(), content);
     }
 
     /// Set content for an extension without a corresponding instance.
@@ -215,8 +215,9 @@ impl<'a, T: GrantExtension + ?Sized> GrantExtension for &'a T {
     }
 }
 
-impl<'a, T: GrantExtension + ?Sized> GrantExtension for Cow<'a, T> 
-    where T: Clone + ToOwned
+impl<'a, T: GrantExtension + ?Sized> GrantExtension for Cow<'a, T>
+where
+    T: Clone + ToOwned,
 {
     fn identifier(&self) -> &'static str {
         self.as_ref().identifier()

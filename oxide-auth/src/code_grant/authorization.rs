@@ -78,10 +78,9 @@ pub trait Endpoint {
 /// If the client is not registered, the request will otherwise be ignored, if the request has
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
-pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request)
--> self::Result<Pending> {
+pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> self::Result<Pending> {
     if !request.valid() {
-        return Err(Error::Ignore)
+        return Err(Error::Ignore);
     }
 
     // Check preconditions
@@ -91,7 +90,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request)
         Some(ref uri) => {
             let parsed = Url::parse(&uri).map_err(|_| Error::Ignore)?;
             Some(Cow::Owned(parsed))
-        },
+        }
     };
 
     let client_url = ClientUrl {
@@ -113,11 +112,12 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request)
         AuthorizationError::default());
 
     match request.response_type() {
-        Some(ref method) if method.as_ref() == "code"
-            => (),
+        Some(ref method) if method.as_ref() == "code" => (),
         _ => {
-            prepared_error.description().set_type(AuthorizationErrorType::UnsupportedResponseType);
-            return Err(Error::Redirect(prepared_error))
+            prepared_error
+                .description()
+                .set_type(AuthorizationErrorType::UnsupportedResponseType);
+            return Err(Error::Redirect(prepared_error));
         }
     }
 
@@ -126,28 +126,35 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request)
     let scope = match scope.map(|scope| scope.as_ref().parse()) {
         None => None,
         Some(Err(_)) => {
-            prepared_error.description().set_type(AuthorizationErrorType::InvalidScope);
-            return Err(Error::Redirect(prepared_error))
-        },
+            prepared_error
+                .description()
+                .set_type(AuthorizationErrorType::InvalidScope);
+            return Err(Error::Redirect(prepared_error));
+        }
         Some(Ok(scope)) => Some(scope),
     };
 
     let grant_extension = match handler.extension().extend(request) {
         Ok(extension_data) => extension_data,
         Err(()) => {
-            prepared_error.description().set_type(AuthorizationErrorType::InvalidRequest);
-            return Err(Error::Redirect(prepared_error))
-        },
+            prepared_error
+                .description()
+                .set_type(AuthorizationErrorType::InvalidRequest);
+            return Err(Error::Redirect(prepared_error));
+        }
     };
 
-    let pre_grant = handler.registrar()
+    let pre_grant = handler
+        .registrar()
         .negotiate(bound_client, scope)
         .map_err(|err| match err {
             RegistrarError::PrimitiveError => Error::PrimitiveError,
             RegistrarError::Unspecified => {
-                prepared_error.description().set_type(AuthorizationErrorType::InvalidScope);
+                prepared_error
+                    .description()
+                    .set_type(AuthorizationErrorType::InvalidScope);
                 Error::Redirect(prepared_error)
-            },
+            }
         })?;
 
     Ok(Pending {
@@ -180,22 +187,25 @@ impl Pending {
     /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
     /// same endpoint as was used to create the pending request.
     pub fn authorize(self, handler: &mut dyn Endpoint, owner_id: Cow<str>) -> Result<Url> {
-       let mut url = self.pre_grant.redirect_uri.clone();
+        let mut url = self.pre_grant.redirect_uri.clone();
 
-       let grant = handler.authorizer().authorize(Grant {
-           owner_id: owner_id.into_owned(),
-           client_id: self.pre_grant.client_id,
-           redirect_uri: self.pre_grant.redirect_uri,
-           scope: self.pre_grant.scope,
-           until: Utc::now() + Duration::minutes(10),
-           extensions: self.extensions,
-       }).map_err(|()| Error::PrimitiveError)?;
+        let grant = handler
+            .authorizer()
+            .authorize(Grant {
+                owner_id: owner_id.into_owned(),
+                client_id: self.pre_grant.client_id,
+                redirect_uri: self.pre_grant.redirect_uri,
+                scope: self.pre_grant.scope,
+                until: Utc::now() + Duration::minutes(10),
+                extensions: self.extensions,
+            })
+            .map_err(|()| Error::PrimitiveError)?;
 
-       url.query_pairs_mut()
-           .append_pair("code", grant.as_str())
-           .extend_pairs(self.state.map(|v| ("state", v)))
-           .finish();
-       Ok(url)
+        url.query_pairs_mut()
+            .append_pair("code", grant.as_str())
+            .extend_pairs(self.state.map(|v| ("state", v)))
+            .finish();
+        Ok(url)
     }
 
     /// Retrieve a reference to the negotiated parameters (e.g. scope). These should be displayed
@@ -235,10 +245,13 @@ type Result<T> = StdResult<T, Error>;
 
 impl ErrorUrl {
     /// Construct a new error, already fixing the state parameter if it exists.
-    fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl where S: AsRef<str> {
+    fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl
+    where
+        S: AsRef<str>,
+    {
         url.query_pairs_mut()
             .extend_pairs(state.as_ref().map(|st| ("state", st.as_ref())));
-        ErrorUrl{ base_uri: url, error }
+        ErrorUrl { base_uri: url, error }
     }
 
     /// Get a handle to the description the client will receive.
@@ -265,8 +278,7 @@ impl Into<Url> for ErrorUrl {
     /// Finalize the error url by saving its parameters in the query part of the redirect_uri
     fn into(self) -> Url {
         let mut url = self.base_uri;
-        url.query_pairs_mut()
-            .extend_pairs(self.error.into_iter());
+        url.query_pairs_mut().extend_pairs(self.error.into_iter());
         url
     }
 }
