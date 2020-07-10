@@ -196,7 +196,7 @@ pub mod access_token {
                     Input::Recovered(opt_grant)
                 }
                 Requested::Extend {
-                    grant,
+                    grant: _,
                     mut extensions,
                 } => {
                     let mut access_extensions = handler
