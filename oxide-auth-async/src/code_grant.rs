@@ -100,3 +100,135 @@ pub mod resource {
         }
     }
 }
+
+pub mod access_token {
+    use async_trait::async_trait;
+    use oxide_auth::code_grant::accesstoken::{
+        AccessToken, Request, BearerToken, Input, Output, Error, PrimitiveError,
+    };
+    use oxide_auth::primitives::{
+        grant::{Extensions, Grant},
+        registrar::RegistrarError,
+    };
+
+    #[async_trait(?Send)]
+    pub trait Extension {
+        /// Inspect the request and extension data to produce extension data.
+        ///
+        /// The input data comes from the extension data produced in the handling of the
+        /// authorization code request.
+        async fn extend(
+            &mut self, request: &dyn Request, data: Extensions,
+        ) -> std::result::Result<Extensions, ()>;
+    }
+
+    #[async_trait(?Send)]
+    impl Extension for () {
+        async fn extend(
+            &mut self, _: &dyn Request, _: Extensions,
+        ) -> std::result::Result<Extensions, ()> {
+            Ok(Extensions::new())
+        }
+    }
+
+    pub trait Endpoint {
+        /// Get the client corresponding to some id.
+        fn registrar(&self) -> &dyn crate::primitives::Registrar;
+
+        /// Get the authorizer from which we can recover the authorization.
+        fn authorizer(&mut self) -> &mut dyn crate::primitives::Authorizer;
+
+        /// Return the issuer instance to create the access token.
+        fn issuer(&mut self) -> &mut dyn crate::primitives::Issuer;
+
+        /// The system of used extension, extending responses.
+        ///
+        /// It is possible to use `&mut ()`.
+        fn extension(&mut self) -> &mut dyn Extension;
+    }
+
+    pub async fn access_token(
+        handler: &mut dyn Endpoint, request: &dyn Request,
+    ) -> Result<BearerToken, Error> {
+        enum Requested<'a> {
+            None,
+            Authenticate {
+                client: &'a str,
+                passdata: Option<&'a [u8]>,
+            },
+            Recover(&'a str),
+            Extend {
+                grant: &'a Grant,
+                extensions: &'a mut Extensions,
+            },
+            Issue {
+                grant: &'a Grant,
+            },
+        }
+
+        let mut access_token = AccessToken::new(request);
+        let mut requested = Requested::None;
+
+        loop {
+            let input = match requested {
+                Requested::None => Input::None,
+                Requested::Authenticate { client, passdata } => {
+                    handler
+                        .registrar()
+                        .check(client, passdata)
+                        .await
+                        .map_err(|err| match err {
+                            RegistrarError::Unspecified => Error::unauthorized("basic"),
+                            RegistrarError::PrimitiveError => Error::Primitive(PrimitiveError {
+                                grant: None,
+                                extensions: None,
+                            }),
+                        })?;
+                    Input::Authenticated
+                }
+                Requested::Recover(code) => {
+                    let opt_grant = handler.authorizer().extract(code).await.map_err(|_| {
+                        Error::Primitive(PrimitiveError {
+                            grant: None,
+                            extensions: None,
+                        })
+                    })?;
+                    Input::Recovered(opt_grant)
+                }
+                Requested::Extend {
+                    grant,
+                    mut extensions,
+                } => {
+                    let mut access_extensions = handler
+                        .extension()
+                        .extend(request, extensions.clone())
+                        .await
+                        .map_err(|_| Error::invalid())?;
+                    extensions = &mut access_extensions;
+                    Input::Done
+                }
+                Requested::Issue { grant } => {
+                    let token = handler.issuer().issue(grant.clone()).await.map_err(|_| {
+                        Error::Primitive(PrimitiveError {
+                            // FIXME: endpoint should get and handle these.
+                            grant: None,
+                            extensions: None,
+                        })
+                    })?;
+                    Input::Issued(token)
+                }
+            };
+
+            requested = match access_token.advance(input) {
+                Output::Authenticate { client, passdata } => {
+                    Requested::Authenticate { client, passdata }
+                }
+                Output::Recover { code } => Requested::Recover(code),
+                Output::Extend { grant, extensions } => Requested::Extend { grant, extensions },
+                Output::Issue { grant } => Requested::Issue { grant },
+                Output::Ok(token) => return Ok(token),
+                Output::Err(e) => return Err(e),
+            };
+        }
+    }
+}
