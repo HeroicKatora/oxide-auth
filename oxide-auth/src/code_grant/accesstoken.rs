@@ -122,6 +122,7 @@ enum AccessTokenState {
         redirect_uri: url::Url,
     },
     Recover {
+        client: String,
         code: String,
         redirect_uri: url::Url,
     },
@@ -175,13 +176,19 @@ impl AccessToken {
             (current, Input::None) => current,
             (
                 AccessTokenState::Authenticate {
-                    code, redirect_uri, ..
+                    client,
+                    code,
+                    redirect_uri,
+                    ..
                 },
                 Input::Authenticated,
-            ) => Self::authencicated(code, redirect_uri),
-            (AccessTokenState::Recover { code, redirect_uri }, Input::Recovered(grant)) => {
-                Self::recovered(code, redirect_uri, grant).unwrap_or_else(AccessTokenState::Err)
-            }
+            ) => Self::authencicated(client, code, redirect_uri),
+            (
+                AccessTokenState::Recover {
+                    client, redirect_uri, ..
+                },
+                Input::Recovered(grant),
+            ) => Self::recovered(client, redirect_uri, grant).unwrap_or_else(AccessTokenState::Err),
             (
                 AccessTokenState::Extend {
                     saved_params,
@@ -273,8 +280,12 @@ impl AccessToken {
         })
     }
 
-    fn authencicated(code: String, redirect_uri: url::Url) -> AccessTokenState {
-        AccessTokenState::Recover { code, redirect_uri }
+    fn authencicated(client: String, code: String, redirect_uri: url::Url) -> AccessTokenState {
+        AccessTokenState::Recover {
+            client,
+            code,
+            redirect_uri,
+        }
     }
 
     fn recovered(
