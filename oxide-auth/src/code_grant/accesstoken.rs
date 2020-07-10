@@ -528,7 +528,7 @@ type Result<T> = std::result::Result<T, Error>;
 pub struct BearerToken(IssuedToken, String);
 
 impl Error {
-    fn invalid() -> Self {
+    pub fn invalid() -> Self {
         Error::Invalid(ErrorDescription {
             error: AccessTokenError::default(),
         })
@@ -544,7 +544,7 @@ impl Error {
         })
     }
 
-    fn unauthorized(authtype: &str) -> Error {
+    pub fn unauthorized(authtype: &str) -> Error {
         Error::Unauthorized(
             ErrorDescription {
                 error: {
