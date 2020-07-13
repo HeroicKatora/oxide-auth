@@ -2,7 +2,7 @@ use std::str::from_utf8;
 use std::{borrow::Cow, marker::PhantomData};
 
 use oxide_auth::{
-    endpoint::{QueryParameter, InnerTemplate, WebRequest, OAuthError, WebResponse},
+    endpoint::{QueryParameter, WebRequest, OAuthError, WebResponse, Template},
     code_grant::accesstoken::{Error as TokenError, Request as TokenRequest},
 };
 
@@ -132,10 +132,7 @@ where
             Ok(token) => token,
         };
 
-        let mut response = self
-            .endpoint
-            .inner
-            .response(&mut request, InnerTemplate::Ok.into())?;
+        let mut response = self.endpoint.inner.response(&mut request, Template::new_ok())?;
         response
             .body_json(&token.to_json())
             .map_err(|err| self.endpoint.inner.web_error(err))?;
@@ -148,13 +145,8 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(
 ) -> Result<R::Response, E::Error> {
     Ok(match error {
         TokenError::Invalid(mut json) => {
-            let mut response = endpoint.response(
-                request,
-                InnerTemplate::BadRequest {
-                    access_token_error: Some(json.description()),
-                }
-                .into(),
-            )?;
+            let mut response =
+                endpoint.response(request, Template::new_bad(Some(json.description())))?;
             response.client_error().map_err(|err| endpoint.web_error(err))?;
             response
                 .body_json(&json.to_json())
@@ -164,11 +156,7 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(
         TokenError::Unauthorized(mut json, scheme) => {
             let mut response = endpoint.response(
                 request,
-                InnerTemplate::Unauthorized {
-                    error: None,
-                    access_token_error: Some(json.description()),
-                }
-                .into(),
+                Template::new_unauthorized(None, Some(json.description())),
             )?;
             response
                 .unauthorized(&scheme)

@@ -118,7 +118,7 @@ pub enum ResponseStatus {
 /// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
 /// think the pros or cons should be evaluated differently.
 #[derive(Debug)]
-pub enum InnerTemplate<'a> {
+enum InnerTemplate<'a> {
     /// Authorization to access the resource has not been granted.
     Unauthorized {
         /// The underlying cause for denying access.
@@ -369,6 +369,27 @@ pub trait Endpoint<Request: WebRequest> {
 }
 
 impl<'a> Template<'a> {
+    /// Create an OK template
+    pub fn new_ok() -> Self {
+        InnerTemplate::Ok.into()
+    }
+
+    /// Create a bad request template
+    pub fn new_bad(access_token_error: Option<&'a mut AccessTokenError>) -> Self {
+        InnerTemplate::BadRequest { access_token_error }.into()
+    }
+
+    /// Create an unauthorized template
+    pub fn new_unauthorized(
+        error: Option<ResourceError>, access_token_error: Option<&'a mut AccessTokenError>,
+    ) -> Self {
+        InnerTemplate::Unauthorized {
+            error,
+            access_token_error,
+        }
+        .into()
+    }
+
     /// The corresponding status code.
     pub fn status(&self) -> ResponseStatus {
         match self.inner {
