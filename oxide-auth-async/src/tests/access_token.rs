@@ -55,7 +55,7 @@ impl<'a> Endpoint<CraftedRequest> for AccessTokenEndpoint<'a> {
     fn registrar(&self) -> Option<&dyn crate::primitives::Registrar> {
         Some(self.registrar)
     }
-    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
+    fn authorizer_mut(&mut self) -> Option<&mut dyn crate::primitives::Authorizer> {
         Some(self.authorizer)
     }
     fn issuer_mut(&mut self) -> Option<&mut dyn crate::primitives::Issuer> {
@@ -71,6 +71,9 @@ impl<'a> Endpoint<CraftedRequest> for AccessTokenEndpoint<'a> {
     }
     fn web_error(&mut self, _err: <CraftedRequest as WebRequest>::Error) -> Self::Error {
         unimplemented!()
+    }
+    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
+        None
     }
 }
 
