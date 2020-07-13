@@ -10,7 +10,6 @@ use oxide_auth::{
 use crate::{
     endpoint::{access_token::AccessTokenFlow, Endpoint},
     primitives::Authorizer,
-    frontends::simple::endpoint::{OptAuthorizer, OptRegistrar, OptIssuer, Vacant, ResponseCreator},
 };
 //use crate::frontends::simple::endpoint::access_token_flow;
 
@@ -35,7 +34,6 @@ struct AccessTokenEndpoint<'a> {
     registrar: &'a ClientMap,
     authorizer: &'a mut AuthMap<TestGenerator>,
     issuer: &'a mut TokenMap<TestGenerator>,
-    response: Vacant,
 }
 
 impl<'a> AccessTokenEndpoint<'a> {
@@ -47,7 +45,6 @@ impl<'a> AccessTokenEndpoint<'a> {
             registrar,
             authorizer,
             issuer,
-            response: Vacant,
         }
     }
 }
@@ -56,18 +53,18 @@ impl<'a> Endpoint<CraftedRequest> for AccessTokenEndpoint<'a> {
     type Error = Error<CraftedRequest>;
 
     fn registrar(&self) -> Option<&dyn crate::primitives::Registrar> {
-        self.registrar.opt_ref()
+        Some(self.registrar)
     }
     fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
-        self.authorizer.opt_mut()
+        Some(self.authorizer)
     }
     fn issuer_mut(&mut self) -> Option<&mut dyn crate::primitives::Issuer> {
-        self.issuer.opt_mut()
+        Some(self.issuer)
     }
     fn response(
         &mut self, request: &mut CraftedRequest, kind: oxide_auth::endpoint::Template,
     ) -> Result<<CraftedRequest as WebRequest>::Response, Self::Error> {
-        Ok(self.response.create(request, kind))
+        Ok(Default::default())
     }
     fn error(&mut self, _err: oxide_auth::endpoint::OAuthError) -> Self::Error {
         unimplemented!()
