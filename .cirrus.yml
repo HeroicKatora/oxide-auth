@@ -7,6 +7,7 @@ stable_task:
   env:
     matrix:
       - CRATE: oxide-auth
+      - CRATE: oxide-auth-async
       - CRATE: oxide-auth-actix
       - CRATE: actix-example
       - CRATE: oxide-auth-iron
@@ -24,6 +25,7 @@ nightly_task:
   env:
     matrix:
       - CRATE: oxide-auth
+      - CRATE: oxide-auth-async
       - CRATE: oxide-auth-actix
       - CRATE: actix-example
       - CRATE: oxide-auth-iron
