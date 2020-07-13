@@ -1,5 +1,10 @@
-use oxide_auth::endpoint::{OAuthError, Template, WebRequest, WebResponse};
+use oxide_auth::endpoint::{OAuthError, Template, WebRequest};
+
+// pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
+pub use crate::code_grant::access_token::Extension as AccessTokenExtension;
 use crate::primitives::{Authorizer, Registrar, Issuer};
+
+pub mod access_token;
 
 pub trait Endpoint<Request: WebRequest> {
     /// The error typed used as the error representation of each flow.
@@ -49,12 +54,23 @@ pub trait Endpoint<Request: WebRequest> {
     /// Wrap an error in the request/response types.
     fn web_error(&mut self, err: Request::Error) -> Self::Error;
 
-    /*
     /// Get the central extension instance this endpoint.
     ///
     /// Returning `None` is the default implementation and acts as simply providing any extensions.
     fn extension(&mut self) -> Option<&mut dyn Extension> {
         None
     }
-    */
+}
+
+pub trait Extension {
+    // FIXME
+    // /// The handler for authorization code extensions.
+    // fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
+    //     None
+    // }
+
+    /// The handler for access token extensions.
+    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
+        None
+    }
 }
