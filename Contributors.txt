@@ -4,3 +4,4 @@
 HeroicKatora <andreas.molzer@gmx.de> (initial author)
 ParisLiakos (Paris Liakos, gotham frontend)
 asonix <asonix@asonix.dog> (actix 1.0 update)
+Geobert Quach (on behalf of Isode Ltd.)
