@@ -63,7 +63,8 @@ pub trait Endpoint<Request: WebRequest> {
 }
 
 pub trait Extension {
-    /// The handler for authorization code extensions.
+    // FIXME
+    // /// The handler for authorization code extensions.
     // fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
     //     None
     // }
