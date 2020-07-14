@@ -214,5 +214,5 @@ pub mod defaults {
 // mod authorization;
 mod access_token;
 mod resource;
-// mod refresh;
+mod refresh;
 // mod pkce;

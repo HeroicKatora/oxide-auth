@@ -1,10 +1,12 @@
-use oxide_auth::endpoint::{OAuthError, Template, WebRequest, Scopes};
+use async_trait::async_trait;
+use oxide_auth::endpoint::{OAuthError, Template, WebRequest, OwnerConsent, PreGrant, Scopes};
 
 // pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
 pub use crate::code_grant::access_token::Extension as AccessTokenExtension;
 use crate::primitives::{Authorizer, Registrar, Issuer};
 
 pub mod access_token;
+pub mod refresh;
 pub mod resource;
 
 pub trait Endpoint<Request: WebRequest> {
@@ -73,5 +75,31 @@ pub trait Extension {
     /// The handler for access token extensions.
     fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
         None
+    }
+}
+
+/// Checks consent with the owner of a resource, identified in a request.
+///
+/// See [`frontends::simple`] for an implementation that permits arbitrary functions.
+///
+/// [`frontends::simple`]: ../frontends/simple/endpoint/struct.FnSolicitor.html
+#[async_trait(?Send)]
+pub trait OwnerSolicitor<Request: WebRequest> {
+    /// Ensure that a user (resource owner) is currently authenticated (for example via a session
+    /// cookie) and determine if he has agreed to the presented grants.
+    async fn check_consent(
+        &mut self, req: &mut Request, pre_grant: &PreGrant,
+    ) -> OwnerConsent<Request::Response>;
+}
+
+#[async_trait(?Send)]
+impl<T, Request: WebRequest> OwnerSolicitor<Request> for T
+where
+    T: oxide_auth::endpoint::OwnerSolicitor<Request> + ?Sized,
+{
+    async fn check_consent(
+        &mut self, req: &mut Request, pre_grant: &PreGrant,
+    ) -> OwnerConsent<Request::Response> {
+        oxide_auth::endpoint::OwnerSolicitor::check_consent(self, req, pre_grant)
     }
 }

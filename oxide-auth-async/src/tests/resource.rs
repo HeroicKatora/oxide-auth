@@ -11,7 +11,7 @@ use super::CraftedRequest;
 use super::defaults::*;
 use crate::endpoint::{resource::ResourceFlow, Endpoint};
 
-struct ResourceEndpoint<'a> {
+pub struct ResourceEndpoint<'a> {
     issuer: &'a mut TokenMap<RandomGenerator>,
     scopes: &'a mut [Scope],
 }
@@ -45,7 +45,7 @@ impl<'a> Endpoint<CraftedRequest> for ResourceEndpoint<'a> {
 }
 
 impl<'a> ResourceEndpoint<'a> {
-    fn new(issuer: &'a mut TokenMap<RandomGenerator>, scopes: &'a mut [Scope]) -> Self {
+    pub fn new(issuer: &'a mut TokenMap<RandomGenerator>, scopes: &'a mut [Scope]) -> Self {
         Self { issuer, scopes }
     }
 }
