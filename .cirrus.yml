@@ -3,7 +3,7 @@ stable_task:
     image: rust:latest
   cargo_cache:
     folder: $CARGO_HOME/registry
-    fingerprint_script: cat Cargo.lock
+    fingerprint_script: cargo update && cat Cargo.lock
   env:
     matrix:
       - CRATE: oxide-auth
@@ -21,7 +21,7 @@ nightly_task:
     image: rustlang/rust:nightly
   cargo_cache:
     folder: $CARGO_HOME/registry
-    fingerprint_script: cat Cargo.lock
+    fingerprint_script: cargo update && cat Cargo.lock
   env:
     matrix:
       - CRATE: oxide-auth
