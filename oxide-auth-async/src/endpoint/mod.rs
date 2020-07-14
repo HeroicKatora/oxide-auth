@@ -1,10 +1,11 @@
-use oxide_auth::endpoint::{OAuthError, Template, WebRequest};
+use oxide_auth::endpoint::{OAuthError, Template, WebRequest, Scopes};
 
 // pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
 pub use crate::code_grant::access_token::Extension as AccessTokenExtension;
 use crate::primitives::{Authorizer, Registrar, Issuer};
 
 pub mod access_token;
+pub mod resource;
 
 pub trait Endpoint<Request: WebRequest> {
     /// The error typed used as the error representation of each flow.
@@ -38,7 +39,7 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// The client must fulfill any one scope, so returning an empty slice will always deny the
     /// request.
-    // fn scopes(&mut self) -> Option<&mut dyn Scopes<Request>>;
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<Request>>;
 
     /// Generate a prototype response.
     ///
