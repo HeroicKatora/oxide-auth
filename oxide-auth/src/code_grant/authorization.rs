@@ -9,6 +9,7 @@ use code_grant::error::{AuthorizationError, AuthorizationErrorType};
 use primitives::authorizer::Authorizer;
 use primitives::registrar::{ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::grant::{Extensions, Grant};
+use crate::{endpoint::Scope, primitives::registrar::BoundClient};
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait Request {
@@ -69,6 +70,187 @@ pub trait Endpoint {
     fn extension(&mut self) -> &mut dyn Extension;
 }
 
+/// The result will indicate wether the authorization succeed or not.
+pub struct Authorization<'req> {
+    state: AuthorizationState<'req>,
+    bound_client: Option<BoundClient<'req>>,
+    extensions: Option<Extensions>,
+    scope: Option<Scope>,
+}
+
+enum AuthorizationState<'req> {
+    /// State after request is validated
+    Binding {
+        client_url: ClientUrl<'req>,
+    },
+    Extending,
+    Negotiating {
+        bound_client: BoundClient<'req>,
+        scope: Option<Scope>,
+    },
+    Pending(Pending),
+    Err(Error),
+}
+
+pub enum Input<'machine> {
+    Bound {
+        request: &'machine dyn Request,
+        bound_client: BoundClient<'machine>,
+    },
+    Extended(Extensions),
+    Negotiated {
+        pre_grant: PreGrant,
+        state: Option<Cow<'machine, str>>,
+    },
+    Finished,
+    None,
+}
+
+pub enum Output<'machine> {
+    Bind {
+        client_url: ClientUrl<'machine>,
+    },
+    Extend,
+    Negotiate {
+        bound_client: BoundClient<'machine>,
+        scope: Option<Scope>,
+    },
+    Ok(Pending),
+    Err(Error),
+}
+
+impl<'req> Authorization<'req> {
+    pub fn new(request: &'req dyn Request) -> Self {
+        Authorization {
+            state: Self::validate(request).unwrap_or_else(AuthorizationState::Err),
+            bound_client: None,
+            extensions: None,
+            scope: None,
+        }
+    }
+
+    pub fn advance(&mut self, input: Input<'req>) -> Output<'_> {
+        self.state = match (self.take(), input) {
+            (current, Input::None) => current,
+            (
+                AuthorizationState::Binding { .. },
+                Input::Bound {
+                    request,
+                    bound_client,
+                },
+            ) => self
+                .bound(request, bound_client)
+                .unwrap_or_else(AuthorizationState::Err),
+            (AuthorizationState::Extending, Input::Extended(grant_extension)) => {
+                self.extended(grant_extension)
+            }
+            (AuthorizationState::Negotiating { .. }, Input::Negotiated { pre_grant, state }) => {
+                self.negotiated(state, pre_grant)
+            }
+            (AuthorizationState::Err(err), _) => AuthorizationState::Err(err),
+            (_, _) => AuthorizationState::Err(Error::PrimitiveError),
+        };
+
+        self.output()
+    }
+
+    fn output(&self) -> Output<'_> {
+        match &self.state {
+            AuthorizationState::Err(err) => Output::Err(err.clone()),
+            AuthorizationState::Binding { client_url } => Output::Bind {
+                client_url: client_url.clone(),
+            },
+            AuthorizationState::Extending => Output::Extend,
+            AuthorizationState::Negotiating { bound_client, scope } => Output::Negotiate {
+                bound_client: (*bound_client).clone(),
+                scope: (*scope).clone(),
+            },
+            AuthorizationState::Pending(pending) => Output::Ok((*pending).clone()),
+        }
+    }
+
+    fn bound(
+        &mut self, request: &dyn Request, bound_client: BoundClient<'req>,
+    ) -> Result<AuthorizationState<'req>> {
+        // It's done here rather than in `validate` because we need bound_client to be sure
+        // `redirect_uri` has a value
+        match request.response_type() {
+            Some(ref method) if method.as_ref() == "code" => (),
+            _ => {
+                let prepared_error = get_prepared_error(
+                    request,
+                    &bound_client.redirect_uri,
+                    AuthorizationErrorType::UnsupportedResponseType,
+                );
+                return Err(Error::Redirect(prepared_error));
+            }
+        }
+
+        // Extract additional parameters from request to be used in negotiating
+        // It's done here rather than in `validate` because we need bound_client to be sure
+        // `redirect_uri` has a value
+        let scope = request.scope();
+        self.scope = match scope.map(|scope| scope.as_ref().parse()) {
+            None => None,
+            Some(Err(_)) => {
+                let prepared_error = get_prepared_error(
+                    request,
+                    &bound_client.redirect_uri,
+                    AuthorizationErrorType::InvalidScope,
+                );
+                return Err(Error::Redirect(prepared_error));
+            }
+            Some(Ok(scope)) => Some(scope),
+        };
+
+        self.bound_client = Some(bound_client);
+        Ok(AuthorizationState::Extending)
+    }
+
+    fn extended(&mut self, grant_extension: Extensions) -> AuthorizationState<'req> {
+        self.extensions = Some(grant_extension);
+        AuthorizationState::Negotiating {
+            bound_client: self.bound_client.clone().unwrap(),
+            scope: self.scope.clone(),
+        }
+    }
+
+    fn negotiated(&mut self, state: Option<Cow<str>>, pre_grant: PreGrant) -> AuthorizationState<'req> {
+        AuthorizationState::Pending(Pending {
+            pre_grant,
+            state: state.map(Cow::into_owned),
+            extensions: self.extensions.clone().expect("Should have extensions by now"),
+        })
+    }
+
+    fn take(&mut self) -> AuthorizationState<'req> {
+        std::mem::replace(&mut self.state, AuthorizationState::Err(Error::PrimitiveError))
+    }
+
+    fn validate(request: &'req dyn Request) -> Result<AuthorizationState<'req>> {
+        if !request.valid() {
+            return Err(Error::Ignore);
+        };
+
+        // Check preconditions
+        let client_id = request.client_id().ok_or(Error::Ignore)?;
+        let redirect_uri = match request.redirect_uri() {
+            None => None,
+            Some(ref uri) => {
+                let parsed = Url::parse(&uri).map_err(|_| Error::Ignore)?;
+                Some(Cow::Owned(parsed))
+            }
+        };
+
+        Ok(AuthorizationState::Binding {
+            client_url: ClientUrl {
+                client_id,
+                redirect_uri,
+            },
+        })
+    }
+}
+
 /// Retrieve allowed scope and redirect url from the registrar.
 ///
 /// Checks the validity of any given input as the registrar instance communicates the registrated
@@ -79,93 +261,99 @@ pub trait Endpoint {
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
 pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> self::Result<Pending> {
-    if !request.valid() {
-        return Err(Error::Ignore);
+    enum Requested<'a> {
+        None,
+        Bind {
+            client_url: ClientUrl<'a>,
+        },
+        Extend,
+        Negotiate {
+            bound_client: BoundClient<'a>,
+            scope: Option<Scope>,
+        },
     }
 
-    // Check preconditions
-    let client_id = request.client_id().ok_or(Error::Ignore)?;
-    let redirect_uri = match request.redirect_uri() {
-        None => None,
-        Some(ref uri) => {
-            let parsed = Url::parse(&uri).map_err(|_| Error::Ignore)?;
-            Some(Cow::Owned(parsed))
-        }
-    };
+    let mut authorization = Authorization::new(request);
+    let mut requested = Requested::None;
+    let mut redirect_uri = None;
 
-    let client_url = ClientUrl {
-        client_id,
-        redirect_uri,
-    };
-
-    let bound_client = match handler.registrar().bound_redirect(client_url) {
-        Err(RegistrarError::Unspecified) => return Err(Error::Ignore),
-        Err(RegistrarError::PrimitiveError) => return Err(Error::PrimitiveError),
-        Ok(pre_grant) => pre_grant,
-    };
-
-    let state = request.state();
-
-    // Setup an error with url and state, makes the code flow afterwards easier.
-    let error_uri = bound_client.redirect_uri.clone().into_owned();
-    let mut prepared_error =
-        ErrorUrl::new(error_uri.clone(), state.clone(), AuthorizationError::default());
-
-    match request.response_type() {
-        Some(ref method) if method.as_ref() == "code" => (),
-        _ => {
-            prepared_error
-                .description()
-                .set_type(AuthorizationErrorType::UnsupportedResponseType);
-            return Err(Error::Redirect(prepared_error));
-        }
-    }
-
-    // Extract additional parameters
-    let scope = request.scope();
-    let scope = match scope.map(|scope| scope.as_ref().parse()) {
-        None => None,
-        Some(Err(_)) => {
-            prepared_error
-                .description()
-                .set_type(AuthorizationErrorType::InvalidScope);
-            return Err(Error::Redirect(prepared_error));
-        }
-        Some(Ok(scope)) => Some(scope),
-    };
-
-    let grant_extension = match handler.extension().extend(request) {
-        Ok(extension_data) => extension_data,
-        Err(()) => {
-            prepared_error
-                .description()
-                .set_type(AuthorizationErrorType::InvalidRequest);
-            return Err(Error::Redirect(prepared_error));
-        }
-    };
-
-    let pre_grant = handler
-        .registrar()
-        .negotiate(bound_client, scope)
-        .map_err(|err| match err {
-            RegistrarError::PrimitiveError => Error::PrimitiveError,
-            RegistrarError::Unspecified => {
-                prepared_error
-                    .description()
-                    .set_type(AuthorizationErrorType::InvalidScope);
-                Error::Redirect(prepared_error)
+    loop {
+        let input = match requested {
+            Requested::None => Input::None,
+            Requested::Bind { client_url } => {
+                let bound_client = match handler.registrar().bound_redirect(client_url) {
+                    Err(RegistrarError::Unspecified) => return Err(Error::Ignore),
+                    Err(RegistrarError::PrimitiveError) => return Err(Error::PrimitiveError),
+                    Ok(pre_grant) => pre_grant,
+                };
+                redirect_uri = Some(bound_client.redirect_uri.clone().into_owned());
+                Input::Bound {
+                    request,
+                    bound_client,
+                }
             }
-        })?;
+            Requested::Extend => {
+                let grant_extension = match handler.extension().extend(request) {
+                    Ok(extension_data) => extension_data,
+                    Err(()) => {
+                        let prepared_error = get_prepared_error(
+                            request,
+                            &redirect_uri.unwrap(),
+                            AuthorizationErrorType::InvalidRequest,
+                        );
+                        return Err(Error::Redirect(prepared_error));
+                    }
+                };
+                Input::Extended(grant_extension)
+            }
+            Requested::Negotiate { bound_client, scope } => {
+                let redirect_uri = bound_client.redirect_uri.clone();
+                let pre_grant = handler
+                    .registrar()
+                    .negotiate(bound_client, scope)
+                    .map_err(|err| match err {
+                        RegistrarError::PrimitiveError => Error::PrimitiveError,
+                        RegistrarError::Unspecified => {
+                            let prepared_error = get_prepared_error(
+                                request,
+                                &redirect_uri,
+                                AuthorizationErrorType::InvalidScope,
+                            );
+                            Error::Redirect(prepared_error)
+                        }
+                    })?;
+                Input::Negotiated {
+                    pre_grant,
+                    state: request.state(),
+                }
+            }
+        };
 
-    Ok(Pending {
-        pre_grant,
-        state: state.map(Cow::into_owned),
-        extensions: grant_extension,
-    })
+        requested = match authorization.advance(input) {
+            Output::Bind { client_url } => Requested::Bind { client_url },
+            Output::Extend => Requested::Extend,
+            Output::Negotiate { bound_client, scope } => Requested::Negotiate { bound_client, scope },
+            Output::Ok(pending) => return Ok(pending),
+            Output::Err(e) => return Err(e),
+        };
+    }
+}
+
+fn get_prepared_error(
+    request: &dyn Request, redirect_uri: &Url, err_type: AuthorizationErrorType,
+) -> ErrorUrl {
+    let mut err = ErrorUrl::new(
+        redirect_uri.clone(),
+        request.state().clone(),
+        AuthorizationError::default(),
+    );
+    err.description().set_type(err_type);
+    err
 }
 
 /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
 /// can signal a reponse using this object.
+#[derive(Clone)]
 pub struct Pending {
     pre_grant: PreGrant,
     state: Option<String>,
@@ -219,6 +407,7 @@ impl Pending {
 /// Not all errors are signalled to the requesting party, especially when impersonation is possible
 /// it is integral for security to resolve the error internally instead of redirecting the user
 /// agent to a possibly crafted and malicious target.
+#[derive(Clone)]
 pub enum Error {
     /// Ignore the request entirely
     Ignore,
@@ -236,6 +425,7 @@ pub enum Error {
 /// makes it possible to alter the contained error, for example to provide additional optional
 /// information. The error type should not be altered by the frontend but the specificalities
 /// of this should be enforced by the frontend instead.
+#[derive(Clone)]
 pub struct ErrorUrl {
     base_uri: Url,
     error: AuthorizationError,
