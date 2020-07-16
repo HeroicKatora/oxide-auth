@@ -259,32 +259,41 @@ impl<'req> Authorization<'req> {
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
 pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> self::Result<Pending> {
-    enum Requested<'a> {
+    enum Requested {
         None,
         Bind {
-            client_url: ClientUrl<'a>,
+            client_id: String,
+            redirect_uri: Option<Url>,
         },
         Extend,
         Negotiate {
-            bound_client: BoundClient<'a>,
+            client_id: String,
+            redirect_uri: Url,
             scope: Option<Scope>,
         },
     }
 
     let mut authorization = Authorization::new(request);
     let mut requested = Requested::None;
-    let mut redirect_uri = None;
+    let mut the_redirect_uri = None;
 
     loop {
         let input = match requested {
             Requested::None => Input::None,
-            Requested::Bind { client_url } => {
+            Requested::Bind {
+                client_id,
+                redirect_uri,
+            } => {
+                let client_url = ClientUrl {
+                    client_id: Cow::Owned(client_id),
+                    redirect_uri: redirect_uri.map(|uri| Cow::Owned(uri)),
+                };
                 let bound_client = match handler.registrar().bound_redirect(client_url) {
                     Err(RegistrarError::Unspecified) => return Err(Error::Ignore),
                     Err(RegistrarError::PrimitiveError) => return Err(Error::PrimitiveError),
                     Ok(pre_grant) => pre_grant,
                 };
-                redirect_uri = Some(bound_client.redirect_uri.clone().into_owned());
+                the_redirect_uri = Some(bound_client.redirect_uri.clone().into_owned());
                 Input::Bound {
                     request,
                     bound_client,
@@ -296,7 +305,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                     Err(()) => {
                         let prepared_error = get_prepared_error(
                             request,
-                            &redirect_uri.unwrap(),
+                            &the_redirect_uri.unwrap(),
                             AuthorizationErrorType::InvalidRequest,
                         );
                         return Err(Error::Redirect(prepared_error));
@@ -304,8 +313,15 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                 };
                 Input::Extended(grant_extension)
             }
-            Requested::Negotiate { bound_client, scope } => {
-                let redirect_uri = bound_client.redirect_uri.clone();
+            Requested::Negotiate {
+                client_id,
+                redirect_uri,
+                scope,
+            } => {
+                let bound_client = BoundClient {
+                    client_id: Cow::Owned(client_id),
+                    redirect_uri: Cow::Owned(redirect_uri.clone()),
+                };
                 let pre_grant = handler
                     .registrar()
                     .negotiate(bound_client, scope)
@@ -332,13 +348,15 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                 client_id,
                 redirect_uri,
             } => Requested::Bind {
-                client_url: ClientUrl {
-                    client_id: Cow::Owned(client_id),
-                    redirect_uri: redirect_uri.map(|uri| Cow::Owned(uri)),
-                },
+                client_id,
+                redirect_uri,
             },
             Output::Extend => Requested::Extend,
-            Output::Negotiate { bound_client, scope } => Requested::Negotiate { bound_client, scope },
+            Output::Negotiate { bound_client, scope } => Requested::Negotiate {
+                client_id: bound_client.client_id.into_owned(),
+                redirect_uri: bound_client.redirect_uri.into_owned(),
+                scope,
+            },
             Output::Ok(pending) => return Ok(pending),
             Output::Err(e) => return Err(e),
         };
