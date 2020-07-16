@@ -72,22 +72,20 @@ pub trait Endpoint {
 
 /// The result will indicate wether the authorization succeed or not.
 pub struct Authorization<'req> {
-    state: AuthorizationState<'req>,
+    state: AuthorizationState,
     bound_client: Option<BoundClient<'req>>,
     extensions: Option<Extensions>,
     scope: Option<Scope>,
 }
 
-enum AuthorizationState<'req> {
+enum AuthorizationState {
     /// State after request is validated
     Binding {
-        client_url: ClientUrl<'req>,
+        client_id: String,
+        redirect_uri: Option<Url>,
     },
     Extending,
-    Negotiating {
-        bound_client: BoundClient<'req>,
-        scope: Option<Scope>,
-    },
+    Negotiating,
     Pending(Pending),
     Err(Error),
 }
@@ -100,7 +98,7 @@ pub enum Input<'machine> {
     Extended(Extensions),
     Negotiated {
         pre_grant: PreGrant,
-        state: Option<Cow<'machine, str>>,
+        state: Option<String>,
     },
     Finished,
     None,
@@ -108,7 +106,8 @@ pub enum Input<'machine> {
 
 pub enum Output<'machine> {
     Bind {
-        client_url: ClientUrl<'machine>,
+        client_id: String,
+        redirect_uri: Option<Url>,
     },
     Extend,
     Negotiate {
@@ -120,7 +119,7 @@ pub enum Output<'machine> {
 }
 
 impl<'req> Authorization<'req> {
-    pub fn new(request: &'req dyn Request) -> Self {
+    pub fn new(request: &dyn Request) -> Self {
         Authorization {
             state: Self::validate(request).unwrap_or_else(AuthorizationState::Err),
             bound_client: None,
@@ -144,7 +143,7 @@ impl<'req> Authorization<'req> {
             (AuthorizationState::Extending, Input::Extended(grant_extension)) => {
                 self.extended(grant_extension)
             }
-            (AuthorizationState::Negotiating { .. }, Input::Negotiated { pre_grant, state }) => {
+            (AuthorizationState::Negotiating, Input::Negotiated { pre_grant, state }) => {
                 self.negotiated(state, pre_grant)
             }
             (AuthorizationState::Err(err), _) => AuthorizationState::Err(err),
@@ -157,13 +156,17 @@ impl<'req> Authorization<'req> {
     fn output(&self) -> Output<'_> {
         match &self.state {
             AuthorizationState::Err(err) => Output::Err(err.clone()),
-            AuthorizationState::Binding { client_url } => Output::Bind {
-                client_url: client_url.clone(),
+            AuthorizationState::Binding {
+                client_id,
+                redirect_uri,
+            } => Output::Bind {
+                client_id: client_id.to_string(),
+                redirect_uri: (*redirect_uri).clone(),
             },
             AuthorizationState::Extending => Output::Extend,
-            AuthorizationState::Negotiating { bound_client, scope } => Output::Negotiate {
-                bound_client: (*bound_client).clone(),
-                scope: (*scope).clone(),
+            AuthorizationState::Negotiating => Output::Negotiate {
+                bound_client: self.bound_client.clone().unwrap(),
+                scope: self.scope.clone(),
             },
             AuthorizationState::Pending(pending) => Output::Ok((*pending).clone()),
         }
@@ -171,7 +174,7 @@ impl<'req> Authorization<'req> {
 
     fn bound(
         &mut self, request: &dyn Request, bound_client: BoundClient<'req>,
-    ) -> Result<AuthorizationState<'req>> {
+    ) -> Result<AuthorizationState> {
         // It's done here rather than in `validate` because we need bound_client to be sure
         // `redirect_uri` has a value
         match request.response_type() {
@@ -207,34 +210,31 @@ impl<'req> Authorization<'req> {
         Ok(AuthorizationState::Extending)
     }
 
-    fn extended(&mut self, grant_extension: Extensions) -> AuthorizationState<'req> {
+    fn extended(&mut self, grant_extension: Extensions) -> AuthorizationState {
         self.extensions = Some(grant_extension);
-        AuthorizationState::Negotiating {
-            bound_client: self.bound_client.clone().unwrap(),
-            scope: self.scope.clone(),
-        }
+        AuthorizationState::Negotiating
     }
 
-    fn negotiated(&mut self, state: Option<Cow<str>>, pre_grant: PreGrant) -> AuthorizationState<'req> {
+    fn negotiated(&mut self, state: Option<String>, pre_grant: PreGrant) -> AuthorizationState {
         AuthorizationState::Pending(Pending {
             pre_grant,
-            state: state.map(Cow::into_owned),
+            state,
             extensions: self.extensions.clone().expect("Should have extensions by now"),
         })
     }
 
-    fn take(&mut self) -> AuthorizationState<'req> {
+    fn take(&mut self) -> AuthorizationState {
         std::mem::replace(&mut self.state, AuthorizationState::Err(Error::PrimitiveError))
     }
 
-    fn validate(request: &'req dyn Request) -> Result<AuthorizationState<'req>> {
+    fn validate(request: &dyn Request) -> Result<AuthorizationState> {
         if !request.valid() {
             return Err(Error::Ignore);
         };
 
         // Check preconditions
         let client_id = request.client_id().ok_or(Error::Ignore)?;
-        let redirect_uri = match request.redirect_uri() {
+        let redirect_uri: Option<Cow<Url>> = match request.redirect_uri() {
             None => None,
             Some(ref uri) => {
                 let parsed = Url::parse(&uri).map_err(|_| Error::Ignore)?;
@@ -243,10 +243,8 @@ impl<'req> Authorization<'req> {
         };
 
         Ok(AuthorizationState::Binding {
-            client_url: ClientUrl {
-                client_id,
-                redirect_uri,
-            },
+            client_id: client_id.into_owned(),
+            redirect_uri: redirect_uri.map(|uri| uri.into_owned()),
         })
     }
 }
@@ -324,13 +322,21 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                     })?;
                 Input::Negotiated {
                     pre_grant,
-                    state: request.state(),
+                    state: request.state().map(|s| s.into_owned()),
                 }
             }
         };
 
         requested = match authorization.advance(input) {
-            Output::Bind { client_url } => Requested::Bind { client_url },
+            Output::Bind {
+                client_id,
+                redirect_uri,
+            } => Requested::Bind {
+                client_url: ClientUrl {
+                    client_id: Cow::Owned(client_id),
+                    redirect_uri: redirect_uri.map(|uri| Cow::Owned(uri)),
+                },
+            },
             Output::Extend => Requested::Extend,
             Output::Negotiate { bound_client, scope } => Requested::Negotiate { bound_client, scope },
             Output::Ok(pending) => return Ok(pending),
