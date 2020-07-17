@@ -11,10 +11,10 @@ edition = "2018"
 async-trait = "0.1.21"
 oxide-auth = { path = "../oxide-auth" }
 base64 = "0.9"
-
-[dev-dependencies]
 url = "1.7"
 chrono = "0.4.2"
+
+[dev-dependencies]
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
