@@ -42,6 +42,9 @@ impl<'a> Endpoint<CraftedRequest> for ResourceEndpoint<'a> {
     fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
         Some(&mut self.scopes)
     }
+    fn owner_solicitor(&mut self) -> Option<&mut dyn crate::endpoint::OwnerSolicitor<CraftedRequest>> {
+        None
+    }
 }
 
 impl<'a> ResourceEndpoint<'a> {

@@ -3,8 +3,10 @@ use oxide_auth::endpoint::{OAuthError, Template, WebRequest, OwnerConsent, PreGr
 
 // pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
 pub use crate::code_grant::access_token::Extension as AccessTokenExtension;
+pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
 use crate::primitives::{Authorizer, Registrar, Issuer};
 
+pub mod authorization;
 pub mod access_token;
 pub mod refresh;
 pub mod resource;
@@ -35,7 +37,7 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// Returning `None` will implicated failing the authorization code flow but does have any
     /// effect on other flows.
-    // fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<Request>>;
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<Request>>;
 
     /// Determine the required scopes for a request.
     ///
@@ -66,11 +68,10 @@ pub trait Endpoint<Request: WebRequest> {
 }
 
 pub trait Extension {
-    // FIXME
-    // /// The handler for authorization code extensions.
-    // fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
-    //     None
-    // }
+    /// The handler for authorization code extensions.
+    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
+        None
+    }
 
     /// The handler for access token extensions.
     fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {

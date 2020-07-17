@@ -195,17 +195,14 @@ pub mod access_token {
                     })?;
                     Input::Recovered(opt_grant)
                 }
-                Requested::Extend {
-                    grant: _,
-                    mut extensions,
-                } => {
-                    let mut access_extensions = handler
+                Requested::Extend { grant: _, extensions } => {
+                    let access_extensions = handler
                         .extension()
                         .extend(request, extensions.clone())
                         .await
                         .map_err(|_| Error::invalid())?;
-                    extensions = &mut access_extensions;
-                    Input::Done
+
+                    Input::Extended { access_extensions }
                 }
                 Requested::Issue { grant } => {
                     let token = handler.issuer().issue(grant.clone()).await.map_err(|_| {
@@ -227,6 +224,241 @@ pub mod access_token {
                 Output::Extend { grant, extensions } => Requested::Extend { grant, extensions },
                 Output::Issue { grant } => Requested::Issue { grant },
                 Output::Ok(token) => return Ok(token),
+                Output::Err(e) => return Err(e),
+            };
+        }
+    }
+}
+
+pub mod authorization {
+    use async_trait::async_trait;
+    use oxide_auth::{
+        primitives::{
+            prelude::ClientUrl,
+            grant::{Grant, Extensions},
+            registrar::{BoundClient, RegistrarError},
+        },
+        code_grant::{
+            error::{AuthorizationError, AuthorizationErrorType},
+            authorization::{
+                Request, Authorization, Input, Error, get_prepared_error, Output, ErrorUrl,
+            },
+        },
+        endpoint::{PreGrant, Scope},
+    };
+    use url::Url;
+    use chrono::{Duration, Utc};
+    use std::borrow::Cow;
+
+    /// A system of addons provided additional data.
+    ///
+    /// An endpoint not having any extension may use `&mut ()` as the result of system.
+    #[async_trait(?Send)]
+    pub trait Extension {
+        /// Inspect the request to produce extension data.
+        async fn extend(&mut self, request: &dyn Request) -> std::result::Result<Extensions, ()>;
+    }
+
+    #[async_trait(?Send)]
+    impl Extension for () {
+        async fn extend(&mut self, _: &dyn Request) -> std::result::Result<Extensions, ()> {
+            Ok(Extensions::new())
+        }
+    }
+
+    /// Required functionality to respond to authorization code requests.
+    ///
+    /// Each method will only be invoked exactly once when processing a correct and authorized request,
+    /// and potentially less than once when the request is faulty.  These methods should be implemented
+    /// by internally using `primitives`, as it is implemented in the `frontend` module.
+    pub trait Endpoint {
+        /// 'Bind' a client and redirect uri from a request to internally approved parameters.
+        fn registrar(&self) -> &dyn crate::primitives::Registrar;
+
+        /// Generate an authorization code for a given grant.
+        fn authorizer(&mut self) -> &mut dyn crate::primitives::Authorizer;
+
+        /// An extension implementation of this endpoint.
+        ///
+        /// It is possible to use `&mut ()`.
+        fn extension(&mut self) -> &mut dyn Extension;
+    }
+
+    /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
+    /// can signal a reponse using this object.
+    #[derive(Clone)]
+    pub struct Pending {
+        pre_grant: PreGrant,
+        state: Option<String>,
+        extensions: Extensions,
+    }
+
+    impl Pending {
+        /// Denies the request, which redirects to the client for which the request originated.
+        pub fn deny(self) -> Result<Url, Error> {
+            let url = self.pre_grant.redirect_uri;
+            let mut error = AuthorizationError::default();
+            error.set_type(AuthorizationErrorType::AccessDenied);
+            let error = ErrorUrl::new(url, self.state, error);
+            Err(Error::Redirect(error))
+        }
+
+        /// Inform the backend about consent from a resource owner.
+        ///
+        /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
+        /// same endpoint as was used to create the pending request.
+        pub async fn authorize<'a>(
+            self, handler: &mut dyn Endpoint, owner_id: Cow<'a, str>,
+        ) -> Result<Url, Error> {
+            let mut url = self.pre_grant.redirect_uri.clone();
+
+            let grant = handler
+                .authorizer()
+                .authorize(Grant {
+                    owner_id: owner_id.into_owned(),
+                    client_id: self.pre_grant.client_id,
+                    redirect_uri: self.pre_grant.redirect_uri,
+                    scope: self.pre_grant.scope,
+                    until: Utc::now() + Duration::minutes(10),
+                    extensions: self.extensions,
+                })
+                .await
+                .map_err(|()| Error::PrimitiveError)?;
+
+            url.query_pairs_mut()
+                .append_pair("code", grant.as_str())
+                .extend_pairs(self.state.map(|v| ("state", v)))
+                .finish();
+            Ok(url)
+        }
+
+        /// Retrieve a reference to the negotiated parameters (e.g. scope). These should be displayed
+        /// to the resource owner when asking for his authorization.
+        pub fn pre_grant(&self) -> &PreGrant {
+            &self.pre_grant
+        }
+    }
+
+    /// Retrieve allowed scope and redirect url from the registrar.
+    ///
+    /// Checks the validity of any given input as the registrar instance communicates the registrated
+    /// parameters. The registrar can also set or override the requested (default) scope of the client.
+    /// This will result in a tuple of negotiated parameters which can be used further to authorize
+    /// the client by the owner or, in case of errors, in an action to be taken.
+    /// If the client is not registered, the request will otherwise be ignored, if the request has
+    /// some other syntactical error, the client is contacted at its redirect url with an error
+    /// response.
+    pub async fn authorization_code(
+        handler: &mut dyn Endpoint, request: &dyn Request,
+    ) -> Result<Pending, Error> {
+        enum Requested {
+            None,
+            Bind {
+                client_id: String,
+                redirect_uri: Option<Url>,
+            },
+            Extend,
+            Negotiate {
+                client_id: String,
+                redirect_uri: Url,
+                scope: Option<Scope>,
+            },
+        }
+
+        let mut authorization = Authorization::new(request);
+        let mut requested = Requested::None;
+        let mut the_redirect_uri = None;
+
+        loop {
+            let input = match requested {
+                Requested::None => Input::None,
+                Requested::Bind {
+                    client_id,
+                    redirect_uri,
+                } => {
+                    let client_url = ClientUrl {
+                        client_id: Cow::Owned(client_id),
+                        redirect_uri: redirect_uri.map(|uri| Cow::Owned(uri)),
+                    };
+                    let bound_client = match handler.registrar().bound_redirect(client_url).await {
+                        Err(RegistrarError::Unspecified) => return Err(Error::Ignore),
+                        Err(RegistrarError::PrimitiveError) => return Err(Error::PrimitiveError),
+                        Ok(pre_grant) => pre_grant,
+                    };
+                    the_redirect_uri = Some(bound_client.redirect_uri.clone().into_owned());
+                    Input::Bound {
+                        request,
+                        bound_client,
+                    }
+                }
+                Requested::Extend => {
+                    let grant_extension = match handler.extension().extend(request).await {
+                        Ok(extension_data) => extension_data,
+                        Err(()) => {
+                            let prepared_error = get_prepared_error(
+                                request,
+                                &the_redirect_uri.unwrap(),
+                                AuthorizationErrorType::InvalidRequest,
+                            );
+                            return Err(Error::Redirect(prepared_error));
+                        }
+                    };
+                    Input::Extended(grant_extension)
+                }
+                Requested::Negotiate {
+                    client_id,
+                    redirect_uri,
+                    scope,
+                } => {
+                    let bound_client = BoundClient {
+                        client_id: Cow::Owned(client_id),
+                        redirect_uri: Cow::Owned(redirect_uri.clone()),
+                    };
+                    let pre_grant = handler.registrar().negotiate(bound_client, scope).await.map_err(
+                        |err| match err {
+                            RegistrarError::PrimitiveError => Error::PrimitiveError,
+                            RegistrarError::Unspecified => {
+                                let prepared_error = get_prepared_error(
+                                    request,
+                                    &redirect_uri,
+                                    AuthorizationErrorType::InvalidScope,
+                                );
+                                Error::Redirect(prepared_error)
+                            }
+                        },
+                    )?;
+                    Input::Negotiated {
+                        pre_grant,
+                        state: request.state().map(|s| s.into_owned()),
+                    }
+                }
+            };
+
+            requested = match authorization.advance(input) {
+                Output::Bind {
+                    client_id,
+                    redirect_uri,
+                } => Requested::Bind {
+                    client_id,
+                    redirect_uri,
+                },
+                Output::Extend => Requested::Extend,
+                Output::Negotiate { bound_client, scope } => Requested::Negotiate {
+                    client_id: bound_client.client_id.into_owned(),
+                    redirect_uri: bound_client.redirect_uri.into_owned(),
+                    scope,
+                },
+                Output::Ok {
+                    pre_grant,
+                    state,
+                    extensions,
+                } => {
+                    return Ok(Pending {
+                        pre_grant,
+                        state,
+                        extensions,
+                    })
+                }
                 Output::Err(e) => return Err(e),
             };
         }
