@@ -86,10 +86,15 @@ enum AuthorizationState {
     },
     Extending,
     Negotiating,
-    Pending(Pending),
+    Pending {
+        pre_grant: PreGrant,
+        state: Option<String>,
+        extensions: Extensions,
+    },
     Err(Error),
 }
 
+/// Input data for the state machine
 pub enum Input<'machine> {
     Bound {
         request: &'machine dyn Request,
@@ -104,6 +109,7 @@ pub enum Input<'machine> {
     None,
 }
 
+/// State machine result at each state
 pub enum Output<'machine> {
     Bind {
         client_id: String,
@@ -114,7 +120,11 @@ pub enum Output<'machine> {
         bound_client: BoundClient<'machine>,
         scope: Option<Scope>,
     },
-    Ok(Pending),
+    Ok {
+        pre_grant: PreGrant,
+        state: Option<String>,
+        extensions: Extensions,
+    },
     Err(Error),
 }
 
@@ -168,7 +178,15 @@ impl<'req> Authorization<'req> {
                 bound_client: self.bound_client.clone().unwrap(),
                 scope: self.scope.clone(),
             },
-            AuthorizationState::Pending(pending) => Output::Ok((*pending).clone()),
+            AuthorizationState::Pending {
+                pre_grant,
+                state,
+                extensions,
+            } => Output::Ok {
+                pre_grant: pre_grant.clone(),
+                state: state.clone(),
+                extensions: extensions.clone(),
+            },
         }
     }
 
@@ -216,11 +234,11 @@ impl<'req> Authorization<'req> {
     }
 
     fn negotiated(&mut self, state: Option<String>, pre_grant: PreGrant) -> AuthorizationState {
-        AuthorizationState::Pending(Pending {
+        AuthorizationState::Pending {
             pre_grant,
             state,
             extensions: self.extensions.clone().expect("Should have extensions by now"),
-        })
+        }
     }
 
     fn take(&mut self) -> AuthorizationState {
@@ -357,13 +375,23 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                 redirect_uri: bound_client.redirect_uri.into_owned(),
                 scope,
             },
-            Output::Ok(pending) => return Ok(pending),
+            Output::Ok {
+                pre_grant,
+                state,
+                extensions,
+            } => {
+                return Ok(Pending {
+                    pre_grant,
+                    state,
+                    extensions,
+                })
+            }
             Output::Err(e) => return Err(e),
         };
     }
 }
 
-fn get_prepared_error(
+pub fn get_prepared_error(
     request: &dyn Request, redirect_uri: &Url, err_type: AuthorizationErrorType,
 ) -> ErrorUrl {
     let mut err = ErrorUrl::new(
@@ -459,7 +487,7 @@ type Result<T> = StdResult<T, Error>;
 
 impl ErrorUrl {
     /// Construct a new error, already fixing the state parameter if it exists.
-    fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl
+    pub fn new<S>(mut url: Url, state: Option<S>, error: AuthorizationError) -> ErrorUrl
     where
         S: AsRef<str>,
     {
