@@ -168,7 +168,7 @@ pub enum Input<'req> {
     Request(&'req dyn Request),
     Authenticated,
     Recovered(Option<Grant>),
-    Done,
+    Extended { access_extensions: Extensions },
     Issued(IssuedToken),
     None,
 }
@@ -217,13 +217,9 @@ impl AccessToken {
                 },
                 Input::Recovered(grant),
             ) => Self::recovered(client, redirect_uri, grant).unwrap_or_else(AccessTokenState::Err),
-            (
-                AccessTokenState::Extend {
-                    saved_params,
-                    extensions,
-                },
-                Input::Done,
-            ) => Self::issue(saved_params, extensions),
+            (AccessTokenState::Extend { saved_params, .. }, Input::Extended { access_extensions }) => {
+                Self::issue(saved_params, access_extensions)
+            }
             (AccessTokenState::Issue { grant }, Input::Issued(token)) => {
                 return Output::Ok(Self::finish(grant, token));
             }
@@ -397,18 +393,12 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
                 })?;
                 Input::Recovered(opt_grant)
             }
-            Requested::Extend {
-                grant: _,
-                mut extensions,
-            } => {
-                let mut access_extensions = handler
+            Requested::Extend { grant: _, extensions } => {
+                let access_extensions = handler
                     .extension()
                     .extend(request, extensions.clone())
                     .map_err(|_| Error::invalid())?;
-                // FIXME: it that right? access_extensions seems to be lost but tests are passing
-                // and clippy is complaining
-                extensions = &mut access_extensions;
-                Input::Done
+                Input::Extended { access_extensions }
             }
             Requested::Issue { grant } => {
                 let token = handler.issuer().issue(grant.clone()).map_err(|_| {
