@@ -323,7 +323,7 @@ impl<'req> Refresh<'req> {
 }
 
 impl Input {
-    #[allow(missing_docs)]
+    /// Take the current value of Input and replace it with `Input::None`
     pub fn take(&mut self) -> Self {
         core::mem::replace(self, Input::None)
     }
