@@ -3,7 +3,7 @@ use std::mem;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use serde_json;
 
 use code_grant::error::{AccessTokenError, AccessTokenErrorType};
@@ -140,7 +140,7 @@ pub enum Input<'req> {
     Request(&'req dyn Request),
     Authenticated,
     Recovered(Option<Grant>),
-    Done,
+    Extended { access_extensions: Extensions },
     Issued(IssuedToken),
     None,
 }
@@ -189,13 +189,9 @@ impl AccessToken {
                 },
                 Input::Recovered(grant),
             ) => Self::recovered(client, redirect_uri, grant).unwrap_or_else(AccessTokenState::Err),
-            (
-                AccessTokenState::Extend {
-                    saved_params,
-                    extensions,
-                },
-                Input::Done,
-            ) => Self::issue(saved_params, extensions),
+            (AccessTokenState::Extend { saved_params, .. }, Input::Extended { access_extensions }) => {
+                Self::issue(saved_params, access_extensions)
+            }
             (AccessTokenState::Issue { grant }, Input::Issued(token)) => {
                 return Output::Ok(Self::finish(grant, token));
             }
@@ -275,7 +271,7 @@ impl AccessToken {
         Ok(AccessTokenState::Authenticate {
             client: client_id.to_string(),
             passdata: passdata.map(Vec::from),
-            redirect_uri: redirect_uri,
+            redirect_uri,
             code: code.into_owned(),
         })
     }
@@ -322,104 +318,81 @@ impl AccessToken {
     }
 }
 
+// FiXME: use state machine instead
 /// Try to redeem an authorization code.
 pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
-    if !request.valid() {
-        return Err(Error::invalid());
+    enum Requested<'a> {
+        None,
+        Authenticate {
+            client: &'a str,
+            passdata: Option<&'a [u8]>,
+        },
+        Recover(&'a str),
+        Extend {
+            grant: &'a Grant,
+            extensions: &'a mut Extensions,
+        },
+        Issue {
+            grant: &'a Grant,
+        },
     }
 
-    let authorization = request.authorization();
-    let client_id = request.client_id();
-    let client_secret = request.extension("client_secret");
+    let mut access_token = AccessToken::new(request);
+    let mut requested = Requested::None;
 
-    let mut credentials = Credentials::None;
-    if let Some((client_id, auth)) = &authorization {
-        credentials.authenticate(client_id.as_ref(), auth.as_ref());
-    }
-
-    if let Some(client_id) = &client_id {
-        match &client_secret {
-            Some(auth) if request.allow_credentials_in_body() => {
-                credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes())
+    loop {
+        let input = match requested {
+            Requested::None => Input::None,
+            Requested::Authenticate { client, passdata } => {
+                handler
+                    .registrar()
+                    .check(client, passdata)
+                    .map_err(|err| match err {
+                        RegistrarError::Unspecified => Error::unauthorized("basic"),
+                        RegistrarError::PrimitiveError => Error::Primitive(PrimitiveError {
+                            grant: None,
+                            extensions: None,
+                        }),
+                    })?;
+                Input::Authenticated
             }
-            // Ignore parameter if not allowed.
-            Some(_) | None => credentials.unauthenticated(client_id.as_ref()),
-        }
+            Requested::Recover(code) => {
+                let opt_grant = handler.authorizer().extract(code).map_err(|_| {
+                    Error::Primitive(PrimitiveError {
+                        grant: None,
+                        extensions: None,
+                    })
+                })?;
+                Input::Recovered(opt_grant)
+            }
+            Requested::Extend { grant: _, extensions } => {
+                let access_extensions = handler
+                    .extension()
+                    .extend(request, extensions.clone())
+                    .map_err(|_| Error::invalid())?;
+                Input::Extended { access_extensions }
+            }
+            Requested::Issue { grant } => {
+                let token = handler.issuer().issue(grant.clone()).map_err(|_| {
+                    Error::Primitive(PrimitiveError {
+                        // FIXME: endpoint should get and handle these.
+                        grant: None,
+                        extensions: None,
+                    })
+                })?;
+                Input::Issued(token)
+            }
+        };
+
+        requested = match access_token.advance(input) {
+            Output::Authenticate { client, passdata } => Requested::Authenticate { client, passdata },
+            Output::Recover { code } => Requested::Recover(code),
+            Output::Extend { grant, extensions } => Requested::Extend { grant, extensions },
+            Output::Issue { grant } => Requested::Issue { grant },
+            Output::Ok(token) => return Ok(token),
+            Output::Err(e) => return Err(e),
+        };
     }
-
-    match request.grant_type() {
-        Some(ref cow) if cow == "authorization_code" => (),
-        None => return Err(Error::invalid()),
-        Some(_) => return Err(Error::invalid_with(AccessTokenErrorType::UnsupportedGrantType)),
-    };
-
-    let (client_id, auth) = credentials.into_client().ok_or_else(Error::invalid)?;
-
-    handler
-        .registrar()
-        .check(&client_id, auth)
-        .map_err(|err| match err {
-            RegistrarError::Unspecified => Error::unauthorized("basic"),
-            RegistrarError::PrimitiveError => Error::Primitive(PrimitiveError {
-                grant: None,
-                extensions: None,
-            }),
-        })?;
-
-    let code = request.code().ok_or_else(Error::invalid)?;
-    let code = code.as_ref();
-
-    let saved_params = match handler.authorizer().extract(code) {
-        Err(()) => {
-            return Err(Error::Primitive(PrimitiveError {
-                grant: None,
-                extensions: None,
-            }))
-        }
-        Ok(None) => return Err(Error::invalid()),
-        Ok(Some(v)) => v,
-    };
-
-    let redirect_uri = request.redirect_uri().ok_or_else(Error::invalid)?;
-    let redirect_uri = redirect_uri.as_ref().parse().map_err(|_| Error::invalid())?;
-
-    if (saved_params.client_id.as_ref(), &saved_params.redirect_uri) != (client_id, &redirect_uri) {
-        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
-    }
-
-    if saved_params.until < Utc::now() {
-        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
-    }
-
-    let code_extensions = saved_params.extensions;
-    let access_extensions = handler.extension().extend(request, code_extensions);
-    let access_extensions = match access_extensions {
-        Ok(extensions) => extensions,
-        Err(_) => return Err(Error::invalid()),
-    };
-
-    let token = handler
-        .issuer()
-        .issue(Grant {
-            client_id: saved_params.client_id,
-            owner_id: saved_params.owner_id,
-            redirect_uri: saved_params.redirect_uri,
-            scope: saved_params.scope.clone(),
-            until: Utc::now() + Duration::hours(1),
-            extensions: access_extensions,
-        })
-        .map_err(|()| {
-            Error::Primitive(PrimitiveError {
-                // FIXME: endpoint should get and handle these.
-                grant: None,
-                extensions: None,
-            })
-        })?;
-
-    Ok(BearerToken {
-        0: token,
-        1: saved_params.scope.to_string(),
-    })
 }
 
 impl<'a> Credentials<'a> {

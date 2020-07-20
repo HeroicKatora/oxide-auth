@@ -75,6 +75,9 @@ impl<'a> Endpoint<CraftedRequest> for AccessTokenEndpoint<'a> {
     fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
         None
     }
+    fn owner_solicitor(&mut self) -> Option<&mut dyn crate::endpoint::OwnerSolicitor<CraftedRequest>> {
+        None
+    }
 }
 
 impl AccessTokenSetup {

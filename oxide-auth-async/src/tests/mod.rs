@@ -211,7 +211,7 @@ pub mod defaults {
     pub const EXAMPLE_SCOPE: &str = "example default";
 }
 
-// mod authorization;
+mod authorization;
 mod access_token;
 mod resource;
 mod refresh;

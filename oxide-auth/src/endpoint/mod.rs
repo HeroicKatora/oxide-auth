@@ -390,6 +390,11 @@ impl<'a> Template<'a> {
         .into()
     }
 
+    /// Create a redirect template
+    pub fn new_redirect(authorization_error: Option<&'a mut AuthorizationError>) -> Self {
+        InnerTemplate::Redirect { authorization_error }.into()
+    }
+
     /// The corresponding status code.
     pub fn status(&self) -> ResponseStatus {
         match self.inner {
