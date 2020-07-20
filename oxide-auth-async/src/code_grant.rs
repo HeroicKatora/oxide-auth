@@ -240,9 +240,7 @@ pub mod authorization {
         },
         code_grant::{
             error::{AuthorizationError, AuthorizationErrorType},
-            authorization::{
-                Request, Authorization, Input, Error, get_prepared_error, Output, ErrorUrl,
-            },
+            authorization::{Request, Authorization, Input, Error, Output, ErrorUrl},
         },
         endpoint::{PreGrant, Scope},
     };
@@ -299,7 +297,7 @@ pub mod authorization {
             let url = self.pre_grant.redirect_uri;
             let mut error = AuthorizationError::default();
             error.set_type(AuthorizationErrorType::AccessDenied);
-            let error = ErrorUrl::new(url, self.state, error);
+            let error = ErrorUrl::new(url, self.state.as_deref(), error);
             Err(Error::Redirect(error))
         }
 
@@ -395,9 +393,9 @@ pub mod authorization {
                     let grant_extension = match handler.extension().extend(request).await {
                         Ok(extension_data) => extension_data,
                         Err(()) => {
-                            let prepared_error = get_prepared_error(
+                            let prepared_error = ErrorUrl::with_request(
                                 request,
-                                &the_redirect_uri.unwrap(),
+                                the_redirect_uri.unwrap().clone(),
                                 AuthorizationErrorType::InvalidRequest,
                             );
                             return Err(Error::Redirect(prepared_error));
@@ -418,9 +416,9 @@ pub mod authorization {
                         |err| match err {
                             RegistrarError::PrimitiveError => Error::PrimitiveError,
                             RegistrarError::Unspecified => {
-                                let prepared_error = get_prepared_error(
+                                let prepared_error = ErrorUrl::with_request(
                                     request,
-                                    &redirect_uri,
+                                    redirect_uri.clone(),
                                     AuthorizationErrorType::InvalidScope,
                                 );
                                 Error::Redirect(prepared_error)
@@ -444,8 +442,8 @@ pub mod authorization {
                 },
                 Output::Extend => Requested::Extend,
                 Output::Negotiate { bound_client, scope } => Requested::Negotiate {
-                    client_id: bound_client.client_id.into_owned(),
-                    redirect_uri: bound_client.redirect_uri.into_owned(),
+                    client_id: bound_client.client_id.clone().into_owned(),
+                    redirect_uri: bound_client.redirect_uri.clone().into_owned(),
                     scope,
                 },
                 Output::Ok {
