@@ -129,7 +129,7 @@ pub enum Input<'req> {
     Scopes(&'req [Scope]),
     /// Provides simply the original request.
     Request {
-        #[allow(missing_docs)]
+        /// The request
         request: &'req dyn Request,
     },
     /// Advance without input as far as possible, or just retrieve the output again.
@@ -173,14 +173,15 @@ pub enum Output<'machine> {
     Err(Error),
 }
 
-#[allow(missing_docs)]
 impl Resource {
+    /// Create a Resource state machine at `ResourceState::New` state
     pub fn new() -> Self {
         Resource {
             state: ResourceState::New,
         }
     }
 
+    /// Progress the state machine to next step, taking in needed `Input` parameters
     pub fn advance(&mut self, input: Input) -> Output<'_> {
         self.state = match (self.take(), input) {
             (any, Input::None) => any,

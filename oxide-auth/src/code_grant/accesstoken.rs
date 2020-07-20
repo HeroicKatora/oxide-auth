@@ -202,7 +202,7 @@ pub enum Input<'req> {
     Recovered(Option<Grant>),
     /// Provide extensions
     Extended {
-        #[allow(missing_docs)]
+        /// The grant extension
         access_extensions: Extensions,
     },
     /// The token produced by the backend
@@ -246,7 +246,10 @@ pub enum Output<'machine> {
     /// The issue should issue a new access token
     ///
     /// Fullfilled by `Input::Issued`
-    Issue { grant: &'machine Grant },
+    Issue {
+        /// The grant to be used in the token generation
+        grant: &'machine Grant,
+    },
     /// The state machine finished and a new bearer token was generated
     ///
     /// This output **can not** be requested repeatedly, any future `Input` will yield a primitive
