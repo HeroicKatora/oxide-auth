@@ -136,10 +136,12 @@ enum Credentials<'a> {
     Duplicate,
 }
 
+#[allow(missing_docs)]
 pub struct AccessToken {
     state: AccessTokenState,
 }
 
+#[allow(missing_docs)]
 enum AccessTokenState {
     /// State after the request has been validated.
     Authenticate {
@@ -164,6 +166,7 @@ enum AccessTokenState {
     Err(Error),
 }
 
+#[allow(missing_docs)]
 pub enum Input<'req> {
     Request(&'req dyn Request),
     Authenticated,
@@ -173,6 +176,7 @@ pub enum Input<'req> {
     None,
 }
 
+#[allow(missing_docs)]
 pub enum Output<'machine> {
     Authenticate {
         client: &'machine str,
@@ -193,12 +197,14 @@ pub enum Output<'machine> {
 }
 
 impl AccessToken {
+    /// Create the state machine. validating the request in the process
     pub fn new(request: &dyn Request) -> Self {
         AccessToken {
             state: Self::validate(request).unwrap_or_else(AccessTokenState::Err),
         }
     }
 
+    /// Go to next state
     pub fn advance(&mut self, input: Input) -> Output<'_> {
         self.state = match (self.take(), input) {
             (current, Input::None) => current,
@@ -512,6 +518,7 @@ type Result<T> = std::result::Result<T, Error>;
 pub struct BearerToken(IssuedToken, String);
 
 impl Error {
+    /// Create invalid error type
     pub fn invalid() -> Self {
         Error::Invalid(ErrorDescription {
             error: AccessTokenError::default(),
@@ -528,6 +535,7 @@ impl Error {
         })
     }
 
+    /// Create unauthorized error type
     pub fn unauthorized(authtype: &str) -> Error {
         Error::Unauthorized(
             ErrorDescription {

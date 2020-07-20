@@ -128,7 +128,10 @@ pub enum Input<'req> {
     /// Determine the scopes of requested resource.
     Scopes(&'req [Scope]),
     /// Provides simply the original request.
-    Request { request: &'req dyn Request },
+    Request {
+        #[allow(missing_docs)]
+        request: &'req dyn Request,
+    },
     /// Advance without input as far as possible, or just retrieve the output again.
     None,
 }
@@ -170,6 +173,7 @@ pub enum Output<'machine> {
     Err(Error),
 }
 
+#[allow(missing_docs)]
 impl Resource {
     pub fn new() -> Self {
         Resource {
@@ -210,6 +214,7 @@ impl Resource {
     }
 }
 
+/// Do needed verification before granting access to the resource
 pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
     enum Requested {
         None,

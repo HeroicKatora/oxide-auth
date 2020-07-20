@@ -97,7 +97,7 @@ enum AuthorizationState {
     Err(Error),
 }
 
-/// Input data for the state machine
+#[allow(missing_docs)]
 pub enum Input<'machine> {
     Bound {
         request: &'machine dyn Request,
@@ -112,7 +112,7 @@ pub enum Input<'machine> {
     None,
 }
 
-/// State machine result at each state
+#[allow(missing_docs)]
 pub enum Output<'machine> {
     Bind {
         client_id: String,
@@ -132,6 +132,7 @@ pub enum Output<'machine> {
 }
 
 impl Authorization {
+    /// Create state machine and validate request
     pub fn new(request: &dyn Request) -> Self {
         Authorization {
             state: Self::validate(request).unwrap_or_else(AuthorizationState::Err),
@@ -140,6 +141,7 @@ impl Authorization {
         }
     }
 
+    /// Go to next state
     pub fn advance<'req>(&mut self, input: Input<'req>) -> Output<'_> {
         self.state = match (self.take(), input) {
             (current, Input::None) => current,
@@ -494,6 +496,7 @@ impl ErrorUrl {
         ErrorUrl::new_generic(url, state, error)
     }
 
+    /// Construct a new error with a request to provide `state` and an error type
     pub fn with_request(
         request: &dyn Request, redirect_uri: Url, err_type: AuthorizationErrorType,
     ) -> ErrorUrl {
