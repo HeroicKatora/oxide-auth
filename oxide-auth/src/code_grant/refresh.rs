@@ -323,6 +323,7 @@ impl<'req> Refresh<'req> {
 }
 
 impl Input {
+    #[allow(missing_docs)]
     pub fn take(&mut self) -> Self {
         core::mem::replace(self, Input::None)
     }
@@ -505,6 +506,7 @@ impl Error {
         })
     }
 
+    /// Create unauthorized error type
     pub fn unauthorized(authtype: &str) -> Self {
         Error::Unauthorized(
             ErrorDescription {
