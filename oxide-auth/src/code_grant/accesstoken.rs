@@ -136,12 +136,38 @@ enum Credentials<'a> {
     Duplicate,
 }
 
-#[allow(missing_docs)]
+/// Access token issuing process
+///
+/// This state machine will go through four phases. On creation, the request will be validated and
+/// parameters for the first step will be extracted from it. It will pose some requests in the form
+/// of [`Output`] which should be satisfied with the next [`Input`] data. This will eventually
+/// produce a [`BearerToken`] or an [`Error`]. Note that the executing environment will need to use
+/// a [`Registrar`], an [`Authorizer`], an optionnal [`Extension`] and an [`Issuer`] to which some
+/// requests should be forwarded.
+///
+/// [`Input`]: struct.Input.html
+/// [`Output`]: struct.Output.html
+/// [`BearerToken`]: struct.BearerToken.html
+/// [`Error`]: struct.Error.html
+/// [`Issuer`] ../primitives/issuer/trait.Issuer.html
+/// [`Registrar`] ../primitives/registrar/trait.Registrar.html
+/// [`Authorizer`] ../primitives/authorizer/trait.Authorizer.html
+/// [`Extension`] trait.Extension.html
+///
+/// A rough sketch of the operational phases:
+///
+/// 1. Ensure the request is valid based on the basic requirements (includes required parameters)
+/// 2. Try to produce a new token
+///     2.1. Authenticate the client
+///     2.2. If there was no authentication, assert token does not require authentication
+///     2.3. Recover the current grant corresponding to the `code`
+///     2.4. Check the intrinsic validity (scope)
+/// 3. Query the backend for a new (bearer) token
 pub struct AccessToken {
     state: AccessTokenState,
 }
 
-#[allow(missing_docs)]
+/// Inner state machine for access token
 enum AccessTokenState {
     /// State after the request has been validated.
     Authenticate {
@@ -166,33 +192,69 @@ enum AccessTokenState {
     Err(Error),
 }
 
-#[allow(missing_docs)]
+/// Input injected by the executor into the state machine.
 pub enum Input<'req> {
+    /// The request to be processed.
     Request(&'req dyn Request),
+    /// Positively answer an authentication query.
     Authenticated,
+    /// Provide the queried refresh token.
     Recovered(Option<Grant>),
-    Extended { access_extensions: Extensions },
+    /// Provide extensions
+    Extended {
+        #[allow(missing_docs)]
+        access_extensions: Extensions,
+    },
+    /// The token produced by the backend
     Issued(IssuedToken),
+    /// Advance without input as far as possible, or just retrieve the output again.
     None,
 }
 
-#[allow(missing_docs)]
+/// A request by the statemachine to the executor.
+///
+/// Each variant is fulfilled by certain variants of the next inputs as an argument to
+/// `AccessToken::advance`. The output of most states is simply repeated if `Input::None` is
+/// provided instead but note that the successful bearer token response is **not** repeated.
 pub enum Output<'machine> {
+    /// The registrar should authenticate a client.
+    ///
+    /// Fulfilled by `Input::Authenticated`. In an unsuccessful case, the executor should not
+    /// continue and discard the flow.
     Authenticate {
+        /// The to-be-authenticated client.
         client: &'machine str,
+        /// The supplied passdata/password.
         passdata: Option<&'machine [u8]>,
     },
+    /// The issuer should try to recover the grant for this `code`
+    ///
+    /// Fulfilled by `Input::Recovered`.
     Recover {
+        /// The `code` from current request
         code: &'machine str,
     },
+    /// The extension (if any) should provide the extensions
+    ///
+    /// Fullfilled by `Input::Extended`
     Extend {
+        /// The grant that should be issued as determined.
         grant: &'machine Grant,
+        /// The grant extensions if any
         extensions: &'machine mut Extensions,
     },
-    Issue {
-        grant: &'machine Grant,
-    },
+    /// The issue should issue a new access token
+    ///
+    /// Fullfilled by `Input::Issued`
+    Issue { grant: &'machine Grant },
+    /// The state machine finished and a new bearer token was generated
+    ///
+    /// This output **can not** be requested repeatedly, any future `Input` will yield a primitive
+    /// error instead.
     Ok(BearerToken),
+    /// The state machine finished in an error.
+    ///
+    /// The error will be repeated on *any* following input.
     Err(Error),
 }
 
