@@ -4,7 +4,10 @@ use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
 
-use code_grant::{accesstoken::TokenResponse, error::{AccessTokenError, AccessTokenErrorType}};
+use code_grant::{
+    accesstoken::TokenResponse,
+    error::{AccessTokenError, AccessTokenErrorType},
+};
 use primitives::grant::Grant;
 use primitives::issuer::{RefreshedToken, Issuer};
 use primitives::registrar::{Registrar, RegistrarError};
@@ -540,7 +543,8 @@ impl ErrorDescription {
     ///
     /// The string may be the content of an `application/json` body for example.
     pub fn to_json(&self) -> String {
-        let asmap = self.error
+        let asmap = self
+            .error
             .iter()
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();

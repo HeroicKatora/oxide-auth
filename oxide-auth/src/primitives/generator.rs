@@ -50,7 +50,7 @@ pub trait TagGrant {
 /// succeed.
 pub struct RandomGenerator {
     random: OsRng,
-    len: usize
+    len: usize,
 }
 
 impl RandomGenerator {
@@ -58,7 +58,7 @@ impl RandomGenerator {
     pub fn new(length: usize) -> RandomGenerator {
         RandomGenerator {
             random: OsRng {},
-            len: length
+            len: length,
         }
     }
 
@@ -81,7 +81,7 @@ impl RandomGenerator {
 /// signing the same grant for different uses, i.e. separating authorization from bearer grants and
 /// refresh tokens.
 pub struct Assertion {
-    hasher: Hmac::<sha2::Sha256>
+    hasher: Hmac<sha2::Sha256>,
 }
 
 /// The cryptographic suite ensuring integrity of tokens.
@@ -135,12 +135,14 @@ impl Assertion {
     ///
     /// If future suites are added where this is not possible, this function may panic when supplied
     /// with an incorrect key length.
-    /// 
+    ///
     /// Currently, the implementation lacks the ability to really make use of another hasing mechanism than
     /// hmac + sha256.
     pub fn new(kind: AssertionKind, key: &[u8]) -> Self {
         match kind {
-            AssertionKind::HmacSha256 => Assertion { hasher: Hmac::<sha2::Sha256>::new_varkey(key).unwrap() },
+            AssertionKind::HmacSha256 => Assertion {
+                hasher: Hmac::<sha2::Sha256>::new_varkey(key).unwrap(),
+            },
             AssertionKind::__NonExhaustive => unreachable!(),
         }
     }
@@ -148,9 +150,11 @@ impl Assertion {
     /// Construct an assertion instance whose tokens are only valid for the program execution.
     pub fn ephemeral() -> Self {
         // TODO Extract KeySize from currently selected hasher
-        let mut rand_bytes: [u8; 32] = [0;32];                
+        let mut rand_bytes: [u8; 32] = [0; 32];
         thread_rng().fill_bytes(&mut rand_bytes);
-        Assertion { hasher: Hmac::<sha2::Sha256>::new_varkey(&rand_bytes).unwrap() }
+        Assertion {
+            hasher: Hmac::<sha2::Sha256>::new_varkey(&rand_bytes).unwrap(),
+        }
     }
 
     /// Get a reference to generator for the given tag.
@@ -165,9 +169,9 @@ impl Assertion {
         let mut hasher = self.hasher.clone();
         hasher.input(&assertion.0);
         hasher.verify(assertion.1.as_slice()).map_err(|_| ())?;
-        
-        let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String)
-            = rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
+
+        let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String) =
+            rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
 
         Ok((serde_grant.grant(), tag))
     }
@@ -188,7 +192,7 @@ impl Assertion {
     fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(counter, serde_grant, tag)).unwrap();
-        let signature = self.signature(&tosign);        
+        let signature = self.signature(&tosign);
         let assert = AssertGrant(tosign, signature.code().to_vec());
 
         Ok(encode(&rmp_serde::to_vec(&assert).unwrap()))

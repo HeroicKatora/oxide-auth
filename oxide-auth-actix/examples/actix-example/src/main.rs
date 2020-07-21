@@ -56,9 +56,7 @@ async fn post_authorize(
         .await?
 }
 
-async fn token(
-    (req, state): (OAuthRequest, web::Data<Addr<State>>),
-) -> Result<OAuthResponse, WebError> {
+async fn token((req, state): (OAuthRequest, web::Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
     state.send(Token(req).wrap(Extras::Nothing)).await?
 }
 

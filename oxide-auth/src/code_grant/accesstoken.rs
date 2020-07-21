@@ -16,27 +16,27 @@ use primitives::registrar::{Registrar, RegistrarError};
 #[derive(Deserialize, Serialize)]
 pub(crate) struct TokenResponse {
     /// The access token issued by the authorization server.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
 
     /// The refresh token, which can be used to obtain new access tokens.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
 
     /// The type of the token issued.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub token_type: Option<String>,
 
     /// The lifetime in seconds of the access token.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_in: Option<i64>,
 
     /// The scope, which limits the permissions on the access token.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
 
     /// Error code
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
@@ -640,7 +640,8 @@ impl ErrorDescription {
     /// Convert the error into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(&self) -> String {
-        let asmap = self.error
+        let asmap = self
+            .error
             .iter()
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();
@@ -678,11 +679,14 @@ mod tests {
 
     #[test]
     fn bearer_token_encoding() {
-        let token = BearerToken(IssuedToken {
-            token: "access".into(),
-            refresh: Some("refresh".into()),
-            until: Utc::now(),
-        }, "scope".into());
+        let token = BearerToken(
+            IssuedToken {
+                token: "access".into(),
+                refresh: Some("refresh".into()),
+                until: Utc::now(),
+            },
+            "scope".into(),
+        );
 
         let json = token.to_json();
         let token = serde_json::from_str::<TokenResponse>(&json).unwrap();

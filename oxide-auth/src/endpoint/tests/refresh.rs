@@ -109,8 +109,7 @@ impl RefreshTokenSetup {
             Some(Body::Json(body)) => body,
             _ => panic!("Expect json body"),
         };
-        let body: TokenResponse = serde_json::from_str(&body)
-            .expect("Expected valid json body");
+        let body: TokenResponse = serde_json::from_str(&body).expect("Expected valid json body");
         let duration = body.expires_in.unwrap();
         RefreshedToken {
             token: body.access_token.expect("Expected a token"),
@@ -210,8 +209,11 @@ fn access_valid_public() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.refresh_token)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.refresh_token),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -228,8 +230,11 @@ fn access_valid_private() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.refresh_token)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.refresh_token),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(setup.basic_authorization.clone()),
     };
 
@@ -256,8 +261,11 @@ fn public_private_invalid_grant() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.refresh_token)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.refresh_token),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(basic_authorization),
     };
 
@@ -273,8 +281,11 @@ fn private_wrong_client_fails() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.refresh_token)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.refresh_token),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -285,8 +296,11 @@ fn private_wrong_client_fails() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.refresh_token)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.refresh_token),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(format!("Basic {}", base64::encode("Wrong:AndWrong"))),
     };
 
@@ -302,8 +316,11 @@ fn invalid_request() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.refresh_token)]
-            .iter().to_single_value_query()),
+                ("refresh_token", &setup.refresh_token),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(setup.basic_authorization.clone() + "=/"),
     };
 
@@ -333,8 +350,11 @@ fn public_invalid_token() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", WRONG_REFRESH_TOKEN)]
-            .iter().to_single_value_query()),
+                ("refresh_token", WRONG_REFRESH_TOKEN),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -352,8 +372,11 @@ fn private_invalid_token() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", WRONG_REFRESH_TOKEN)]
-            .iter().to_single_value_query()),
+                ("refresh_token", WRONG_REFRESH_TOKEN),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some(setup.basic_authorization.clone()),
     };
 

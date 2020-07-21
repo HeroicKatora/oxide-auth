@@ -176,7 +176,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
     fn parse_header(header: Cow<str>) -> Result<Authorization, InitError<R::Error>> {
         let authorization = {
             if !header.starts_with("Basic ") {
-                return Err(InitError::Malformed)
+                return Err(InitError::Malformed);
             }
 
             let combined = match base64::decode(&header[6..]) {

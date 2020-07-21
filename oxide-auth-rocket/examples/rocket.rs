@@ -44,8 +44,11 @@ fn authorize_consent<'r>(
     oauth: OAuthRequest<'r>, allow: Option<bool>, state: State<MyState>,
 ) -> Result<OAuthResponse<'r>, OAuthFailure> {
     let allowed = allow.unwrap_or(false);
-    state.endpoint()
-        .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| consent_decision(allowed, grant)))
+    state
+        .endpoint()
+        .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| {
+            consent_decision(allowed, grant)
+        }))
         .authorization_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
@@ -56,7 +59,8 @@ fn token<'r>(
     mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>,
 ) -> Result<OAuthResponse<'r>, OAuthFailure> {
     oauth.add_body(body);
-    state.endpoint()
+    state
+        .endpoint()
         .access_token_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
@@ -67,7 +71,8 @@ fn refresh<'r>(
     mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>,
 ) -> Result<OAuthResponse<'r>, OAuthFailure> {
     oauth.add_body(body);
-    state.endpoint()
+    state
+        .endpoint()
         .refresh_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())

@@ -190,12 +190,12 @@ impl fmt::Debug for ClientType {
 impl Client {
     /// Create a public client.
     pub fn public(client_id: &str, redirect_uri: Url, default_scope: Scope) -> Client {
-        Client { 
-            client_id: client_id.to_string(), 
-            redirect_uri, 
-            additional_redirect_uris: vec![], 
-            default_scope, 
-            client_type: ClientType::Public 
+        Client {
+            client_id: client_id.to_string(),
+            redirect_uri,
+            additional_redirect_uris: vec![],
+            default_scope,
+            client_type: ClientType::Public,
         }
     }
 
@@ -291,7 +291,7 @@ pub trait PasswordPolicy: Send + Sync {
 /// Store passwords using `Argon2` to derive the stored value.
 #[derive(Clone, Debug, Default)]
 pub struct Argon2 {
-    _private: ()
+    _private: (),
 }
 
 impl PasswordPolicy for Argon2 {
@@ -301,19 +301,16 @@ impl PasswordPolicy for Argon2 {
         config.secret = &[];
 
         let mut salt = vec![0; 32];
-        thread_rng().try_fill_bytes(salt.as_mut_slice())
+        thread_rng()
+            .try_fill_bytes(salt.as_mut_slice())
             .expect("Failed to generate password salt");
 
         let encoded = argon2::hash_encoded(passphrase, &salt, &config);
         encoded.unwrap().as_bytes().to_vec()
     }
-}
 
-    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8])
-        -> Result<(), RegistrarError>
-    {
-        let hash = String::from_utf8(stored.to_vec())
-            .map_err(|_| RegistrarError::PrimitiveError)?;
+    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), RegistrarError> {
+        let hash = String::from_utf8(stored.to_vec()).map_err(|_| RegistrarError::PrimitiveError)?;
         let valid = argon2::verify_encoded_ext(&hash, passphrase, &[], client_id.as_bytes())
             .map_err(|_| RegistrarError::PrimitiveError)?;
         match valid {
@@ -327,7 +324,7 @@ impl PasswordPolicy for Argon2 {
 //                             Standard Implementations of Registrars                            //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| { Argon2::default() });
+static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| Argon2::default());
 
 impl ClientMap {
     /// Create an empty map without any clients in it.
@@ -350,7 +347,8 @@ impl ClientMap {
     // This is not an instance method because it needs to borrow the box but register needs &mut
     fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> &'a dyn PasswordPolicy {
         policy
-            .as_ref().map(|boxed| &**boxed)
+            .as_ref()
+            .map(|boxed| &**boxed)
             .unwrap_or(&*DEFAULT_PASSWORD_POLICY)
     }
 }
@@ -483,7 +481,12 @@ impl Registrar for ClientMap {
         // Perform exact matching as motivated in the rfc
         match bound.redirect_uri {
             None => (),
-            Some(ref url) if url.as_ref().as_str() == client.redirect_uri.as_str() || client.additional_redirect_uris.contains(url) => (),
+            Some(ref url)
+                if url.as_ref().as_str() == client.redirect_uri.as_str()
+                    || client.additional_redirect_uris.contains(url) =>
+            {
+                ()
+            }
             _ => return Err(RegistrarError::Unspecified),
         }
 
@@ -614,24 +617,39 @@ mod tests {
         let redirect_uri: Url = "https://example.com/foo".parse().unwrap();
         let additional_redirect_uris: Vec<Url> = vec!["https://example.com/bar".parse().unwrap()];
         let default_scope = "default".parse().unwrap();
-        let client = Client::public(client_id, redirect_uri, default_scope).with_additional_redirect_uris(additional_redirect_uris);
+        let client = Client::public(client_id, redirect_uri, default_scope)
+            .with_additional_redirect_uris(additional_redirect_uris);
         let mut client_map = ClientMap::new();
         client_map.register_client(client);
 
-        assert_eq!(client_map.bound_redirect(ClientUrl {
-            client_id: Cow::from(client_id),
-            redirect_uri: Some(Cow::Borrowed(&"https://example.com/foo".parse().unwrap()))
-        }).unwrap().redirect_uri, Cow::Owned("https://example.com/foo".parse().unwrap()));
+        assert_eq!(
+            client_map
+                .bound_redirect(ClientUrl {
+                    client_id: Cow::from(client_id),
+                    redirect_uri: Some(Cow::Borrowed(&"https://example.com/foo".parse().unwrap()))
+                })
+                .unwrap()
+                .redirect_uri,
+            Cow::Owned("https://example.com/foo".parse().unwrap())
+        );
 
-        assert_eq!(client_map.bound_redirect(ClientUrl {
-            client_id: Cow::from(client_id),
-            redirect_uri: Some(Cow::Borrowed(&"https://example.com/bar".parse().unwrap()))
-        }).unwrap().redirect_uri, Cow::Owned("https://example.com/bar".parse().unwrap()));
+        assert_eq!(
+            client_map
+                .bound_redirect(ClientUrl {
+                    client_id: Cow::from(client_id),
+                    redirect_uri: Some(Cow::Borrowed(&"https://example.com/bar".parse().unwrap()))
+                })
+                .unwrap()
+                .redirect_uri,
+            Cow::Owned("https://example.com/bar".parse().unwrap())
+        );
 
-        assert!(client_map.bound_redirect(ClientUrl {
-            client_id: Cow::from(client_id),
-            redirect_uri: Some(Cow::Borrowed(&"https://example.com/baz".parse().unwrap()))
-        }).is_err());
+        assert!(client_map
+            .bound_redirect(ClientUrl {
+                client_id: Cow::from(client_id),
+                redirect_uri: Some(Cow::Borrowed(&"https://example.com/baz".parse().unwrap()))
+            })
+            .is_err());
     }
 
     #[test]

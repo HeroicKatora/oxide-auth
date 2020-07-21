@@ -95,7 +95,7 @@ impl Value {
         match self {
             Value::Public(Some(content)) => Ok(Some(&content)),
             Value::Public(None) => Ok(None),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
@@ -118,7 +118,7 @@ impl Value {
         match self {
             Value::Private(Some(content)) => Ok(Some(&content)),
             Value::Private(None) => Ok(None),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
@@ -161,7 +161,9 @@ impl Extensions {
 
     /// Iterate of the public extensions whose presence and content is not secret.
     pub fn public(&self) -> PublicExtensions {
-        PublicExtensions { iter: self.extensions.iter() }
+        PublicExtensions {
+            iter: self.extensions.iter(),
+        }
     }
 
     /// Iterate of the private extensions whose presence and content must not be revealed.
@@ -254,20 +256,36 @@ mod tests {
         extensions.set_raw("priv".into(), Value::Private(Some("private".into())));
         extensions.set_raw("priv_none".into(), Value::Private(None));
 
-        assert_eq!(extensions.public()
-            .filter(|&(name, value)| name == "pub" && value == Some("content"))
-            .count(), 1);
-        assert_eq!(extensions.public()
-            .filter(|&(name, value)| name == "pub_none" && value == None)
-            .count(), 1);
+        assert_eq!(
+            extensions
+                .public()
+                .filter(|&(name, value)| name == "pub" && value == Some("content"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            extensions
+                .public()
+                .filter(|&(name, value)| name == "pub_none" && value == None)
+                .count(),
+            1
+        );
         assert_eq!(extensions.public().count(), 2);
 
-        assert_eq!(extensions.private()
-            .filter(|&(name, value)| name == "priv" && value == Some("private"))
-            .count(), 1);
-        assert_eq!(extensions.private()
-            .filter(|&(name, value)| name == "priv_none" && value == None)
-            .count(), 1);
+        assert_eq!(
+            extensions
+                .private()
+                .filter(|&(name, value)| name == "priv" && value == Some("private"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            extensions
+                .private()
+                .filter(|&(name, value)| name == "priv_none" && value == None)
+                .count(),
+            1
+        );
         assert_eq!(extensions.private().count(), 2);
     }
 }

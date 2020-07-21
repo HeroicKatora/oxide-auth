@@ -169,12 +169,15 @@ pub enum WebError {
 
 impl OAuthRequest {
     /// Create a new OAuthRequest from an HttpRequest and Payload
-    pub async fn new(
-        req: HttpRequest,
-        mut payload: Payload,
-    ) -> Result<Self, WebError> {
-        let query = Query::extract(&req).await.ok().map(|q: Query<NormalizedParameter>| q.into_inner());
-        let body = Form::from_request(&req, &mut payload).await.ok().map(|b: Form<NormalizedParameter>| b.into_inner());
+    pub async fn new(req: HttpRequest, mut payload: Payload) -> Result<Self, WebError> {
+        let query = Query::extract(&req)
+            .await
+            .ok()
+            .map(|q: Query<NormalizedParameter>| q.into_inner());
+        let body = Form::from_request(&req, &mut payload)
+            .await
+            .ok()
+            .map(|b: Form<NormalizedParameter>| b.into_inner());
 
         let mut all_auth = req.headers().get_all(header::AUTHORIZATION);
         let optional = all_auth.next();
@@ -324,10 +327,8 @@ impl WebResponse for OAuthResponse {
 
     fn body_json(&mut self, json: &str) -> Result<(), Self::Error> {
         self.body = Some(json.to_owned());
-        self.headers.insert(
-            header::CONTENT_TYPE,
-            TryFrom::try_from("application/json")?,
-        );
+        self.headers
+            .insert(header::CONTENT_TYPE, TryFrom::try_from("application/json")?);
         Ok(())
     }
 }
@@ -434,7 +435,7 @@ impl fmt::Display for WebError {
             WebError::Body => write!(f, "No body present"),
             WebError::Authorization => write!(f, "Request has invalid Authorization headers"),
             WebError::Canceled => write!(f, "Operation canceled"),
-            WebError::Mailbox => write!(f,"An actor's mailbox was full"),
+            WebError::Mailbox => write!(f, "An actor's mailbox was full"),
             WebError::InternalError(None) => write!(f, "An internal server error occured"),
             WebError::InternalError(Some(ref e)) => write!(f, "An internal server error occured: {}", e),
         }
@@ -452,7 +453,7 @@ impl error::Error for WebError {
             | WebError::Query
             | WebError::Body
             | WebError::Canceled
-            | WebError::Mailbox 
+            | WebError::Mailbox
             | WebError::InternalError(_) => None,
         }
     }
