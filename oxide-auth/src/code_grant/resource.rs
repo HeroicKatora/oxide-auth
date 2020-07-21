@@ -128,7 +128,10 @@ pub enum Input<'req> {
     /// Determine the scopes of requested resource.
     Scopes(&'req [Scope]),
     /// Provides simply the original request.
-    Request { request: &'req dyn Request },
+    Request {
+        /// The request
+        request: &'req dyn Request,
+    },
     /// Advance without input as far as possible, or just retrieve the output again.
     None,
 }
@@ -171,12 +174,14 @@ pub enum Output<'machine> {
 }
 
 impl Resource {
+    /// Create a Resource state machine at `ResourceState::New` state
     pub fn new() -> Self {
         Resource {
             state: ResourceState::New,
         }
     }
 
+    /// Progress the state machine to next step, taking in needed `Input` parameters
     pub fn advance(&mut self, input: Input) -> Output<'_> {
         self.state = match (self.take(), input) {
             (any, Input::None) => any,
@@ -210,6 +215,7 @@ impl Resource {
     }
 }
 
+/// Do needed verification before granting access to the resource
 pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
     enum Requested {
         None,

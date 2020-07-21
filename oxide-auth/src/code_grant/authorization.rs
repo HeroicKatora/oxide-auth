@@ -97,41 +97,70 @@ enum AuthorizationState {
     Err(Error),
 }
 
-/// Input data for the state machine
+/// Input injected by the executor into the state machine.
 pub enum Input<'machine> {
+    /// Binding of the client succeeded
     Bound {
+        /// Request is given again to make some additional check that need bound client to run
         request: &'machine dyn Request,
+        /// The bound client
         bound_client: BoundClient<'static>,
     },
+    /// Extension succeeded
     Extended(Extensions),
+    /// Negotiation done
     Negotiated {
+        /// The pre grant from the negotiation
         pre_grant: PreGrant,
+        /// State from the request
         state: Option<String>,
     },
+    /// We're done
     Finished,
+    /// Advance without input as far as possible, or just retrieve the output again.
     None,
 }
 
-/// State machine result at each state
+/// A request by the statemachine to the executor.
+///
+/// Each variant is fulfilled by certain variants of the next inputs as an argument to
+/// `Authorization::advance`. The output of most states is simply repeated if `Input::None` is
+/// provided instead.
 pub enum Output<'machine> {
+    /// Ask registrar to bind the client and checks its redirect_uri
     Bind {
+        /// The to-be-bound client.
         client_id: String,
+        /// The redirect_uri to check if any
         redirect_uri: Option<Url>,
     },
+    /// Ask for extensions if any
     Extend,
+    /// Ask registrar to negociate
     Negotiate {
+        /// The current bound client
         bound_client: &'machine BoundClient<'static>,
+        /// The scope, if any
         scope: Option<Scope>,
     },
+    /// State machine is finished, provides parameters to construct a `Pending` (sync or async
+    /// version)
     Ok {
+        /// The grant
         pre_grant: PreGrant,
+        /// The state
         state: Option<String>,
+        /// The extensions
         extensions: Extensions,
     },
+    /// The state machine finished in an error.
+    ///
+    /// The error will be repeated on *any* following input.
     Err(Error),
 }
 
 impl Authorization {
+    /// Create state machine and validate request
     pub fn new(request: &dyn Request) -> Self {
         Authorization {
             state: Self::validate(request).unwrap_or_else(AuthorizationState::Err),
@@ -140,6 +169,7 @@ impl Authorization {
         }
     }
 
+    /// Go to next state
     pub fn advance<'req>(&mut self, input: Input<'req>) -> Output<'_> {
         self.state = match (self.take(), input) {
             (current, Input::None) => current,
@@ -494,6 +524,7 @@ impl ErrorUrl {
         ErrorUrl::new_generic(url, state, error)
     }
 
+    /// Construct a new error with a request to provide `state` and an error type
     pub fn with_request(
         request: &dyn Request, redirect_uri: Url, err_type: AuthorizationErrorType,
     ) -> ErrorUrl {
