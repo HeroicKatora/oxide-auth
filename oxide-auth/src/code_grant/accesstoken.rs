@@ -14,7 +14,7 @@ use primitives::registrar::{Registrar, RegistrarError};
 
 /// Token Response
 #[derive(Deserialize, Serialize)]
-pub(crate) struct TokenResponse {
+pub struct TokenResponse {
     /// The access token issued by the authorization server.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,

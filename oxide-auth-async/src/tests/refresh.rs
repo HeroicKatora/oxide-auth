@@ -2,7 +2,8 @@ use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken, TokenMap};
 use oxide_auth::primitives::generator::RandomGenerator;
 use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{
-    endpoint::{Scope, WebRequest},
+    code_grant::accesstoken::TokenResponse,
+    endpoint::{WebRequest},
     primitives::registrar::{Client, ClientMap},
     frontends::simple::endpoint::Error,
 };
@@ -67,6 +68,7 @@ struct RefreshTokenSetup {
     registrar: ClientMap,
     issuer: TokenMap<RandomGenerator>,
     issued: IssuedToken,
+    refresh_token: String,
     basic_authorization: String,
 }
 
@@ -93,7 +95,8 @@ impl RefreshTokenSetup {
 
         registrar.register_client(client);
         let issued = smol::run(issuer.issue(grant)).unwrap();
-        assert!(!issued.refresh.is_empty());
+        assert!(issued.refreshable());
+        let refresh_token = issued.refresh.clone().unwrap();
 
         let basic_authorization =
             base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
@@ -103,6 +106,7 @@ impl RefreshTokenSetup {
             registrar,
             issuer,
             issued,
+            refresh_token,
             basic_authorization,
         }
     }
@@ -128,7 +132,8 @@ impl RefreshTokenSetup {
 
         registrar.register_client(client);
         let issued = smol::run(issuer.issue(grant)).unwrap();
-        assert!(!issued.refresh.is_empty());
+        assert!(issued.refreshable());
+        let refresh_token = issued.refresh.clone().unwrap();
 
         let basic_authorization = "DO_NOT_USE".into();
 
@@ -136,6 +141,7 @@ impl RefreshTokenSetup {
             registrar,
             issuer,
             issued,
+            refresh_token,
             basic_authorization,
         }
     }
@@ -149,12 +155,11 @@ impl RefreshTokenSetup {
             Some(Body::Json(body)) => body,
             _ => panic!("Expect json body"),
         };
-        let mut body: HashMap<String, String> =
-            serde_json::from_str(&body).expect("Expected valid json body");
-        let duration: i64 = body.remove("expires_in").unwrap().parse().unwrap();
+        let body: TokenResponse = serde_json::from_str(&body).expect("Expected valid json body");
+        let duration = body.expires_in.unwrap();
         RefreshedToken {
-            token: body.remove("access_token").expect("Expected a token"),
-            refresh: body.remove("refresh_token"),
+            token: body.access_token.expect("Expected a token"),
+            refresh: body.refresh_token,
             until: Utc::now() + Duration::seconds(duration),
         }
     }
@@ -250,7 +255,7 @@ fn access_valid_public() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh),
+                ("refresh_token", &setup.refresh_token),
             ]
             .iter()
             .to_single_value_query(),
@@ -271,7 +276,7 @@ fn access_valid_private() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh),
+                ("refresh_token", &setup.refresh_token),
             ]
             .iter()
             .to_single_value_query(),
@@ -302,7 +307,7 @@ fn public_private_invalid_grant() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh),
+                ("refresh_token", &setup.refresh_token),
             ]
             .iter()
             .to_single_value_query(),
@@ -322,7 +327,7 @@ fn private_wrong_client_fails() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh),
+                ("refresh_token", &setup.refresh_token),
             ]
             .iter()
             .to_single_value_query(),
@@ -337,7 +342,7 @@ fn private_wrong_client_fails() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh),
+                ("refresh_token", &setup.refresh_token),
             ]
             .iter()
             .to_single_value_query(),
@@ -357,7 +362,7 @@ fn invalid_request() {
         urlbody: Some(
             vec![
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &setup.issued.refresh),
+                ("refresh_token", &setup.refresh_token),
             ]
             .iter()
             .to_single_value_query(),
