@@ -5,7 +5,7 @@ use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken};
 use oxide_auth::primitives::registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant};
 
 #[async_trait]
-pub trait Authorizer: Send {
+pub trait Authorizer {
     async fn authorize(&mut self, _: Grant) -> Result<String, ()>;
 
     async fn extract(&mut self, _: &str) -> Result<Option<Grant>, ()>;
