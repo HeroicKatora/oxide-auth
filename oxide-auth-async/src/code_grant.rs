@@ -111,21 +111,21 @@ pub mod access_token {
         registrar::RegistrarError,
     };
 
-    #[async_trait(?Send)]
+    #[async_trait]
     pub trait Extension {
         /// Inspect the request and extension data to produce extension data.
         ///
         /// The input data comes from the extension data produced in the handling of the
         /// authorization code request.
         async fn extend(
-            &mut self, request: &dyn Request, data: Extensions,
+            &mut self, request: &(dyn Request + Sync), data: Extensions,
         ) -> std::result::Result<Extensions, ()>;
     }
 
-    #[async_trait(?Send)]
+    #[async_trait]
     impl Extension for () {
         async fn extend(
-            &mut self, _: &dyn Request, _: Extensions,
+            &mut self, _: &(dyn Request + Sync), _: Extensions,
         ) -> std::result::Result<Extensions, ()> {
             Ok(Extensions::new())
         }
@@ -148,7 +148,7 @@ pub mod access_token {
     }
 
     pub async fn access_token(
-        handler: &mut dyn Endpoint, request: &dyn Request,
+        handler: &mut dyn Endpoint, request: &(dyn Request + Sync),
     ) -> Result<BearerToken, Error> {
         enum Requested<'a> {
             None,
@@ -251,15 +251,17 @@ pub mod authorization {
     /// A system of addons provided additional data.
     ///
     /// An endpoint not having any extension may use `&mut ()` as the result of system.
-    #[async_trait(?Send)]
+    #[async_trait]
     pub trait Extension {
         /// Inspect the request to produce extension data.
-        async fn extend(&mut self, request: &dyn Request) -> std::result::Result<Extensions, ()>;
+        async fn extend(
+            &mut self, request: &(dyn Request + Sync),
+        ) -> std::result::Result<Extensions, ()>;
     }
 
-    #[async_trait(?Send)]
+    #[async_trait]
     impl Extension for () {
-        async fn extend(&mut self, _: &dyn Request) -> std::result::Result<Extensions, ()> {
+        async fn extend(&mut self, _: &(dyn Request + Sync)) -> std::result::Result<Extensions, ()> {
             Ok(Extensions::new())
         }
     }
@@ -347,7 +349,7 @@ pub mod authorization {
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
     pub async fn authorization_code(
-        handler: &mut dyn Endpoint, request: &dyn Request,
+        handler: &mut dyn Endpoint, request: &(dyn Request + Sync),
     ) -> Result<Pending, Error> {
         enum Requested {
             None,

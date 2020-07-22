@@ -68,7 +68,8 @@ struct Authorization(String, Vec<u8>);
 impl<E, R> AccessTokenFlow<E, R>
 where
     E: Endpoint<R>,
-    R: WebRequest,
+    R: WebRequest + Sync,
+    <R as oxide_auth::endpoint::WebRequest>::Error: Sync,
 {
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///

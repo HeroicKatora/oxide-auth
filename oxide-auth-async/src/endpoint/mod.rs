@@ -84,7 +84,7 @@ pub trait Extension {
 /// See [`frontends::simple`] for an implementation that permits arbitrary functions.
 ///
 /// [`frontends::simple`]: ../frontends/simple/endpoint/struct.FnSolicitor.html
-#[async_trait(?Send)]
+#[async_trait]
 pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
@@ -93,14 +93,14 @@ pub trait OwnerSolicitor<Request: WebRequest> {
     ) -> OwnerConsent<Request::Response>;
 }
 
-#[async_trait(?Send)]
-impl<T, Request: WebRequest> OwnerSolicitor<Request> for T
-where
-    T: oxide_auth::endpoint::OwnerSolicitor<Request> + ?Sized,
-{
-    async fn check_consent(
-        &mut self, req: &mut Request, pre_grant: &PreGrant,
-    ) -> OwnerConsent<Request::Response> {
-        oxide_auth::endpoint::OwnerSolicitor::check_consent(self, req, pre_grant)
-    }
-}
+// #[async_trait]
+// impl<T, Request: WebRequest> OwnerSolicitor<Request> for T
+// where
+//     T: oxide_auth::endpoint::OwnerSolicitor<Request> + ?Sized,
+// {
+//     async fn check_consent(
+//         &mut self, req: &mut Request, pre_grant: &PreGrant,
+//     ) -> OwnerConsent<Request::Response> {
+//         oxide_auth::endpoint::OwnerSolicitor::check_consent(self, req, pre_grant)
+//     }
+// }
