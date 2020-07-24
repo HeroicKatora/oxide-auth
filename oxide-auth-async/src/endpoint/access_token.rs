@@ -26,14 +26,20 @@ use crate::{
 /// [`allow_credentials_in_body`]: #method.allow_credentials_in_body
 pub struct AccessTokenFlow<E, R>
 where
-    E: Endpoint<R>,
-    R: WebRequest,
+    E: Endpoint<R> + Send,
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
 {
     endpoint: WrappedToken<E, R>,
     allow_credentials_in_body: bool,
 }
 
-struct WrappedToken<E: Endpoint<R>, R: WebRequest> {
+struct WrappedToken<E, R>
+where
+    E: Endpoint<R> + Send,
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
+{
     inner: E,
     extension_fallback: (),
     r_type: PhantomData<R>,
@@ -71,7 +77,7 @@ struct Authorization(String, Vec<u8>);
 
 impl<E, R> AccessTokenFlow<E, R>
 where
-    E: Endpoint<R>,
+    E: Endpoint<R> + Send,
     R: WebRequest + Send + Clone,
     <R as WebRequest>::Error: Send + Clone,
 {
@@ -145,9 +151,14 @@ where
     }
 }
 
-fn token_error<E: Endpoint<R>, R: WebRequest>(
+fn token_error<E, R>(
     endpoint: &mut E, request: &mut R, error: TokenError,
-) -> Result<R::Response, E::Error> {
+) -> Result<R::Response, E::Error>
+where
+    E: Endpoint<R> + Send,
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
+{
     Ok(match error {
         TokenError::Invalid(mut json) => {
             let mut response =
@@ -178,8 +189,9 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(
     })
 }
 
-impl<E: Endpoint<R>, R> TokenEndpoint<R> for WrappedToken<E, R>
+impl<E, R> TokenEndpoint<R> for WrappedToken<E, R>
 where
+    E: Endpoint<R> + Send,
     R: WebRequest + Clone + Send,
     <R as WebRequest>::Error: Clone + Send,
 {

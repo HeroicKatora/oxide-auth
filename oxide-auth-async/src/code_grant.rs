@@ -307,7 +307,7 @@ pub mod authorization {
     /// Each method will only be invoked exactly once when processing a correct and authorized request,
     /// and potentially less than once when the request is faulty.  These methods should be implemented
     /// by internally using `primitives`, as it is implemented in the `frontend` module.
-    pub trait Endpoint<R>
+    pub trait Endpoint<R>: Send
     where
         R: WebRequest + Clone + Send,
         <R as WebRequest>::Error: Clone + Send,

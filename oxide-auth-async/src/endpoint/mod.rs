@@ -11,7 +11,11 @@ pub mod access_token;
 pub mod refresh;
 pub mod resource;
 
-pub trait Endpoint<Request: WebRequest> {
+pub trait Endpoint<Request>
+where
+    Request: WebRequest + Clone + Send,
+    <Request as WebRequest>::Error: Clone + Send,
+{
     /// The error typed used as the error representation of each flow.
     type Error;
 
