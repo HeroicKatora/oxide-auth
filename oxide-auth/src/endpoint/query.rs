@@ -90,6 +90,12 @@ impl Borrow<dyn QueryParameter> for NormalizedParameter {
     }
 }
 
+impl Borrow<dyn QueryParameter + Send> for NormalizedParameter {
+    fn borrow(&self) -> &(dyn QueryParameter + Send + 'static) {
+        self
+    }
+}
+
 impl<'de> de::Deserialize<'de> for NormalizedParameter {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -138,6 +144,14 @@ where
 }
 
 impl ToOwned for dyn QueryParameter {
+    type Owned = NormalizedParameter;
+
+    fn to_owned(&self) -> Self::Owned {
+        self.normalize()
+    }
+}
+
+impl ToOwned for dyn QueryParameter + Send {
     type Owned = NormalizedParameter;
 
     fn to_owned(&self) -> Self::Owned {

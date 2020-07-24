@@ -62,19 +62,19 @@ pub trait Endpoint<Request: WebRequest> {
     /// Get the central extension instance this endpoint.
     ///
     /// Returning `None` is the default implementation and acts as simply providing any extensions.
-    fn extension(&mut self) -> Option<&mut dyn Extension> {
+    fn extension(&mut self) -> Option<&mut dyn Extension<Request>> {
         None
     }
 }
 
-pub trait Extension {
+pub trait Extension<R: WebRequest> {
     /// The handler for authorization code extensions.
-    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
+    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension<R>> {
         None
     }
 
     /// The handler for access token extensions.
-    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
+    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension<R>> {
         None
     }
 }

@@ -2,7 +2,7 @@ use std::str::from_utf8;
 use std::{borrow::Cow, marker::PhantomData};
 
 use oxide_auth::{
-    endpoint::{QueryParameter, WebRequest, OAuthError, WebResponse, Template},
+    endpoint::{QueryParameter, WebRequest, OAuthError, WebResponse, Template, NormalizedParameter},
     code_grant::accesstoken::{Error as TokenError, Request as TokenRequest},
 };
 
@@ -39,12 +39,14 @@ struct WrappedToken<E: Endpoint<R>, R: WebRequest> {
     r_type: PhantomData<R>,
 }
 
-struct WrappedRequest<'a, R: WebRequest + 'a> {
-    /// Original request.
-    request: PhantomData<R>,
-
+#[derive(Clone)]
+pub struct WrappedRequest<R: WebRequest>
+where
+    R: Clone,
+    <R as WebRequest>::Error: Clone,
+{
     /// The query in the url.
-    body: Cow<'a, dyn QueryParameter + 'static>,
+    body: NormalizedParameter,
 
     /// The authorization tuple
     authorization: Option<Authorization>,
@@ -58,18 +60,20 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
 
 struct Invalid;
 
+#[derive(Clone)]
 enum FailParse<E> {
     Invalid,
     Err(E),
 }
 
+#[derive(Clone)]
 struct Authorization(String, Vec<u8>);
 
 impl<E, R> AccessTokenFlow<E, R>
 where
     E: Endpoint<R>,
-    R: WebRequest + Sync,
-    <R as oxide_auth::endpoint::WebRequest>::Error: Sync,
+    R: WebRequest + Send + Clone,
+    <R as WebRequest>::Error: Send + Clone,
 {
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
@@ -124,7 +128,7 @@ where
     pub async fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
         let issued = access_token(
             &mut self.endpoint,
-            &WrappedRequest::new(&mut request, self.allow_credentials_in_body),
+            WrappedRequest::new(&mut request, self.allow_credentials_in_body),
         )
         .await;
 
@@ -174,7 +178,11 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(
     })
 }
 
-impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
+impl<E: Endpoint<R>, R> TokenEndpoint<R> for WrappedToken<E, R>
+where
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
+{
     fn registrar(&self) -> &dyn Registrar {
         self.inner.registrar().unwrap()
     }
@@ -187,7 +195,7 @@ impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
         self.inner.issuer_mut().unwrap()
     }
 
-    fn extension(&mut self) -> &mut dyn Extension {
+    fn extension(&mut self) -> &mut dyn Extension<R> {
         self.inner
             .extension()
             .and_then(super::Extension::access_token)
@@ -195,12 +203,16 @@ impl<E: Endpoint<R>, R: WebRequest> TokenEndpoint for WrappedToken<E, R> {
     }
 }
 
-impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
-    pub fn new(request: &'a mut R, credentials: bool) -> Self {
+impl<R: WebRequest> WrappedRequest<R>
+where
+    R: Clone,
+    <R as WebRequest>::Error: Clone,
+{
+    pub fn new(request: &mut R, credentials: bool) -> Self {
         Self::new_or_fail(request, credentials).unwrap_or_else(Self::from_err)
     }
 
-    fn new_or_fail(request: &'a mut R, credentials: bool) -> Result<Self, FailParse<R::Error>> {
+    fn new_or_fail(request: &mut R, credentials: bool) -> Result<Self, FailParse<R::Error>> {
         // If there is a header, it must parse correctly.
         let authorization = match request.authheader() {
             Err(err) => return Err(FailParse::Err(err)),
@@ -209,8 +221,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
         };
 
         Ok(WrappedRequest {
-            request: PhantomData,
-            body: request.urlbody().map_err(FailParse::Err)?,
+            body: request.urlbody().map_err(FailParse::Err)?.into_owned(),
             authorization,
             error: None,
             allow_credentials_in_body: credentials,
@@ -219,8 +230,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
 
     fn from_err(err: FailParse<R::Error>) -> Self {
         WrappedRequest {
-            request: PhantomData,
-            body: Cow::Owned(Default::default()),
+            body: Default::default(),
             authorization: None,
             error: Some(err),
             allow_credentials_in_body: false,
@@ -260,7 +270,11 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
     }
 }
 
-impl<'a, R: WebRequest> TokenRequest for WrappedRequest<'a, R> {
+impl<R: WebRequest> TokenRequest for WrappedRequest<R>
+where
+    R: Clone,
+    <R as WebRequest>::Error: Clone,
+{
     fn valid(&self) -> bool {
         self.error.is_none()
     }

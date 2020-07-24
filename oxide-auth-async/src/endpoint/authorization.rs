@@ -1,7 +1,7 @@
 use std::{borrow::Cow, marker::PhantomData};
 
 use oxide_auth::{
-    endpoint::{WebResponse, QueryParameter},
+    endpoint::{WebResponse, QueryParameter, NormalizedParameter},
     code_grant::authorization::{Error as AuthorizationError, Request as AuthorizationRequest},
 };
 
@@ -27,12 +27,14 @@ struct WrappedAuthorization<E: Endpoint<R>, R: WebRequest> {
     r_type: PhantomData<R>,
 }
 
-struct WrappedRequest<'a, R: WebRequest + 'a> {
-    /// Original request.
-    request: PhantomData<R>,
-
+#[derive(Clone)]
+pub struct WrappedRequest<R: WebRequest>
+where
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
+{
     /// The query in the url.
-    query: Cow<'a, dyn QueryParameter + 'static>,
+    query: NormalizedParameter,
 
     /// An error if one occurred.
     error: Option<R::Error>,
@@ -100,8 +102,8 @@ where
 impl<E, R> AuthorizationFlow<E, R>
 where
     E: Endpoint<R>,
-    R: WebRequest + Sync,
-    <R as oxide_auth::endpoint::WebRequest>::Error: Sync,
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
 {
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
@@ -141,8 +143,7 @@ where
     /// When the registrar or the authorizer returned by the endpoint is suddenly `None` when
     /// previously it was `Some(_)`.
     pub async fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
-        let negotiated =
-            authorization_code(&mut self.endpoint, &WrappedRequest::new(&mut request)).await;
+        let negotiated = authorization_code(&mut self.endpoint, WrappedRequest::new(&mut request)).await;
 
         let inner = match negotiated {
             Err(err) => match authorization_error(&mut self.endpoint.inner, &mut request, err) {
@@ -167,7 +168,11 @@ where
     }
 }
 
-impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
+impl<'a, E: Endpoint<R>, R> AuthorizationPartial<'a, E, R>
+where
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
+{
     /// Finish the authentication step.
     ///
     /// If authorization has not yet produced a hard error or an explicit response, executes the
@@ -200,7 +205,11 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(
     }
 }
 
-impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
+impl<'a, E: Endpoint<R>, R> AuthorizationPending<'a, E, R>
+where
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
+{
     /// Resolve the pending status using the endpoint to query owner consent.
     async fn finish(mut self) -> (R, Result<R::Response, E::Error>) {
         let checked = self
@@ -263,7 +272,11 @@ impl<E: Endpoint<R>, R: WebRequest> WrappedAuthorization<E, R> {
     }
 }
 
-impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorization<E, R> {
+impl<E: Endpoint<R>, R> AuthorizationEndpoint<R> for WrappedAuthorization<E, R>
+where
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
+{
     fn registrar(&self) -> &dyn Registrar {
         self.inner.registrar().unwrap()
     }
@@ -272,7 +285,7 @@ impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorizati
         self.inner.authorizer_mut().unwrap()
     }
 
-    fn extension(&mut self) -> &mut dyn Extension {
+    fn extension(&mut self) -> &mut dyn Extension<R> {
         self.inner
             .extension()
             .and_then(super::Extension::authorization)
@@ -280,29 +293,35 @@ impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorizati
     }
 }
 
-impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
+impl<'a, R> WrappedRequest<R>
+where
+    R: WebRequest + Clone + Send + 'a,
+    <R as WebRequest>::Error: Clone + Send,
+{
     pub fn new(request: &'a mut R) -> Self {
         Self::new_or_fail(request).unwrap_or_else(Self::from_err)
     }
 
     fn new_or_fail(request: &'a mut R) -> Result<Self, R::Error> {
         Ok(WrappedRequest {
-            request: PhantomData,
-            query: request.query()?,
+            query: request.query()?.into_owned(),
             error: None,
         })
     }
 
     fn from_err(err: R::Error) -> Self {
         WrappedRequest {
-            request: PhantomData,
-            query: Cow::Owned(Default::default()),
+            query: Default::default(),
             error: Some(err),
         }
     }
 }
 
-impl<'a, R: WebRequest + 'a> AuthorizationRequest for WrappedRequest<'a, R> {
+impl<'a, R> AuthorizationRequest for WrappedRequest<R>
+where
+    R: WebRequest + Clone + Send,
+    <R as WebRequest>::Error: Clone + Send,
+{
     fn valid(&self) -> bool {
         self.error.is_none()
     }
