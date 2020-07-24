@@ -483,10 +483,7 @@ impl Registrar for ClientMap {
             None => (),
             Some(ref url)
                 if url.as_ref().as_str() == client.redirect_uri.as_str()
-                    || client.additional_redirect_uris.contains(url) =>
-            {
-                ()
-            }
+                    || client.additional_redirect_uris.contains(url) => {}
             _ => return Err(RegistrarError::Unspecified),
         }
 

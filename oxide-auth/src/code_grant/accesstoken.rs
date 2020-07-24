@@ -399,7 +399,7 @@ impl AccessToken {
             return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
         }
 
-        let extensions = mem::replace(&mut saved_params.extensions, Extensions::default());
+        let extensions = mem::take(&mut saved_params.extensions);
         Ok(AccessTokenState::Extend {
             saved_params,
             extensions,
