@@ -15,18 +15,16 @@ use url::Url;
 /// All relevant methods for handling authorization code requests.
 pub struct AuthorizationFlow<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     endpoint: WrappedAuthorization<E, R>,
 }
 
 struct WrappedAuthorization<E: Endpoint<R>, R: WebRequest>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     inner: E,
     extension_fallback: (),
@@ -36,8 +34,7 @@ where
 #[derive(Clone)]
 pub struct WrappedRequest<R: WebRequest>
 where
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    R: WebRequest,
 {
     /// The query in the url.
     query: NormalizedParameter,
@@ -48,9 +45,8 @@ where
 
 struct AuthorizationPending<'a, E: 'a, R: 'a>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     endpoint: &'a mut WrappedAuthorization<E, R>,
     pending: Pending,
@@ -63,22 +59,20 @@ where
 /// authorization flow for this request to produce a response or an error.
 struct AuthorizationPartial<'a, E: 'a, R: 'a>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     inner: AuthorizationPartialInner<'a, E, R>,
 
     /// TODO: offer this in the public api instead of dropping the request.
-    _with_request: Option<Box<dyn FnOnce(R) -> () + Send>>,
+    _with_request: Option<Box<dyn FnOnce(R) -> ()>>,
 }
 
 /// Result type from processing an authentication request.
 enum AuthorizationPartialInner<'a, E: 'a, R: 'a>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     /// No error happened during processing and the resource owner can decide over the grant.
     Pending {
@@ -111,8 +105,8 @@ where
 impl<E, R> AuthorizationFlow<E, R>
 where
     E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    R: WebRequest + Send + Sync,
+    <R as WebRequest>::Error: Send + Sync,
 {
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
@@ -152,7 +146,8 @@ where
     /// When the registrar or the authorizer returned by the endpoint is suddenly `None` when
     /// previously it was `Some(_)`.
     pub async fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
-        let negotiated = authorization_code(&mut self.endpoint, WrappedRequest::new(&mut request)).await;
+        let negotiated =
+            authorization_code(&mut self.endpoint, &WrappedRequest::new(&mut request)).await;
 
         let inner = match negotiated {
             Err(err) => match authorization_error(&mut self.endpoint.inner, &mut request, err) {
@@ -179,9 +174,8 @@ where
 
 impl<'a, E, R> AuthorizationPartial<'a, E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     /// Finish the authentication step.
     ///
@@ -202,9 +196,8 @@ fn authorization_error<E, R>(
     endpoint: &mut E, request: &mut R, error: AuthorizationError,
 ) -> Result<R::Response, E::Error>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     match error {
         AuthorizationError::Ignore => Err(endpoint.error(OAuthError::DenySilently)),
@@ -222,9 +215,8 @@ where
 
 impl<'a, E, R> AuthorizationPending<'a, E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     /// Resolve the pending status using the endpoint to query owner consent.
     async fn finish(mut self) -> (R, Result<R::Response, E::Error>) {
@@ -284,20 +276,18 @@ where
 
 impl<E, R> WrappedAuthorization<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     fn owner_solicitor(&mut self) -> &mut dyn OwnerSolicitor<R> {
         self.inner.owner_solicitor().unwrap()
     }
 }
 
-impl<E, R> AuthorizationEndpoint<R> for WrappedAuthorization<E, R>
+impl<E, R> AuthorizationEndpoint for WrappedAuthorization<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     fn registrar(&self) -> &dyn Registrar {
         self.inner.registrar().unwrap()
@@ -307,7 +297,7 @@ where
         self.inner.authorizer_mut().unwrap()
     }
 
-    fn extension(&mut self) -> &mut dyn Extension<R> {
+    fn extension(&mut self) -> &mut dyn Extension {
         self.inner
             .extension()
             .and_then(super::Extension::authorization)
@@ -317,8 +307,7 @@ where
 
 impl<'a, R> WrappedRequest<R>
 where
-    R: WebRequest + Clone + Send + 'a,
-    <R as WebRequest>::Error: Clone + Send,
+    R: WebRequest + 'a,
 {
     pub fn new(request: &'a mut R) -> Self {
         Self::new_or_fail(request).unwrap_or_else(Self::from_err)
@@ -341,8 +330,7 @@ where
 
 impl<'a, R> AuthorizationRequest for WrappedRequest<R>
 where
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    R: WebRequest,
 {
     fn valid(&self) -> bool {
         self.error.is_none()

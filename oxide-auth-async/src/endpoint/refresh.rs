@@ -14,18 +14,16 @@ use crate::{
 /// Takes requests from clients to refresh their access tokens.
 pub struct RefreshFlow<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     endpoint: WrappedRefresh<E, R>,
 }
 
 struct WrappedRefresh<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     inner: E,
     r_type: PhantomData<R>,
@@ -49,9 +47,8 @@ struct Authorization(String, Vec<u8>);
 
 impl<E, R> RefreshFlow<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     /// Wrap the endpoint if it supports handling refresh requests.
     ///
@@ -101,9 +98,8 @@ where
 
 fn token_error<E, R>(endpoint: &mut E, request: &mut R, error: Error) -> Result<R::Response, E::Error>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     Ok(match error {
         Error::Invalid(mut json) => {
@@ -200,9 +196,8 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
 
 impl<E, R> RefreshEndpoint for WrappedRefresh<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     fn registrar(&self) -> &dyn Registrar {
         self.inner.registrar().unwrap()

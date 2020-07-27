@@ -109,46 +109,33 @@ pub mod access_token {
             grant::{Extensions, Grant},
             registrar::RegistrarError,
         },
-        code_grant::accesstoken::{AccessToken, BearerToken, Input, Output, Error, PrimitiveError},
+        code_grant::accesstoken::{
+            AccessToken, BearerToken, Input, Output, Error, PrimitiveError, Request as TokenRequest,
+        },
     };
-    use crate::endpoint::access_token::WrappedRequest;
+    // use crate::endpoint::access_token::WrappedRequest;
 
     #[async_trait]
-    pub trait Extension<'a, R>
-    where
-        R: WebRequest + Clone + Send,
-        <R as WebRequest>::Error: Clone + Send,
-    {
+    pub trait Extension {
         /// Inspect the request and extension data to produce extension data.
         ///
         /// The input data comes from the extension data produced in the handling of the
         /// authorization code request.
         async fn extend(
-            &mut self, request: WrappedRequest<R>, data: Extensions,
-        ) -> std::result::Result<Extensions, ()>
-        where
-            'a: 'async_trait, // https://github.com/dtolnay/async-trait/issues/8#issuecomment-655638329
-            R: 'a;
+            &mut self, request: &(dyn TokenRequest + Sync), data: Extensions,
+        ) -> std::result::Result<Extensions, ()>;
     }
 
     #[async_trait]
-    impl<'a, R> Extension<'a, R> for ()
-    where
-        R: WebRequest + Clone + Send,
-        <R as WebRequest>::Error: Clone + Send,
-    {
+    impl Extension for () {
         async fn extend(
-            &mut self, _: WrappedRequest<R>, _: Extensions,
-        ) -> std::result::Result<Extensions, ()>
-        where
-            'a: 'async_trait, // https://github.com/dtolnay/async-trait/issues/8#issuecomment-655638329
-            R: 'a,
-        {
+            &mut self, _: &(dyn TokenRequest + Sync), _: Extensions,
+        ) -> std::result::Result<Extensions, ()> {
             Ok(Extensions::new())
         }
     }
 
-    pub trait Endpoint<R: WebRequest> {
+    pub trait Endpoint {
         /// Get the client corresponding to some id.
         fn registrar(&self) -> &dyn crate::primitives::Registrar;
 
@@ -161,16 +148,12 @@ pub mod access_token {
         /// The system of used extension, extending responses.
         ///
         /// It is possible to use `&mut ()`.
-        fn extension(&mut self) -> &mut dyn Extension<R>;
+        fn extension(&mut self) -> &mut dyn Extension;
     }
 
-    pub async fn access_token<R: WebRequest>(
-        handler: &mut dyn Endpoint<R>, request: WrappedRequest<R>,
-    ) -> Result<BearerToken, Error>
-    where
-        R: Clone + Send,
-        <R as WebRequest>::Error: Clone + Send,
-    {
+    pub async fn access_token(
+        handler: &mut (dyn Endpoint + Send), request: &(dyn TokenRequest + Sync),
+    ) -> Result<BearerToken, Error> {
         enum Requested<'a> {
             None,
             Authenticate {
@@ -187,7 +170,7 @@ pub mod access_token {
             },
         }
 
-        let mut access_token = AccessToken::new(&request);
+        let mut access_token = AccessToken::new(request);
         let mut requested = Requested::None;
 
         loop {
@@ -219,7 +202,7 @@ pub mod access_token {
                 Requested::Extend { grant: _, extensions } => {
                     let access_extensions = handler
                         .extension()
-                        .extend(request.clone(), extensions.clone())
+                        .extend(request, extensions.clone())
                         .await
                         .map_err(|_| Error::invalid())?;
 
@@ -263,41 +246,27 @@ pub mod authorization {
             error::{AuthorizationError, AuthorizationErrorType},
             authorization::{Request, Authorization, Input, Error, Output, ErrorUrl},
         },
-        endpoint::{PreGrant, Scope, WebRequest},
+        endpoint::{PreGrant, Scope},
     };
     use url::Url;
     use chrono::{Duration, Utc};
 
-    use crate::endpoint::authorization::WrappedRequest;
     use std::borrow::Cow;
 
     /// A system of addons provided additional data.
     ///
     /// An endpoint not having any extension may use `&mut ()` as the result of system.
     #[async_trait]
-    pub trait Extension<'a, R>
-    where
-        R: WebRequest + Clone + Send,
-        <R as WebRequest>::Error: Clone + Send,
-    {
+    pub trait Extension {
         /// Inspect the request to produce extension data.
-        async fn extend(&mut self, request: WrappedRequest<R>) -> std::result::Result<Extensions, ()>
-        where
-            'a: 'async_trait,
-            R: 'a;
+        async fn extend(
+            &mut self, request: &(dyn Request + Sync),
+        ) -> std::result::Result<Extensions, ()>;
     }
 
     #[async_trait]
-    impl<'a, R> Extension<'a, R> for ()
-    where
-        R: WebRequest + Clone + Send,
-        <R as WebRequest>::Error: Clone + Send,
-    {
-        async fn extend(&mut self, _: WrappedRequest<R>) -> std::result::Result<Extensions, ()>
-        where
-            'a: 'async_trait,
-            R: 'a,
-        {
+    impl Extension for () {
+        async fn extend(&mut self, _: &(dyn Request + Sync)) -> std::result::Result<Extensions, ()> {
             Ok(Extensions::new())
         }
     }
@@ -307,11 +276,7 @@ pub mod authorization {
     /// Each method will only be invoked exactly once when processing a correct and authorized request,
     /// and potentially less than once when the request is faulty.  These methods should be implemented
     /// by internally using `primitives`, as it is implemented in the `frontend` module.
-    pub trait Endpoint<R>: Send
-    where
-        R: WebRequest + Clone + Send,
-        <R as WebRequest>::Error: Clone + Send,
-    {
+    pub trait Endpoint {
         /// 'Bind' a client and redirect uri from a request to internally approved parameters.
         fn registrar(&self) -> &dyn crate::primitives::Registrar;
 
@@ -321,7 +286,7 @@ pub mod authorization {
         /// An extension implementation of this endpoint.
         ///
         /// It is possible to use `&mut ()`.
-        fn extension(&mut self) -> &mut dyn Extension<R>;
+        fn extension(&mut self) -> &mut dyn Extension;
     }
 
     /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
@@ -347,13 +312,9 @@ pub mod authorization {
         ///
         /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
         /// same endpoint as was used to create the pending request.
-        pub async fn authorize<'a, R>(
-            self, handler: &mut dyn Endpoint<R>, owner_id: Cow<'a, str>,
-        ) -> Result<Url, Error>
-        where
-            R: WebRequest + Clone + Send,
-            <R as WebRequest>::Error: Clone + Send,
-        {
+        pub async fn authorize(
+            self, handler: &mut dyn Endpoint, owner_id: Cow<'_, str>,
+        ) -> Result<Url, Error> {
             let mut url = self.pre_grant.redirect_uri.clone();
 
             let grant = handler
@@ -392,13 +353,9 @@ pub mod authorization {
     /// If the client is not registered, the request will otherwise be ignored, if the request has
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
-    pub async fn authorization_code<R>(
-        handler: &mut dyn Endpoint<R>, request: WrappedRequest<R>,
-    ) -> Result<Pending, Error>
-    where
-        R: WebRequest + Clone + Send,
-        <R as WebRequest>::Error: Clone + Send,
-    {
+    pub async fn authorization_code(
+        handler: &mut (dyn Endpoint + Send), request: &(dyn Request + Sync),
+    ) -> Result<Pending, Error> {
         enum Requested {
             None,
             Bind {
@@ -413,7 +370,7 @@ pub mod authorization {
             },
         }
 
-        let mut authorization = Authorization::new(&request);
+        let mut authorization = Authorization::new(request);
         let mut requested = Requested::None;
         let mut the_redirect_uri = None;
 
@@ -435,7 +392,7 @@ pub mod authorization {
                     };
                     the_redirect_uri = Some(bound_client.redirect_uri.clone().into_owned());
                     Input::Bound {
-                        request: &request,
+                        request: request,
                         bound_client,
                     }
                 }
@@ -444,7 +401,7 @@ pub mod authorization {
                         Ok(extension_data) => extension_data,
                         Err(()) => {
                             let prepared_error = ErrorUrl::with_request(
-                                &request,
+                                request,
                                 the_redirect_uri.unwrap().clone(),
                                 AuthorizationErrorType::InvalidRequest,
                             );
@@ -467,7 +424,7 @@ pub mod authorization {
                             RegistrarError::PrimitiveError => Error::PrimitiveError,
                             RegistrarError::Unspecified => {
                                 let prepared_error = ErrorUrl::with_request(
-                                    &request,
+                                    request,
                                     redirect_uri.clone(),
                                     AuthorizationErrorType::InvalidScope,
                                 );

@@ -26,9 +26,8 @@ use crate::{
 /// [`allow_credentials_in_body`]: #method.allow_credentials_in_body
 pub struct AccessTokenFlow<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     endpoint: WrappedToken<E, R>,
     allow_credentials_in_body: bool,
@@ -36,9 +35,8 @@ where
 
 struct WrappedToken<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     inner: E,
     extension_fallback: (),
@@ -46,11 +44,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct WrappedRequest<R: WebRequest>
-where
-    R: Clone,
-    <R as WebRequest>::Error: Clone,
-{
+pub struct WrappedRequest<R: WebRequest> {
     /// The query in the url.
     body: NormalizedParameter,
 
@@ -78,8 +72,8 @@ struct Authorization(String, Vec<u8>);
 impl<E, R> AccessTokenFlow<E, R>
 where
     E: Endpoint<R> + Send,
-    R: WebRequest + Send + Clone,
-    <R as WebRequest>::Error: Send + Clone,
+    R: WebRequest + Send + Sync,
+    <R as WebRequest>::Error: Send + Sync,
 {
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
@@ -134,7 +128,7 @@ where
     pub async fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
         let issued = access_token(
             &mut self.endpoint,
-            WrappedRequest::new(&mut request, self.allow_credentials_in_body),
+            &WrappedRequest::new(&mut request, self.allow_credentials_in_body),
         )
         .await;
 
@@ -155,9 +149,8 @@ fn token_error<E, R>(
     endpoint: &mut E, request: &mut R, error: TokenError,
 ) -> Result<R::Response, E::Error>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     Ok(match error {
         TokenError::Invalid(mut json) => {
@@ -189,11 +182,10 @@ where
     })
 }
 
-impl<E, R> TokenEndpoint<R> for WrappedToken<E, R>
+impl<E, R> TokenEndpoint for WrappedToken<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     fn registrar(&self) -> &dyn Registrar {
         self.inner.registrar().unwrap()
@@ -207,7 +199,7 @@ where
         self.inner.issuer_mut().unwrap()
     }
 
-    fn extension(&mut self) -> &mut dyn Extension<R> {
+    fn extension(&mut self) -> &mut dyn Extension {
         self.inner
             .extension()
             .and_then(super::Extension::access_token)
@@ -215,11 +207,7 @@ where
     }
 }
 
-impl<R: WebRequest> WrappedRequest<R>
-where
-    R: Clone,
-    <R as WebRequest>::Error: Clone,
-{
+impl<R: WebRequest> WrappedRequest<R> {
     pub fn new(request: &mut R, credentials: bool) -> Self {
         Self::new_or_fail(request, credentials).unwrap_or_else(Self::from_err)
     }
@@ -283,9 +271,6 @@ where
 }
 
 impl<R: WebRequest> TokenRequest for WrappedRequest<R>
-where
-    R: Clone,
-    <R as WebRequest>::Error: Clone,
 {
     fn valid(&self) -> bool {
         self.error.is_none()

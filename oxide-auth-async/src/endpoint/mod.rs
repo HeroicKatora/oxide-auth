@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use oxide_auth::endpoint::{OAuthError, Template, WebRequest, OwnerConsent, PreGrant, Scopes};
+use oxide_auth::code_grant::accesstoken::Request as TokenRequest;
 
-// pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
-pub use crate::code_grant::access_token::Extension as AccessTokenExtension;
+pub use crate::code_grant::access_token::{Extension as AccessTokenExtension};
 pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
 use crate::primitives::{Authorizer, Registrar, Issuer};
 
@@ -13,8 +13,7 @@ pub mod resource;
 
 pub trait Endpoint<Request>
 where
-    Request: WebRequest + Clone + Send,
-    <Request as WebRequest>::Error: Clone + Send,
+    Request: WebRequest,
 {
     /// The error typed used as the error representation of each flow.
     type Error;
@@ -66,19 +65,19 @@ where
     /// Get the central extension instance this endpoint.
     ///
     /// Returning `None` is the default implementation and acts as simply providing any extensions.
-    fn extension(&mut self) -> Option<&mut dyn Extension<Request>> {
+    fn extension(&mut self) -> Option<&mut dyn Extension> {
         None
     }
 }
 
-pub trait Extension<R: WebRequest> {
+pub trait Extension {
     /// The handler for authorization code extensions.
-    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension<R>> {
+    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
         None
     }
 
     /// The handler for access token extensions.
-    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension<R>> {
+    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
         None
     }
 }

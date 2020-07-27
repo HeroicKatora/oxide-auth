@@ -13,18 +13,16 @@ use super::*;
 /// Guards resources by requiring OAuth authorization.
 pub struct ResourceFlow<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     endpoint: WrappedResource<E, R>,
 }
 
 struct WrappedResource<E, R>(E, PhantomData<R>)
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send;
+    E: Endpoint<R>,
+    R: WebRequest;
 
 struct WrappedRequest<R: WebRequest> {
     /// Original request.
@@ -46,9 +44,8 @@ struct Scoped<'a, E: 'a, R: 'a> {
 
 impl<E, R> ResourceFlow<E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
@@ -141,9 +138,8 @@ impl<R: WebRequest> WrappedRequest<R> {
 
 impl<'a, E: 'a, R: 'a> ResourceEndpoint for Scoped<'a, E, R>
 where
-    E: Endpoint<R> + Send,
-    R: WebRequest + Clone + Send,
-    <R as WebRequest>::Error: Clone + Send,
+    E: Endpoint<R>,
+    R: WebRequest,
 {
     fn scopes(&mut self) -> &[Scope] {
         self.endpoint.scopes().unwrap().scopes(self.request)
