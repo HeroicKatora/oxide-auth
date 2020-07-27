@@ -1,8 +1,11 @@
 //! Async versions of all primitives traits.
 use async_trait::async_trait;
 use oxide_auth::primitives::{grant::Grant, scope::Scope};
-use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken};
-use oxide_auth::primitives::registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant};
+use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken, self};
+use oxide_auth::primitives::{
+    authorizer,
+    registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant, self},
+};
 
 #[async_trait]
 pub trait Authorizer {
@@ -11,19 +14,19 @@ pub trait Authorizer {
     async fn extract(&mut self, _: &str) -> Result<Option<Grant>, ()>;
 }
 
-// #[async_trait]
-// impl<T> Authorizer for T
-// where
-//     T: authorizer::Authorizer + Send + ?Sized,
-// {
-//     async fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
-//         authorizer::Authorizer::authorize(self, grant)
-//     }
+#[async_trait]
+impl<T> Authorizer for T
+where
+    T: authorizer::Authorizer + Send + ?Sized,
+{
+    async fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        authorizer::Authorizer::authorize(self, grant)
+    }
 
-//     async fn extract(&mut self, token: &str) -> Result<Option<Grant>, ()> {
-//         authorizer::Authorizer::extract(self, token)
-//     }
-// }
+    async fn extract(&mut self, token: &str) -> Result<Option<Grant>, ()> {
+        authorizer::Authorizer::extract(self, token)
+    }
+}
 
 #[async_trait]
 pub trait Issuer {
