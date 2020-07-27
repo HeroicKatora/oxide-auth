@@ -354,7 +354,7 @@ pub mod authorization {
     /// some other syntactical error, the client is contacted at its redirect url with an error
     /// response.
     pub async fn authorization_code(
-        handler: &mut (dyn Endpoint + Send), request: &(dyn Request + Sync),
+        handler: &mut (dyn Endpoint + Send + Sync), request: &(dyn Request + Sync),
     ) -> Result<Pending, Error> {
         enum Requested {
             None,
@@ -397,7 +397,7 @@ pub mod authorization {
                     }
                 }
                 Requested::Extend => {
-                    let grant_extension = match handler.extension().extend(request.clone()).await {
+                    let grant_extension = match handler.extension().extend(request).await {
                         Ok(extension_data) => extension_data,
                         Err(()) => {
                             let prepared_error = ErrorUrl::with_request(
