@@ -65,7 +65,7 @@ where
     inner: AuthorizationPartialInner<'a, E, R>,
 
     /// TODO: offer this in the public api instead of dropping the request.
-    _with_request: Option<Box<dyn FnOnce(R) -> ()>>,
+    _with_request: Option<Box<dyn FnOnce(R) -> () + Send>>,
 }
 
 /// Result type from processing an authentication request.
@@ -104,7 +104,7 @@ where
 
 impl<E, R> AuthorizationFlow<E, R>
 where
-    E: Endpoint<R> + Send,
+    E: Endpoint<R> + Send + Sync,
     R: WebRequest + Send + Sync,
     <R as WebRequest>::Error: Send + Sync,
 {
