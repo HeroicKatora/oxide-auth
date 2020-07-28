@@ -45,7 +45,7 @@ where
 
 struct AuthorizationPending<'a, E: 'a, R: 'a>
 where
-    E: Endpoint<R>,
+    E: Endpoint<R> + Send,
     R: WebRequest,
 {
     endpoint: &'a mut WrappedAuthorization<E, R>,
@@ -59,7 +59,7 @@ where
 /// authorization flow for this request to produce a response or an error.
 struct AuthorizationPartial<'a, E: 'a, R: 'a>
 where
-    E: Endpoint<R>,
+    E: Endpoint<R> + Send,
     R: WebRequest,
 {
     inner: AuthorizationPartialInner<'a, E, R>,
@@ -71,7 +71,7 @@ where
 /// Result type from processing an authentication request.
 enum AuthorizationPartialInner<'a, E: 'a, R: 'a>
 where
-    E: Endpoint<R>,
+    E: Endpoint<R> + Send,
     R: WebRequest,
 {
     /// No error happened during processing and the resource owner can decide over the grant.
@@ -174,8 +174,8 @@ where
 
 impl<'a, E, R> AuthorizationPartial<'a, E, R>
 where
-    E: Endpoint<R>,
-    R: WebRequest,
+    E: Endpoint<R> + Send,
+    R: WebRequest + Send,
 {
     /// Finish the authentication step.
     ///
@@ -215,8 +215,8 @@ where
 
 impl<'a, E, R> AuthorizationPending<'a, E, R>
 where
-    E: Endpoint<R>,
-    R: WebRequest,
+    E: Endpoint<R> + Send,
+    R: WebRequest + Send,
 {
     /// Resolve the pending status using the endpoint to query owner consent.
     async fn finish(mut self) -> (R, Result<R::Response, E::Error>) {
@@ -279,7 +279,7 @@ where
     E: Endpoint<R>,
     R: WebRequest,
 {
-    fn owner_solicitor(&mut self) -> &mut dyn OwnerSolicitor<R> {
+    fn owner_solicitor(&mut self) -> &mut (dyn OwnerSolicitor<R> + Send) {
         self.inner.owner_solicitor().unwrap()
     }
 }
@@ -289,15 +289,15 @@ where
     E: Endpoint<R>,
     R: WebRequest,
 {
-    fn registrar(&self) -> &dyn Registrar {
+    fn registrar(&self) -> &(dyn Registrar + Sync) {
         self.inner.registrar().unwrap()
     }
 
-    fn authorizer(&mut self) -> &mut dyn Authorizer {
+    fn authorizer(&mut self) -> &mut (dyn Authorizer + Send) {
         self.inner.authorizer_mut().unwrap()
     }
 
-    fn extension(&mut self) -> &mut dyn Extension {
+    fn extension(&mut self) -> &mut (dyn Extension + Send) {
         self.inner
             .extension()
             .and_then(super::Extension::authorization)

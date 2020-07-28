@@ -104,7 +104,6 @@ pub mod resource {
 pub mod access_token {
     use async_trait::async_trait;
     use oxide_auth::{
-        endpoint::WebRequest,
         primitives::{
             grant::{Extensions, Grant},
             registrar::RegistrarError,
@@ -278,15 +277,15 @@ pub mod authorization {
     /// by internally using `primitives`, as it is implemented in the `frontend` module.
     pub trait Endpoint {
         /// 'Bind' a client and redirect uri from a request to internally approved parameters.
-        fn registrar(&self) -> &dyn crate::primitives::Registrar;
+        fn registrar(&self) -> &(dyn crate::primitives::Registrar + Sync);
 
         /// Generate an authorization code for a given grant.
-        fn authorizer(&mut self) -> &mut dyn crate::primitives::Authorizer;
+        fn authorizer(&mut self) -> &mut (dyn crate::primitives::Authorizer + Send);
 
         /// An extension implementation of this endpoint.
         ///
         /// It is possible to use `&mut ()`.
-        fn extension(&mut self) -> &mut dyn Extension;
+        fn extension(&mut self) -> &mut (dyn Extension + Send);
     }
 
     /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
@@ -313,7 +312,7 @@ pub mod authorization {
         /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
         /// same endpoint as was used to create the pending request.
         pub async fn authorize(
-            self, handler: &mut dyn Endpoint, owner_id: Cow<'_, str>,
+            self, handler: &mut (dyn Endpoint + Send), owner_id: Cow<'_, str>,
         ) -> Result<Url, Error> {
             let mut url = self.pre_grant.redirect_uri.clone();
 
@@ -392,7 +391,7 @@ pub mod authorization {
                     };
                     the_redirect_uri = Some(bound_client.redirect_uri.clone().into_owned());
                     Input::Bound {
-                        request: request,
+                        request,
                         bound_client,
                     }
                 }

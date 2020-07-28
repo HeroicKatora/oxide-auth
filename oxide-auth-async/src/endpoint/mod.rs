@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use oxide_auth::endpoint::{OAuthError, Template, WebRequest, OwnerConsent, PreGrant, Scopes};
-use oxide_auth::code_grant::accesstoken::Request as TokenRequest;
 
 pub use crate::code_grant::access_token::{Extension as AccessTokenExtension};
 pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
@@ -22,13 +21,13 @@ where
     ///
     /// Returning `None` will implicate failing any flow that requires a registrar but does not
     /// have any effect on flows that do not require one.
-    fn registrar(&self) -> Option<&dyn Registrar>;
+    fn registrar(&self) -> Option<&(dyn Registrar + Sync)>;
 
     /// An authorizer if this endpoint can access one.
     ///
     /// Returning `None` will implicate failing any flow that requires an authorizer but does not
     /// have any effect on flows that do not require one.
-    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer>;
+    fn authorizer_mut(&mut self) -> Option<&mut (dyn Authorizer + Send)>;
 
     /// An issuer if this endpoint can access one.
     ///
@@ -40,7 +39,7 @@ where
     ///
     /// Returning `None` will implicated failing the authorization code flow but does have any
     /// effect on other flows.
-    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<Request>>;
+    fn owner_solicitor(&mut self) -> Option<&mut (dyn OwnerSolicitor<Request> + Send)>;
 
     /// Determine the required scopes for a request.
     ///
@@ -65,14 +64,14 @@ where
     /// Get the central extension instance this endpoint.
     ///
     /// Returning `None` is the default implementation and acts as simply providing any extensions.
-    fn extension(&mut self) -> Option<&mut dyn Extension> {
+    fn extension(&mut self) -> Option<&mut (dyn Extension + Send)> {
         None
     }
 }
 
 pub trait Extension {
     /// The handler for authorization code extensions.
-    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
+    fn authorization(&mut self) -> Option<&mut (dyn AuthorizationExtension + Send)> {
         None
     }
 
