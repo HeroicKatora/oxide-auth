@@ -4,14 +4,14 @@ pub mod refresh {
 
     pub trait Endpoint {
         /// Authenticate the requesting confidential client.
-        fn registrar(&self) -> &dyn crate::primitives::Registrar;
+        fn registrar(&self) -> &(dyn crate::primitives::Registrar + Sync);
 
         /// Recover and test the provided refresh token then issue new tokens.
-        fn issuer(&mut self) -> &mut dyn crate::primitives::Issuer;
+        fn issuer(&mut self) -> &mut (dyn crate::primitives::Issuer + Send);
     }
 
     pub async fn refresh(
-        handler: &mut dyn Endpoint, request: &dyn Request,
+        handler: &mut (dyn Endpoint + Send + Sync), request: &(dyn Request + Sync),
     ) -> Result<BearerToken, Error> {
         let mut refresh = Refresh::new(request);
         let mut input = Input::None;
@@ -65,7 +65,9 @@ pub mod resource {
         fn issuer(&mut self) -> &mut dyn crate::primitives::Issuer;
     }
 
-    pub async fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant, Error> {
+    pub async fn protect(
+        handler: &mut (dyn Endpoint + Send + Sync), req: &(dyn Request + Sync),
+    ) -> Result<Grant, Error> {
         enum Requested {
             None,
             Request,
@@ -136,22 +138,22 @@ pub mod access_token {
 
     pub trait Endpoint {
         /// Get the client corresponding to some id.
-        fn registrar(&self) -> &dyn crate::primitives::Registrar;
+        fn registrar(&self) -> &(dyn crate::primitives::Registrar + Sync);
 
         /// Get the authorizer from which we can recover the authorization.
-        fn authorizer(&mut self) -> &mut dyn crate::primitives::Authorizer;
+        fn authorizer(&mut self) -> &mut (dyn crate::primitives::Authorizer + Send);
 
         /// Return the issuer instance to create the access token.
-        fn issuer(&mut self) -> &mut dyn crate::primitives::Issuer;
+        fn issuer(&mut self) -> &mut (dyn crate::primitives::Issuer + Send);
 
         /// The system of used extension, extending responses.
         ///
         /// It is possible to use `&mut ()`.
-        fn extension(&mut self) -> &mut dyn Extension;
+        fn extension(&mut self) -> &mut (dyn Extension + Send);
     }
 
     pub async fn access_token(
-        handler: &mut (dyn Endpoint + Send), request: &(dyn TokenRequest + Sync),
+        handler: &mut (dyn Endpoint + Send + Sync), request: &(dyn TokenRequest + Sync),
     ) -> Result<BearerToken, Error> {
         enum Requested<'a> {
             None,
@@ -382,7 +384,7 @@ pub mod authorization {
                 } => {
                     let client_url = ClientUrl {
                         client_id: Cow::Owned(client_id),
-                        redirect_uri: redirect_uri.map(|uri| Cow::Owned(uri)),
+                        redirect_uri: redirect_uri.map(Cow::Owned),
                     };
                     let bound_client = match handler.registrar().bound_redirect(client_url).await {
                         Err(RegistrarError::Unspecified) => return Err(Error::Ignore),
@@ -401,7 +403,7 @@ pub mod authorization {
                         Err(()) => {
                             let prepared_error = ErrorUrl::with_request(
                                 request,
-                                the_redirect_uri.unwrap().clone(),
+                                the_redirect_uri.unwrap(),
                                 AuthorizationErrorType::InvalidRequest,
                             );
                             return Err(Error::Redirect(prepared_error));

@@ -71,7 +71,7 @@ struct Authorization(String, Vec<u8>);
 
 impl<E, R> AccessTokenFlow<E, R>
 where
-    E: Endpoint<R> + Send,
+    E: Endpoint<R> + Send + Sync,
     R: WebRequest + Send + Sync,
     <R as WebRequest>::Error: Send + Sync,
 {
@@ -187,19 +187,19 @@ where
     E: Endpoint<R>,
     R: WebRequest,
 {
-    fn registrar(&self) -> &dyn Registrar {
+    fn registrar(&self) -> &(dyn Registrar + Sync) {
         self.inner.registrar().unwrap()
     }
 
-    fn authorizer(&mut self) -> &mut dyn Authorizer {
+    fn authorizer(&mut self) -> &mut (dyn Authorizer + Send) {
         self.inner.authorizer_mut().unwrap()
     }
 
-    fn issuer(&mut self) -> &mut dyn Issuer {
+    fn issuer(&mut self) -> &mut (dyn Issuer + Send) {
         self.inner.issuer_mut().unwrap()
     }
 
-    fn extension(&mut self) -> &mut dyn Extension {
+    fn extension(&mut self) -> &mut (dyn Extension + Send) {
         self.inner
             .extension()
             .and_then(super::Extension::access_token)
@@ -270,8 +270,7 @@ impl<R: WebRequest> WrappedRequest<R> {
     }
 }
 
-impl<R: WebRequest> TokenRequest for WrappedRequest<R>
-{
+impl<R: WebRequest> TokenRequest for WrappedRequest<R> {
     fn valid(&self) -> bool {
         self.error.is_none()
     }

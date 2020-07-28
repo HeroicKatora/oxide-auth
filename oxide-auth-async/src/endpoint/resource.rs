@@ -44,8 +44,9 @@ struct Scoped<'a, E: 'a, R: 'a> {
 
 impl<E, R> ResourceFlow<E, R>
 where
-    E: Endpoint<R>,
-    R: WebRequest,
+    E: Endpoint<R> + Send + Sync,
+    R: WebRequest + Send + Sync,
+    <R as WebRequest>::Error: Send + Sync,
 {
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
@@ -102,7 +103,7 @@ where
             }
         };
 
-        let mut response = self.endpoint.0.response(request, template.into())?;
+        let mut response = self.endpoint.0.response(request, template)?;
         response
             .unauthorized(&error.www_authenticate())
             .map_err(|err| self.endpoint.0.web_error(err))?;
@@ -156,6 +157,6 @@ impl<R: WebRequest> ResourceRequest for WrappedRequest<R> {
     }
 
     fn token(&self) -> Option<Cow<str>> {
-        self.authorization.as_ref().map(String::as_str).map(Cow::Borrowed)
+        self.authorization.as_deref().map(Cow::Borrowed)
     }
 }

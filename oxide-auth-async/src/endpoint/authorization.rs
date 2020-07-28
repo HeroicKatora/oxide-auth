@@ -21,7 +21,7 @@ where
     endpoint: WrappedAuthorization<E, R>,
 }
 
-struct WrappedAuthorization<E: Endpoint<R>, R: WebRequest>
+struct WrappedAuthorization<E: Endpoint<R>, R>
 where
     E: Endpoint<R>,
     R: WebRequest,
@@ -32,7 +32,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct WrappedRequest<R: WebRequest>
+pub struct WrappedRequest<R>
 where
     R: WebRequest,
 {

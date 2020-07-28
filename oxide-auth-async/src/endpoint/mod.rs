@@ -33,7 +33,7 @@ where
     ///
     /// Returning `None` will implicate failing any flow that requires an issuer but does not have
     /// any effect on flows that do not require one.
-    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer>;
+    fn issuer_mut(&mut self) -> Option<&mut (dyn Issuer + Send)>;
 
     /// Return the system that checks owner consent.
     ///
@@ -76,7 +76,7 @@ pub trait Extension {
     }
 
     /// The handler for access token extensions.
-    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
+    fn access_token(&mut self) -> Option<&mut (dyn AccessTokenExtension + Send)> {
         None
     }
 }
