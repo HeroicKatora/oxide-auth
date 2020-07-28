@@ -1,10 +1,10 @@
 //! Async versions of all primitives traits.
 use async_trait::async_trait;
 use oxide_auth::primitives::{grant::Grant, scope::Scope};
-use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken, self};
+use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken};
 use oxide_auth::primitives::{
     authorizer,
-    registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant, self},
+    registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant},
 };
 
 #[async_trait]
