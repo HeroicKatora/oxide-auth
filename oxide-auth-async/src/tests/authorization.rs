@@ -16,13 +16,13 @@ use super::defaults::*;
 struct AuthorizationEndpoint<'a> {
     registrar: &'a ClientMap,
     authorizer: &'a mut AuthMap<TestGenerator>,
-    solicitor: &'a mut dyn OwnerSolicitor<CraftedRequest>,
+    solicitor: &'a mut (dyn OwnerSolicitor<CraftedRequest> + Send + Sync),
 }
 
 impl<'a> AuthorizationEndpoint<'a> {
     fn new(
         registrar: &'a ClientMap, authorizer: &'a mut AuthMap<TestGenerator>,
-        solicitor: &'a mut dyn OwnerSolicitor<CraftedRequest>,
+        solicitor: &'a mut (dyn OwnerSolicitor<CraftedRequest> + Send + Sync),
     ) -> Self {
         Self {
             registrar,
@@ -35,13 +35,13 @@ impl<'a> AuthorizationEndpoint<'a> {
 impl<'a> Endpoint<CraftedRequest> for AuthorizationEndpoint<'a> {
     type Error = Error<CraftedRequest>;
 
-    fn registrar(&self) -> Option<&dyn crate::primitives::Registrar> {
+    fn registrar(&self) -> Option<&(dyn crate::primitives::Registrar + Sync)> {
         Some(self.registrar)
     }
-    fn authorizer_mut(&mut self) -> Option<&mut dyn crate::primitives::Authorizer> {
+    fn authorizer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Authorizer + Send)> {
         Some(self.authorizer)
     }
-    fn issuer_mut(&mut self) -> Option<&mut dyn crate::primitives::Issuer> {
+    fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
         None
     }
     fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
@@ -58,7 +58,7 @@ impl<'a> Endpoint<CraftedRequest> for AuthorizationEndpoint<'a> {
     fn web_error(&mut self, err: <CraftedRequest as WebRequest>::Error) -> Self::Error {
         Error::Web(err)
     }
-    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<CraftedRequest>> {
+    fn owner_solicitor(&mut self) -> Option<&mut (dyn OwnerSolicitor<CraftedRequest> + Send)> {
         Some(self.solicitor)
     }
 }
@@ -119,7 +119,7 @@ impl AuthorizationSetup {
         }
     }
 
-    fn test_error_redirect<P>(&mut self, request: CraftedRequest, mut pagehandler: P)
+    fn test_error_redirect<P: Send + Sync>(&mut self, request: CraftedRequest, mut pagehandler: P)
     where
         P: OwnerSolicitor<CraftedRequest>,
     {

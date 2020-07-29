@@ -19,13 +19,13 @@ pub struct ResourceEndpoint<'a> {
 impl<'a> Endpoint<CraftedRequest> for ResourceEndpoint<'a> {
     type Error = Error<CraftedRequest>;
 
-    fn registrar(&self) -> Option<&dyn crate::primitives::Registrar> {
+    fn registrar(&self) -> Option<&(dyn crate::primitives::Registrar + Sync)> {
         None
     }
-    fn authorizer_mut(&mut self) -> Option<&mut dyn crate::primitives::Authorizer> {
+    fn authorizer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Authorizer + Send)> {
         None
     }
-    fn issuer_mut(&mut self) -> Option<&mut dyn crate::primitives::Issuer> {
+    fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
         Some(self.issuer)
     }
     fn response(
@@ -42,7 +42,9 @@ impl<'a> Endpoint<CraftedRequest> for ResourceEndpoint<'a> {
     fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
         Some(&mut self.scopes)
     }
-    fn owner_solicitor(&mut self) -> Option<&mut dyn crate::endpoint::OwnerSolicitor<CraftedRequest>> {
+    fn owner_solicitor(
+        &mut self,
+    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
         None
     }
 }

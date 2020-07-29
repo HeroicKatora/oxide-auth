@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use oxide_auth::primitives::{grant::Grant, scope::Scope};
 use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken};
 use oxide_auth::primitives::{
-    authorizer,
+    authorizer, registrar, issuer,
     registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant},
 };
 
@@ -39,27 +39,27 @@ pub trait Issuer {
     async fn recover_refresh(&mut self, _: &str) -> Result<Option<Grant>, ()>;
 }
 
-// #[async_trait]
-// impl<T> Issuer for T
-// where
-//     T: issuer::Issuer + Send + ?Sized,
-// {
-//     async fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
-//         issuer::Issuer::issue(self, grant)
-//     }
+#[async_trait]
+impl<T> Issuer for T
+where
+    T: issuer::Issuer + Send + ?Sized,
+{
+    async fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        issuer::Issuer::issue(self, grant)
+    }
 
-//     async fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
-//         issuer::Issuer::refresh(self, token, grant)
-//     }
+    async fn refresh(&mut self, token: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        issuer::Issuer::refresh(self, token, grant)
+    }
 
-//     async fn recover_token(&mut self, token: &str) -> Result<Option<Grant>, ()> {
-//         issuer::Issuer::recover_token(self, token)
-//     }
+    async fn recover_token(&mut self, token: &str) -> Result<Option<Grant>, ()> {
+        issuer::Issuer::recover_token(self, token)
+    }
 
-//     async fn recover_refresh(&mut self, token: &str) -> Result<Option<Grant>, ()> {
-//         issuer::Issuer::recover_refresh(self, token)
-//     }
-// }
+    async fn recover_refresh(&mut self, token: &str) -> Result<Option<Grant>, ()> {
+        issuer::Issuer::recover_refresh(self, token)
+    }
+}
 
 #[async_trait]
 pub trait Registrar {
@@ -72,22 +72,22 @@ pub trait Registrar {
     async fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError>;
 }
 
-// #[async_trait]
-// impl<T> Registrar for T
-// where
-//     T: registrar::Registrar + Send + ?Sized,
-// {
-//     async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
-//         registrar::Registrar::bound_redirect(self, bound)
-//     }
+#[async_trait]
+impl<T> Registrar for T
+where
+    T: registrar::Registrar + Send + Sync + ?Sized,
+{
+    async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        registrar::Registrar::bound_redirect(self, bound)
+    }
 
-//     async fn negotiate<'a>(
-//         &self, client: BoundClient<'a>, scope: Option<Scope>,
-//     ) -> Result<PreGrant, RegistrarError> {
-//         registrar::Registrar::negotiate(self, client, scope)
-//     }
+    async fn negotiate<'a>(
+        &self, client: BoundClient<'a>, scope: Option<Scope>,
+    ) -> Result<PreGrant, RegistrarError> {
+        registrar::Registrar::negotiate(self, client, scope)
+    }
 
-//     async fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
-//         registrar::Registrar::check(self, client_id, passphrase)
-//     }
-// }
+    async fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
+        registrar::Registrar::check(self, client_id, passphrase)
+    }
+}

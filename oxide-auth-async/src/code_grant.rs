@@ -1,6 +1,6 @@
 pub mod refresh {
     use oxide_auth::code_grant::refresh::{BearerToken, Error, Input, Output, Refresh, Request};
-    use oxide_auth::primitives::registrar::RegistrarError;
+    use oxide_auth::primitives::{grant::Grant, registrar::RegistrarError};
 
     pub trait Endpoint {
         /// Authenticate the requesting confidential client.
@@ -13,41 +13,64 @@ pub mod refresh {
     pub async fn refresh(
         handler: &mut (dyn Endpoint + Send + Sync), request: &(dyn Request + Sync),
     ) -> Result<BearerToken, Error> {
+        enum Requested {
+            None,
+            Refresh { token: String, grant: Grant },
+            RecoverRefresh { token: String },
+            Authenticate { client: String, pass: Option<Vec<u8>> },
+        }
         let mut refresh = Refresh::new(request);
-        let mut input = Input::None;
+        let mut requested = Requested::None;
         loop {
-            match refresh.next(input.take()) {
-                Output::Err(error) => return Err(error),
-                Output::Ok(token) => return Ok(token),
-                Output::Refresh { token, grant } => {
+            let input = match requested {
+                Requested::None => Input::None,
+                Requested::Refresh { token, grant } => {
                     let refreshed = handler
                         .issuer()
-                        .refresh(token, grant)
+                        .refresh(&token, grant)
                         .await
                         .map_err(|()| Error::Primitive)?;
-                    input = Input::Refreshed(refreshed);
+                    Input::Refreshed(refreshed)
                 }
-                Output::RecoverRefresh { token } => {
+                Requested::RecoverRefresh { token } => {
                     let recovered = handler
                         .issuer()
                         .recover_refresh(&token)
                         .await
                         .map_err(|()| Error::Primitive)?;
-                    input = Input::Recovered(recovered);
+                    Input::Recovered {
+                        request,
+                        grant: recovered,
+                    }
                 }
-                Output::Unauthenticated { client, pass } => {
-                    let _: () =
-                        handler
-                            .registrar()
-                            .check(client, pass)
-                            .await
-                            .map_err(|err| match err {
-                                RegistrarError::PrimitiveError => Error::Primitive,
-                                RegistrarError::Unspecified => Error::unauthorized("basic"),
-                            })?;
-                    input = Input::Authenticated;
+                Requested::Authenticate { client, pass } => {
+                    let _: () = handler
+                        .registrar()
+                        .check(&client, pass.as_ref().map(|p| p.as_slice()))
+                        .await
+                        .map_err(|err| match err {
+                            RegistrarError::PrimitiveError => Error::Primitive,
+                            RegistrarError::Unspecified => Error::unauthorized("basic"),
+                        })?;
+                    Input::Authenticated { request }
                 }
-            }
+            };
+
+            requested = match refresh.advance(input) {
+                Output::Err(error) => return Err(error),
+                Output::Ok(token) => return Ok(token),
+                Output::Refresh { token, grant } => Requested::Refresh {
+                    token: token.to_string(),
+                    grant,
+                },
+                Output::RecoverRefresh { token } => Requested::RecoverRefresh {
+                    token: token.to_string(),
+                },
+                Output::Unauthenticated { client, pass } => Requested::Authenticate {
+                    client: client.to_string(),
+                    pass: pass.map(|p| p.to_vec()),
+                },
+            };
         }
     }
 }
