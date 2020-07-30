@@ -135,7 +135,7 @@ pub enum Input<'req> {
     /// Provide the queried refresh token.
     Recovered {
         request: &'req dyn Request,
-        grant: Option<Grant>,
+        grant: Box<Option<Grant>>,
     },
     /// The refreshed token.
     Refreshed(RefreshedToken),
@@ -177,7 +177,7 @@ pub enum Output<'a> {
         /// The refresh token that has been used.
         token: &'a str,
         /// The grant that should be issued as determined.
-        grant: Grant,
+        grant: Box<Grant>,
     },
     /// The state machine finished and a new bearer token was generated.
     ///
@@ -252,7 +252,7 @@ impl Refresh {
                 self.output()
             }
             (RefreshState::Recovering { authenticated, token }, Input::Recovered { request, grant }) => {
-                self.state = recovered_refresh(request, authenticated, grant, token)
+                self.state = recovered_refresh(request, authenticated, *grant, token)
                     .unwrap_or_else(RefreshState::Err);
                 self.output()
             }
@@ -299,7 +299,7 @@ impl Refresh {
             RefreshState::Recovering { token, .. } => Output::RecoverRefresh { token: &token },
             RefreshState::Issuing { token, grant, .. } => Output::Refresh {
                 token,
-                grant: grant.clone(),
+                grant: Box::new(grant.clone()),
             },
             RefreshState::Err(error) => Output::Err(error.clone()),
         }
@@ -326,7 +326,7 @@ impl<'req> Input<'req> {
 pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
     enum Requested {
         None,
-        Refresh { token: String, grant: Grant },
+        Refresh { token: String, grant: Box<Grant> },
         RecoverRefresh { token: String },
         Authenticate { client: String, pass: Option<Vec<u8>> },
     }
@@ -338,7 +338,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
             Requested::Refresh { token, grant } => {
                 let refreshed = handler
                     .issuer()
-                    .refresh(&token, grant)
+                    .refresh(&token, *grant)
                     .map_err(|()| Error::Primitive)?;
                 Input::Refreshed(refreshed)
             }
@@ -349,7 +349,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
                     .map_err(|()| Error::Primitive)?;
                 Input::Recovered {
                     request,
-                    grant: recovered,
+                    grant: Box::new(recovered),
                 }
             }
             Requested::Authenticate { client, pass } => {

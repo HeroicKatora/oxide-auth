@@ -199,7 +199,7 @@ pub enum Input<'req> {
     /// Positively answer an authentication query.
     Authenticated,
     /// Provide the queried refresh token.
-    Recovered(Option<Grant>),
+    Recovered(Box<Option<Grant>>),
     /// Provide extensions
     Extended {
         /// The grant extension
@@ -256,7 +256,7 @@ pub enum Output<'machine> {
     /// The state machine finished in an error.
     ///
     /// The error will be repeated on *any* following input.
-    Err(Error),
+    Err(Box<Error>),
 }
 
 impl AccessToken {
@@ -285,7 +285,7 @@ impl AccessToken {
                     client, redirect_uri, ..
                 },
                 Input::Recovered(grant),
-            ) => Self::recovered(client, redirect_uri, grant).unwrap_or_else(AccessTokenState::Err),
+            ) => Self::recovered(client, redirect_uri, *grant).unwrap_or_else(AccessTokenState::Err),
             (AccessTokenState::Extend { saved_params, .. }, Input::Extended { access_extensions }) => {
                 Self::issue(saved_params, access_extensions)
             }
@@ -293,7 +293,7 @@ impl AccessToken {
                 return Output::Ok(Self::finish(grant, token));
             }
             (AccessTokenState::Err(err), _) => AccessTokenState::Err(err),
-            (_, _) => AccessTokenState::Err(Error::Primitive(PrimitiveError::empty())),
+            (_, _) => AccessTokenState::Err(Error::Primitive(Box::new(PrimitiveError::empty()))),
         };
 
         self.output()
@@ -301,7 +301,7 @@ impl AccessToken {
 
     fn output(&mut self) -> Output<'_> {
         match &mut self.state {
-            AccessTokenState::Err(err) => Output::Err(err.clone()),
+            AccessTokenState::Err(err) => Output::Err(Box::new(err.clone())),
             AccessTokenState::Authenticate { client, passdata, .. } => Output::Authenticate {
                 client,
                 passdata: passdata.as_ref().map(Vec::as_slice),
@@ -315,7 +315,7 @@ impl AccessToken {
     fn take(&mut self) -> AccessTokenState {
         mem::replace(
             &mut self.state,
-            AccessTokenState::Err(Error::Primitive(PrimitiveError::empty())),
+            AccessTokenState::Err(Error::Primitive(Box::new(PrimitiveError::empty()))),
         )
     }
 
@@ -439,21 +439,21 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
                     .check(client, passdata)
                     .map_err(|err| match err {
                         RegistrarError::Unspecified => Error::unauthorized("basic"),
-                        RegistrarError::PrimitiveError => Error::Primitive(PrimitiveError {
+                        RegistrarError::PrimitiveError => Error::Primitive(Box::new(PrimitiveError {
                             grant: None,
                             extensions: None,
-                        }),
+                        })),
                     })?;
                 Input::Authenticated
             }
             Requested::Recover(code) => {
                 let opt_grant = handler.authorizer().extract(code).map_err(|_| {
-                    Error::Primitive(PrimitiveError {
+                    Error::Primitive(Box::new(PrimitiveError {
                         grant: None,
                         extensions: None,
-                    })
+                    }))
                 })?;
-                Input::Recovered(opt_grant)
+                Input::Recovered(Box::new(opt_grant))
             }
             Requested::Extend { extensions } => {
                 let access_extensions = handler
@@ -464,11 +464,11 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
             }
             Requested::Issue { grant } => {
                 let token = handler.issuer().issue(grant.clone()).map_err(|_| {
-                    Error::Primitive(PrimitiveError {
+                    Error::Primitive(Box::new(PrimitiveError {
                         // FIXME: endpoint should get and handle these.
                         grant: None,
                         extensions: None,
-                    })
+                    }))
                 })?;
                 Input::Issued(token)
             }
@@ -480,7 +480,7 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
             Output::Extend { extensions } => Requested::Extend { extensions },
             Output::Issue { grant } => Requested::Issue { grant },
             Output::Ok(token) => return Ok(token),
-            Output::Err(e) => return Err(e),
+            Output::Err(e) => return Err(*e),
         };
     }
 }
@@ -532,7 +532,7 @@ pub enum Error {
     ///
     /// This is expected to occur with some endpoints. See `PrimitiveError` for
     /// more details on when this is returned.
-    Primitive(PrimitiveError),
+    Primitive(Box<PrimitiveError>),
 }
 
 /// The endpoint should have enough control over its primitives to find
