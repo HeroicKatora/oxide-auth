@@ -238,8 +238,6 @@ pub enum Output<'machine> {
     ///
     /// Fullfilled by `Input::Extended`
     Extend {
-        /// The grant that should be issued as determined.
-        grant: &'machine Grant,
         /// The grant extensions if any
         extensions: &'machine mut Extensions,
     },
@@ -309,13 +307,7 @@ impl AccessToken {
                 passdata: passdata.as_ref().map(Vec::as_slice),
             },
             AccessTokenState::Recover { code, .. } => Output::Recover { code },
-            AccessTokenState::Extend {
-                saved_params,
-                extensions,
-            } => Output::Extend {
-                grant: saved_params,
-                extensions,
-            },
+            AccessTokenState::Extend { extensions, .. } => Output::Extend { extensions },
             AccessTokenState::Issue { grant } => Output::Issue { grant },
         }
     }
@@ -428,7 +420,6 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
         },
         Recover(&'a str),
         Extend {
-            grant: &'a Grant,
             extensions: &'a mut Extensions,
         },
         Issue {
@@ -464,7 +455,7 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
                 })?;
                 Input::Recovered(opt_grant)
             }
-            Requested::Extend { grant: _, extensions } => {
+            Requested::Extend { extensions } => {
                 let access_extensions = handler
                     .extension()
                     .extend(request, extensions.clone())
@@ -486,7 +477,7 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
         requested = match access_token.advance(input) {
             Output::Authenticate { client, passdata } => Requested::Authenticate { client, passdata },
             Output::Recover { code } => Requested::Recover(code),
-            Output::Extend { grant, extensions } => Requested::Extend { grant, extensions },
+            Output::Extend { extensions } => Requested::Extend { extensions },
             Output::Issue { grant } => Requested::Issue { grant },
             Output::Ok(token) => return Ok(token),
             Output::Err(e) => return Err(e),

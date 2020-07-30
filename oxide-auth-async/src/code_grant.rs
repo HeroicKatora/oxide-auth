@@ -186,7 +186,6 @@ pub mod access_token {
             },
             Recover(&'a str),
             Extend {
-                grant: &'a Grant,
                 extensions: &'a mut Extensions,
             },
             Issue {
@@ -223,7 +222,7 @@ pub mod access_token {
                     })?;
                     Input::Recovered(opt_grant)
                 }
-                Requested::Extend { grant: _, extensions } => {
+                Requested::Extend { extensions } => {
                     let access_extensions = handler
                         .extension()
                         .extend(request, extensions.clone())
@@ -249,7 +248,7 @@ pub mod access_token {
                     Requested::Authenticate { client, passdata }
                 }
                 Output::Recover { code } => Requested::Recover(code),
-                Output::Extend { grant, extensions } => Requested::Extend { grant, extensions },
+                Output::Extend { extensions, .. } => Requested::Extend { extensions },
                 Output::Issue { grant } => Requested::Issue { grant },
                 Output::Ok(token) => return Ok(token),
                 Output::Err(e) => return Err(e),
