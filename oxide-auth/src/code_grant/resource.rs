@@ -250,7 +250,7 @@ pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
     }
 }
 
-fn validate<'req>(request: &'req dyn Request) -> Result<ResourceState> {
+fn validate(request: &'_ dyn Request) -> Result<ResourceState> {
     if !request.valid() {
         return Err(Error::InvalidRequest {
             authenticate: Authenticate::empty(),
@@ -280,7 +280,7 @@ fn validate<'req>(request: &'req dyn Request) -> Result<ResourceState> {
     Ok(ResourceState::Internalized { token })
 }
 
-fn get_scopes<'req>(token: String, scopes: &'req [Scope]) -> ResourceState {
+fn get_scopes(token: String, scopes: &'_ [Scope]) -> ResourceState {
     ResourceState::Recovering {
         token,
         scopes: scopes.to_owned(),
