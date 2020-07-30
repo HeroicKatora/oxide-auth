@@ -46,7 +46,7 @@ pub mod refresh {
                 Requested::Authenticate { client, pass } => {
                     let _: () = handler
                         .registrar()
-                        .check(&client, pass.as_ref().map(|p| p.as_slice()))
+                        .check(&client, pass.as_deref())
                         .await
                         .map_err(|err| match err {
                             RegistrarError::PrimitiveError => Error::Primitive,

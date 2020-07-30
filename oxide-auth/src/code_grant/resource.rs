@@ -287,7 +287,7 @@ fn get_scopes<'req>(token: String, scopes: &'req [Scope]) -> ResourceState {
     }
 }
 
-fn recovered<'req>(grant: Option<Grant>, mut scopes: Vec<Scope>) -> Result<Grant> {
+fn recovered(grant: Option<Grant>, mut scopes: Vec<Scope>) -> Result<Grant> {
     let grant = match grant {
         Some(grant) => grant,
         None => {

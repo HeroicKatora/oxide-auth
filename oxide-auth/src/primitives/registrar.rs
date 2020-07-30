@@ -324,7 +324,7 @@ impl PasswordPolicy for Argon2 {
 //                             Standard Implementations of Registrars                            //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| Argon2::default());
+static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(Argon2::default);
 
 impl ClientMap {
     /// Create an empty map without any clients in it.

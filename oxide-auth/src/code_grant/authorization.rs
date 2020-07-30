@@ -337,7 +337,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
             } => {
                 let client_url = ClientUrl {
                     client_id: Cow::Owned(client_id),
-                    redirect_uri: redirect_uri.map(|uri| Cow::Owned(uri)),
+                    redirect_uri: redirect_uri.map(Cow::Owned),
                 };
                 let bound_client = match handler.registrar().bound_redirect(client_url) {
                     Err(RegistrarError::Unspecified) => return Err(Error::Ignore),
@@ -530,7 +530,7 @@ impl ErrorUrl {
     ) -> ErrorUrl {
         let mut err = ErrorUrl::new(
             redirect_uri,
-            request.state().as_deref().clone(),
+            request.state().as_deref(),
             AuthorizationError::default(),
         );
         err.description().set_type(err_type);

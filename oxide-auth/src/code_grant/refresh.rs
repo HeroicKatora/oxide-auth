@@ -353,13 +353,14 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
                 }
             }
             Requested::Authenticate { client, pass } => {
-                let _: () = handler
-                    .registrar()
-                    .check(&client, pass.as_ref().map(|p| p.as_slice()))
-                    .map_err(|err| match err {
-                        RegistrarError::PrimitiveError => Error::Primitive,
-                        RegistrarError::Unspecified => Error::unauthorized("basic"),
-                    })?;
+                let _: () =
+                    handler
+                        .registrar()
+                        .check(&client, pass.as_deref())
+                        .map_err(|err| match err {
+                            RegistrarError::PrimitiveError => Error::Primitive,
+                            RegistrarError::Unspecified => Error::unauthorized("basic"),
+                        })?;
                 Input::Authenticated { request }
             }
         };
