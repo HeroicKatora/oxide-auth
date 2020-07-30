@@ -131,10 +131,15 @@ enum RefreshState {
 #[derive(Clone)]
 pub enum Input<'req> {
     /// Positively answer an authentication query.
-    Authenticated { request: &'req dyn Request },
+    Authenticated {
+        /// The required scope to access the resource.
+        scope: Option<Cow<'req, str>>,
+    },
     /// Provide the queried refresh token.
     Recovered {
-        request: &'req dyn Request,
+        /// The required scope to access the resource.
+        scope: Option<Cow<'req, str>>,
+        /// The grant
         grant: Box<Option<Grant>>,
     },
     /// The refreshed token.
@@ -251,13 +256,13 @@ impl Refresh {
                 self.state = authenticated(client, token);
                 self.output()
             }
-            (RefreshState::Recovering { authenticated, token }, Input::Recovered { request, grant }) => {
-                self.state = recovered_refresh(request, authenticated, *grant, token)
+            (RefreshState::Recovering { authenticated, token }, Input::Recovered { scope, grant }) => {
+                self.state = recovered_refresh(scope, authenticated, *grant, token)
                     .unwrap_or_else(RefreshState::Err);
                 self.output()
             }
-            (RefreshState::CoAuthenticating { grant, token }, Input::Authenticated { request }) => {
-                self.state = co_authenticated(request, grant, token).unwrap_or_else(RefreshState::Err);
+            (RefreshState::CoAuthenticating { grant, token }, Input::Authenticated { scope }) => {
+                self.state = co_authenticated(scope, grant, token).unwrap_or_else(RefreshState::Err);
                 self.output()
             }
             (RefreshState::Issuing { grant, token: _ }, Input::Refreshed(token)) => {
@@ -348,7 +353,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
                     .recover_refresh(&token)
                     .map_err(|()| Error::Primitive)?;
                 Input::Recovered {
-                    request,
+                    scope: request.scope(),
                     grant: Box::new(recovered),
                 }
             }
@@ -361,7 +366,9 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
                             RegistrarError::PrimitiveError => Error::Primitive,
                             RegistrarError::Unspecified => Error::unauthorized("basic"),
                         })?;
-                Input::Authenticated { request }
+                Input::Authenticated {
+                    scope: request.scope(),
+                }
             }
         };
 
@@ -421,7 +428,7 @@ fn authenticated(client: String, token: String) -> RefreshState {
 }
 
 fn recovered_refresh(
-    request: &dyn Request, authenticated: Option<String>, grant: Option<Grant>, token: String,
+    scope: Option<Cow<str>>, authenticated: Option<String>, grant: Option<Grant>, token: String,
 ) -> Result<RefreshState> {
     let grant = grant
         // ... is invalid, ... (Section 5.2)
@@ -436,7 +443,7 @@ fn recovered_refresh(
                 // Unauthorized but with BadRequest.
                 Err(Error::invalid(AccessTokenErrorType::InvalidGrant))
             } else {
-                validate(request, grant, token)
+                validate(scope, grant, token)
             }
         }
 
@@ -448,17 +455,17 @@ fn recovered_refresh(
     }
 }
 
-fn co_authenticated(request: &dyn Request, grant: Grant, token: String) -> Result<RefreshState> {
-    validate(request, grant, token)
+fn co_authenticated(scope: Option<Cow<str>>, grant: Grant, token: String) -> Result<RefreshState> {
+    validate(scope, grant, token)
 }
 
-fn validate(request: &dyn Request, grant: Grant, token: String) -> Result<RefreshState> {
+fn validate(scope: Option<Cow<str>>, grant: Grant, token: String) -> Result<RefreshState> {
     // .. is expired, revoked, ... (Section 5.2)
     if grant.until <= Utc::now() {
         return Err(Error::invalid(AccessTokenErrorType::InvalidGrant));
     }
 
-    let scope = match request.scope() {
+    let scope = match scope {
         // ... is invalid, unknown, malformed (Section 5.2)
         Some(scope) => Some(
             scope

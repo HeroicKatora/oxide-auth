@@ -39,7 +39,7 @@ pub mod refresh {
                         .await
                         .map_err(|()| Error::Primitive)?;
                     Input::Recovered {
-                        request,
+                        scope: request.scope(),
                         grant: Box::new(recovered),
                     }
                 }
@@ -52,7 +52,9 @@ pub mod refresh {
                             RegistrarError::PrimitiveError => Error::Primitive,
                             RegistrarError::Unspecified => Error::unauthorized("basic"),
                         })?;
-                    Input::Authenticated { request }
+                    Input::Authenticated {
+                        scope: request.scope(),
+                    }
                 }
             };
 
