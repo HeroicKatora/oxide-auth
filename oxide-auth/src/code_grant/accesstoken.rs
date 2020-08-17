@@ -183,11 +183,11 @@ enum AccessTokenState {
         redirect_uri: url::Url,
     },
     Extend {
-        saved_params: Grant,
+        saved_params: Box<Grant>,
         extensions: Extensions,
     },
     Issue {
-        grant: Grant,
+        grant: Box<Grant>,
     },
     Err(Error),
 }
@@ -199,7 +199,7 @@ pub enum Input<'req> {
     /// Positively answer an authentication query.
     Authenticated,
     /// Provide the queried refresh token.
-    Recovered(Box<Option<Grant>>),
+    Recovered(Option<Box<Grant>>),
     /// Provide extensions
     Extended {
         /// The grant extension
@@ -285,7 +285,7 @@ impl AccessToken {
                     client, redirect_uri, ..
                 },
                 Input::Recovered(grant),
-            ) => Self::recovered(client, redirect_uri, *grant).unwrap_or_else(AccessTokenState::Err),
+            ) => Self::recovered(client, redirect_uri, grant).unwrap_or_else(AccessTokenState::Err),
             (AccessTokenState::Extend { saved_params, .. }, Input::Extended { access_extensions }) => {
                 Self::issue(saved_params, access_extensions)
             }
@@ -376,7 +376,7 @@ impl AccessToken {
     }
 
     fn recovered(
-        client_id: String, redirect_uri: url::Url, grant: Option<Grant>,
+        client_id: String, redirect_uri: url::Url, grant: Option<Box<Grant>>,
     ) -> Result<AccessTokenState> {
         let mut saved_params = match grant {
             None => return Err(Error::invalid()),
@@ -398,13 +398,13 @@ impl AccessToken {
         })
     }
 
-    fn issue(grant: Grant, extensions: Extensions) -> AccessTokenState {
+    fn issue(grant: Box<Grant>, extensions: Extensions) -> AccessTokenState {
         AccessTokenState::Issue {
-            grant: Grant { extensions, ..grant },
+            grant: Box::new(Grant { extensions, ..*grant }),
         }
     }
 
-    fn finish(grant: Grant, token: IssuedToken) -> BearerToken {
+    fn finish(grant: Box<Grant>, token: IssuedToken) -> BearerToken {
         BearerToken(token, grant.scope.to_string())
     }
 }
@@ -453,7 +453,7 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
                         extensions: None,
                     }))
                 })?;
-                Input::Recovered(Box::new(opt_grant))
+                Input::Recovered(opt_grant.map(|o| Box::new(o)))
             }
             Requested::Extend { extensions } => {
                 let access_extensions = handler

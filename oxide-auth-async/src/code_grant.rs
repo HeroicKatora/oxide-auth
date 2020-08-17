@@ -40,7 +40,7 @@ pub mod refresh {
                         .map_err(|()| Error::Primitive)?;
                     Input::Recovered {
                         scope: request.scope(),
-                        grant: Box::new(recovered),
+                        grant: recovered.map(|r| Box::new(r)),
                     }
                 }
                 Requested::Authenticate { client, pass } => {
@@ -224,7 +224,7 @@ pub mod access_token {
                             extensions: None,
                         }))
                     })?;
-                    Input::Recovered(Box::new(opt_grant))
+                    Input::Recovered(opt_grant.map(|o| Box::new(o)))
                 }
                 Requested::Extend { extensions } => {
                     let access_extensions = handler
