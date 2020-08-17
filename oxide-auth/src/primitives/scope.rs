@@ -70,6 +70,11 @@ impl Scope {
     pub fn allow_access(&self, rhs: &Scope) -> bool {
         self <= rhs
     }
+
+    /// Create an iterator over the individual scopes.
+    pub fn iter(&self) -> impl Iterator<Item=&str> {
+        self.tokens.iter().map(AsRef::as_ref)
+    }
 }
 
 /// Error returned from parsing a scope as encoded in an authorization token request.
@@ -189,5 +194,15 @@ mod tests {
         assert!(!scope_base.priviledged_to(&scope_uncmp));
         assert!(!scope_uncmp.allow_access(&scope_less));
         assert!(!scope_uncmp.allow_access(&scope_base));
+    }
+
+    #[test]
+    fn test_iterating() {
+        let scope = "cap1 cap2 cap3".parse::<Scope>().unwrap();
+        let all = scope.iter().collect::<Vec<_>>();
+        assert_eq!(all.len(), 3);
+        assert!(all.contains(&"cap1"));
+        assert!(all.contains(&"cap2"));
+        assert!(all.contains(&"cap3"));
     }
 }
