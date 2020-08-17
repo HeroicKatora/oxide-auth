@@ -166,7 +166,7 @@ pub enum Output<'machine> {
     ///
     /// This output **can not** be requested repeatedly, any future `Input` will yield a primitive
     /// error instead.
-    Ok(Grant),
+    Ok(Box<Grant>),
     /// The state machine finished in an error.
     ///
     /// The error will be repeated on *any* following input.
@@ -191,7 +191,7 @@ impl Resource {
             (ResourceState::Internalized { token }, Input::Scopes(scopes)) => get_scopes(token, scopes),
             (ResourceState::Recovering { token: _, scopes }, Input::Recovered(grant)) => {
                 match recovered(grant, scopes) {
-                    Ok(grant) => return Output::Ok(grant),
+                    Ok(grant) => return Output::Ok(Box::new(grant)),
                     Err(err) => ResourceState::Err(err),
                 }
             }
@@ -242,7 +242,7 @@ pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
 
         requested = match resource.advance(input) {
             Output::Err(error) => return Err(error),
-            Output::Ok(grant) => return Ok(grant),
+            Output::Ok(grant) => return Ok(*grant),
             Output::GetRequest => Requested::Request,
             Output::DetermineScopes => Requested::Scopes,
             Output::Recover { token } => Requested::Grant(token.to_string()),
@@ -250,7 +250,7 @@ pub fn protect(handler: &mut dyn Endpoint, req: &dyn Request) -> Result<Grant> {
     }
 }
 
-fn validate<'req>(request: &'req dyn Request) -> Result<ResourceState> {
+fn validate(request: &'_ dyn Request) -> Result<ResourceState> {
     if !request.valid() {
         return Err(Error::InvalidRequest {
             authenticate: Authenticate::empty(),
@@ -280,14 +280,14 @@ fn validate<'req>(request: &'req dyn Request) -> Result<ResourceState> {
     Ok(ResourceState::Internalized { token })
 }
 
-fn get_scopes<'req>(token: String, scopes: &'req [Scope]) -> ResourceState {
+fn get_scopes(token: String, scopes: &'_ [Scope]) -> ResourceState {
     ResourceState::Recovering {
         token,
         scopes: scopes.to_owned(),
     }
 }
 
-fn recovered<'req>(grant: Option<Grant>, mut scopes: Vec<Scope>) -> Result<Grant> {
+fn recovered(grant: Option<Grant>, mut scopes: Vec<Scope>) -> Result<Grant> {
     let grant = match grant {
         Some(grant) => grant,
         None => {

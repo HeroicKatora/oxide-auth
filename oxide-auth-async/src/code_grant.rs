@@ -15,7 +15,7 @@ pub mod refresh {
     ) -> Result<BearerToken, Error> {
         enum Requested {
             None,
-            Refresh { token: String, grant: Grant },
+            Refresh { token: String, grant: Box<Grant> },
             RecoverRefresh { token: String },
             Authenticate { client: String, pass: Option<Vec<u8>> },
         }
@@ -27,7 +27,7 @@ pub mod refresh {
                 Requested::Refresh { token, grant } => {
                     let refreshed = handler
                         .issuer()
-                        .refresh(&token, grant)
+                        .refresh(&token, *grant)
                         .await
                         .map_err(|()| Error::Primitive)?;
                     Input::Refreshed(refreshed)
@@ -39,20 +39,22 @@ pub mod refresh {
                         .await
                         .map_err(|()| Error::Primitive)?;
                     Input::Recovered {
-                        request,
-                        grant: recovered,
+                        scope: request.scope(),
+                        grant: recovered.map(|r| Box::new(r)),
                     }
                 }
                 Requested::Authenticate { client, pass } => {
                     let _: () = handler
                         .registrar()
-                        .check(&client, pass.as_ref().map(|p| p.as_slice()))
+                        .check(&client, pass.as_deref())
                         .await
                         .map_err(|err| match err {
                             RegistrarError::PrimitiveError => Error::Primitive,
                             RegistrarError::Unspecified => Error::unauthorized("basic"),
                         })?;
-                    Input::Authenticated { request }
+                    Input::Authenticated {
+                        scope: request.scope(),
+                    }
                 }
             };
 
@@ -117,7 +119,7 @@ pub mod resource {
 
             requested = match resource.advance(input) {
                 Output::Err(error) => return Err(error),
-                Output::Ok(grant) => return Ok(grant),
+                Output::Ok(grant) => return Ok(*grant),
                 Output::GetRequest => Requested::Request,
                 Output::DetermineScopes => Requested::Scopes,
                 Output::Recover { token } => Requested::Grant(token.to_string()),
@@ -186,7 +188,6 @@ pub mod access_token {
             },
             Recover(&'a str),
             Extend {
-                grant: &'a Grant,
                 extensions: &'a mut Extensions,
             },
             Issue {
@@ -207,23 +208,25 @@ pub mod access_token {
                         .await
                         .map_err(|err| match err {
                             RegistrarError::Unspecified => Error::unauthorized("basic"),
-                            RegistrarError::PrimitiveError => Error::Primitive(PrimitiveError {
-                                grant: None,
-                                extensions: None,
-                            }),
+                            RegistrarError::PrimitiveError => {
+                                Error::Primitive(Box::new(PrimitiveError {
+                                    grant: None,
+                                    extensions: None,
+                                }))
+                            }
                         })?;
                     Input::Authenticated
                 }
                 Requested::Recover(code) => {
                     let opt_grant = handler.authorizer().extract(code).await.map_err(|_| {
-                        Error::Primitive(PrimitiveError {
+                        Error::Primitive(Box::new(PrimitiveError {
                             grant: None,
                             extensions: None,
-                        })
+                        }))
                     })?;
-                    Input::Recovered(opt_grant)
+                    Input::Recovered(opt_grant.map(|o| Box::new(o)))
                 }
-                Requested::Extend { grant: _, extensions } => {
+                Requested::Extend { extensions } => {
                     let access_extensions = handler
                         .extension()
                         .extend(request, extensions.clone())
@@ -234,11 +237,11 @@ pub mod access_token {
                 }
                 Requested::Issue { grant } => {
                     let token = handler.issuer().issue(grant.clone()).await.map_err(|_| {
-                        Error::Primitive(PrimitiveError {
+                        Error::Primitive(Box::new(PrimitiveError {
                             // FIXME: endpoint should get and handle these.
                             grant: None,
                             extensions: None,
-                        })
+                        }))
                     })?;
                     Input::Issued(token)
                 }
@@ -249,10 +252,10 @@ pub mod access_token {
                     Requested::Authenticate { client, passdata }
                 }
                 Output::Recover { code } => Requested::Recover(code),
-                Output::Extend { grant, extensions } => Requested::Extend { grant, extensions },
+                Output::Extend { extensions, .. } => Requested::Extend { extensions },
                 Output::Issue { grant } => Requested::Issue { grant },
                 Output::Ok(token) => return Ok(token),
-                Output::Err(e) => return Err(e),
+                Output::Err(e) => return Err(*e),
             };
         }
     }

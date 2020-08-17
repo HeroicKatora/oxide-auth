@@ -112,14 +112,14 @@ enum RefreshState {
     /// potentially wait on grant-to-authorized-user-correspondence matching.
     CoAuthenticating {
         /// The restored grant.
-        grant: Grant,
+        grant: Box<Grant>,
         /// The refresh token of the grant.
         token: String,
     },
     /// State when we await the issuing of a refreshed token.
     Issuing {
         /// The grant with the parameter set.
-        grant: Grant,
+        grant: Box<Grant>,
         /// The refresh token of the grant.
         token: String,
     },
@@ -131,11 +131,16 @@ enum RefreshState {
 #[derive(Clone)]
 pub enum Input<'req> {
     /// Positively answer an authentication query.
-    Authenticated { request: &'req dyn Request },
+    Authenticated {
+        /// The required scope to access the resource.
+        scope: Option<Cow<'req, str>>,
+    },
     /// Provide the queried refresh token.
     Recovered {
-        request: &'req dyn Request,
-        grant: Option<Grant>,
+        /// The required scope to access the resource.
+        scope: Option<Cow<'req, str>>,
+        /// The grant
+        grant: Option<Box<Grant>>,
     },
     /// The refreshed token.
     Refreshed(RefreshedToken),
@@ -177,7 +182,7 @@ pub enum Output<'a> {
         /// The refresh token that has been used.
         token: &'a str,
         /// The grant that should be issued as determined.
-        grant: Grant,
+        grant: Box<Grant>,
     },
     /// The state machine finished and a new bearer token was generated.
     ///
@@ -251,13 +256,13 @@ impl Refresh {
                 self.state = authenticated(client, token);
                 self.output()
             }
-            (RefreshState::Recovering { authenticated, token }, Input::Recovered { request, grant }) => {
-                self.state = recovered_refresh(request, authenticated, grant, token)
+            (RefreshState::Recovering { authenticated, token }, Input::Recovered { scope, grant }) => {
+                self.state = recovered_refresh(scope, authenticated, grant, token)
                     .unwrap_or_else(RefreshState::Err);
                 self.output()
             }
-            (RefreshState::CoAuthenticating { grant, token }, Input::Authenticated { request }) => {
-                self.state = co_authenticated(request, grant, token).unwrap_or_else(RefreshState::Err);
+            (RefreshState::CoAuthenticating { grant, token }, Input::Authenticated { scope }) => {
+                self.state = co_authenticated(scope, grant, token).unwrap_or_else(RefreshState::Err);
                 self.output()
             }
             (RefreshState::Issuing { grant, token: _ }, Input::Refreshed(token)) => {
@@ -326,7 +331,7 @@ impl<'req> Input<'req> {
 pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
     enum Requested {
         None,
-        Refresh { token: String, grant: Grant },
+        Refresh { token: String, grant: Box<Grant> },
         RecoverRefresh { token: String },
         Authenticate { client: String, pass: Option<Vec<u8>> },
     }
@@ -338,7 +343,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
             Requested::Refresh { token, grant } => {
                 let refreshed = handler
                     .issuer()
-                    .refresh(&token, grant)
+                    .refresh(&token, *grant)
                     .map_err(|()| Error::Primitive)?;
                 Input::Refreshed(refreshed)
             }
@@ -348,19 +353,22 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
                     .recover_refresh(&token)
                     .map_err(|()| Error::Primitive)?;
                 Input::Recovered {
-                    request,
-                    grant: recovered,
+                    scope: request.scope(),
+                    grant: recovered.map(|r| Box::new(r)),
                 }
             }
             Requested::Authenticate { client, pass } => {
-                let _: () = handler
-                    .registrar()
-                    .check(&client, pass.as_ref().map(|p| p.as_slice()))
-                    .map_err(|err| match err {
-                        RegistrarError::PrimitiveError => Error::Primitive,
-                        RegistrarError::Unspecified => Error::unauthorized("basic"),
-                    })?;
-                Input::Authenticated { request }
+                let _: () =
+                    handler
+                        .registrar()
+                        .check(&client, pass.as_deref())
+                        .map_err(|err| match err {
+                            RegistrarError::PrimitiveError => Error::Primitive,
+                            RegistrarError::Unspecified => Error::unauthorized("basic"),
+                        })?;
+                Input::Authenticated {
+                    scope: request.scope(),
+                }
             }
         };
 
@@ -420,7 +428,7 @@ fn authenticated(client: String, token: String) -> RefreshState {
 }
 
 fn recovered_refresh(
-    request: &dyn Request, authenticated: Option<String>, grant: Option<Grant>, token: String,
+    scope: Option<Cow<str>>, authenticated: Option<String>, grant: Option<Box<Grant>>, token: String,
 ) -> Result<RefreshState> {
     let grant = grant
         // ... is invalid, ... (Section 5.2)
@@ -435,7 +443,7 @@ fn recovered_refresh(
                 // Unauthorized but with BadRequest.
                 Err(Error::invalid(AccessTokenErrorType::InvalidGrant))
             } else {
-                validate(request, grant, token)
+                validate(scope, grant, token)
             }
         }
 
@@ -447,17 +455,17 @@ fn recovered_refresh(
     }
 }
 
-fn co_authenticated(request: &dyn Request, grant: Grant, token: String) -> Result<RefreshState> {
-    validate(request, grant, token)
+fn co_authenticated(scope: Option<Cow<str>>, grant: Box<Grant>, token: String) -> Result<RefreshState> {
+    validate(scope, grant, token)
 }
 
-fn validate(request: &dyn Request, grant: Grant, token: String) -> Result<RefreshState> {
+fn validate(scope: Option<Cow<str>>, grant: Box<Grant>, token: String) -> Result<RefreshState> {
     // .. is expired, revoked, ... (Section 5.2)
     if grant.until <= Utc::now() {
         return Err(Error::invalid(AccessTokenErrorType::InvalidGrant));
     }
 
-    let scope = match request.scope() {
+    let scope = match scope {
         // ... is invalid, unknown, malformed (Section 5.2)
         Some(scope) => Some(
             scope
@@ -488,7 +496,7 @@ fn validate(request: &dyn Request, grant: Grant, token: String) -> Result<Refres
     Ok(RefreshState::Issuing { grant, token })
 }
 
-fn issued(grant: Grant, token: RefreshedToken) -> BearerToken {
+fn issued(grant: Box<Grant>, token: RefreshedToken) -> BearerToken {
     BearerToken(token, grant.scope.to_string())
 }
 
