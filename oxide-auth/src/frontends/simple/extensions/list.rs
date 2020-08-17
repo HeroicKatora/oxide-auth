@@ -26,15 +26,17 @@ impl AddonList {
     }
 
     /// Add an addon that only applies to authorization.
-    pub fn push_authorization<A>(&mut self, addon: A) 
-        where A: AuthorizationAddon + Send + Sync + 'static 
+    pub fn push_authorization<A>(&mut self, addon: A)
+    where
+        A: AuthorizationAddon + Send + Sync + 'static,
     {
         self.authorization.push(Arc::new(addon))
     }
 
     /// Add an addon that only applies to access_token.
     pub fn push_access_token<A>(&mut self, addon: A)
-        where A: AccessTokenAddon + Send + Sync + 'static 
+    where
+        A: AccessTokenAddon + Send + Sync + 'static,
     {
         self.access_token.push(Arc::new(addon))
     }
@@ -43,7 +45,8 @@ impl AddonList {
     ///
     /// The addon gets added both the authorization and access token addons.
     pub fn push_code<A>(&mut self, addon: A)
-        where A: AuthorizationAddon + AccessTokenAddon + Send + Sync + 'static
+    where
+        A: AuthorizationAddon + AccessTokenAddon + Send + Sync + 'static,
     {
         let arc = Arc::new(addon);
         self.authorization.push(arc.clone());
@@ -68,7 +71,9 @@ impl Extension for AddonList {
 }
 
 impl AccessTokenExtension for AddonList {
-    fn extend(&mut self, request: &dyn Request, mut data: Extensions) -> std::result::Result<Extensions, ()> {
+    fn extend(
+        &mut self, request: &dyn Request, mut data: Extensions,
+    ) -> std::result::Result<Extensions, ()> {
         let mut result_data = Extensions::new();
 
         for ext in self.access_token.iter() {
@@ -111,9 +116,7 @@ impl fmt::Debug for AddonList {
 
         impl<'a, T: GrantExtension> fmt::Debug for ExtIter<'a, T> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.debug_list()
-                    .entries(self.0.clone().map(T::identifier))
-                    .finish()
+                f.debug_list().entries(self.0.clone().map(T::identifier)).finish()
             }
         }
 

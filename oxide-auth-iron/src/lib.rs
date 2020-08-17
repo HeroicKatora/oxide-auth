@@ -16,7 +16,7 @@ use iron::status::Status;
 use url::Url;
 
 /// Errors while decoding requests.
-pub enum Error { 
+pub enum Error {
     /// Generally describes a malformed request.
     BadRequest,
 }
@@ -57,7 +57,9 @@ impl<'a, 'b, 'c: 'b> OAuthRequest<'a, 'b, 'c> {
 
     /// Returns whether the request was sent with the correct ContentType header.
     pub fn is_form_url_encoded(&self) -> bool {
-        self.0.headers.get::<headers::ContentType>()
+        self.0
+            .headers
+            .get::<headers::ContentType>()
             .map(|ct| ct == &headers::ContentType::form_url_encoded())
             .unwrap_or(false)
     }
@@ -65,7 +67,9 @@ impl<'a, 'b, 'c: 'b> OAuthRequest<'a, 'b, 'c> {
     /// Fetch authorization header
     pub fn authorization_header(&self) -> Option<Cow<str>> {
         // Get the raw header.
-        self.0.headers.get::<headers::Authorization<String>>()
+        self.0
+            .headers
+            .get::<headers::Authorization<String>>()
             .map(|h| Cow::Borrowed(h.0.as_ref()))
     }
 }
@@ -223,4 +227,3 @@ impl Into<IronError> for OAuthError {
         self.0
     }
 }
-

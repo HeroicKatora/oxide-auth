@@ -5,6 +5,7 @@ extern crate oxide_auth_rocket;
 #[macro_use]
 extern crate rocket;
 
+#[rustfmt::skip]
 #[path = "../../examples/support/rocket.rs"]
 mod support;
 
@@ -27,8 +28,11 @@ struct MyState {
 }
 
 #[get("/authorize")]
-fn authorize<'r>(oauth: OAuthRequest<'r>, state: State<MyState>) -> Result<OAuthResponse<'r>, OAuthFailure> {
-    state.endpoint()
+fn authorize<'r>(
+    oauth: OAuthRequest<'r>, state: State<MyState>,
+) -> Result<OAuthResponse<'r>, OAuthFailure> {
+    state
+        .endpoint()
         .with_solicitor(FnSolicitor(consent_form))
         .authorization_flow()
         .execute(oauth)
@@ -36,43 +40,46 @@ fn authorize<'r>(oauth: OAuthRequest<'r>, state: State<MyState>) -> Result<OAuth
 }
 
 #[post("/authorize?<allow>")]
-fn authorize_consent<'r>(oauth: OAuthRequest<'r>, allow: Option<bool>, state: State<MyState>)
-    -> Result<OAuthResponse<'r> , OAuthFailure>
-{
+fn authorize_consent<'r>(
+    oauth: OAuthRequest<'r>, allow: Option<bool>, state: State<MyState>,
+) -> Result<OAuthResponse<'r>, OAuthFailure> {
     let allowed = allow.unwrap_or(false);
-    state.endpoint()
-        .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| consent_decision(allowed, grant)))
+    state
+        .endpoint()
+        .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| {
+            consent_decision(allowed, grant)
+        }))
         .authorization_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
 
-#[post("/token", data="<body>")]
-fn token<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
-    -> Result<OAuthResponse<'r>, OAuthFailure>
-{
+#[post("/token", data = "<body>")]
+fn token<'r>(
+    mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>,
+) -> Result<OAuthResponse<'r>, OAuthFailure> {
     oauth.add_body(body);
-    state.endpoint()
+    state
+        .endpoint()
         .access_token_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
 
-#[post("/refresh", data="<body>")]
-fn refresh<'r>(mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>)
-    -> Result<OAuthResponse<'r>, OAuthFailure>
-{
+#[post("/refresh", data = "<body>")]
+fn refresh<'r>(
+    mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>,
+) -> Result<OAuthResponse<'r>, OAuthFailure> {
     oauth.add_body(body);
-    state.endpoint()
+    state
+        .endpoint()
         .refresh_flow()
         .execute(oauth)
         .map_err(|err| err.pack::<OAuthFailure>())
 }
 
 #[get("/")]
-fn protected_resource<'r>(oauth: OAuthRequest<'r>, state: State<MyState>)
-    -> impl Responder<'r>
-{
+fn protected_resource<'r>(oauth: OAuthRequest<'r>, state: State<MyState>) -> impl Responder<'r> {
     const DENY_TEXT: &str = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"/authorize?response_type=code&client_id=LocalClient\">
@@ -80,7 +87,8 @@ here</a> to begin the authorization process.
 </html>
 ";
 
-    let protect = state.endpoint()
+    let protect = state
+        .endpoint()
         .with_scopes(vec!["default-scope".parse().unwrap()])
         .resource_flow()
         .execute(oauth);
@@ -93,20 +101,17 @@ here</a> to begin the authorization process.
                 .finalize()
                 .into();
             Err(Ok(error))
-        },
+        }
         Err(Err(err)) => Err(Err(err.pack::<OAuthFailure>())),
     }
 }
 
 fn main() {
     rocket::ignite()
-        .mount("/", routes![
-            authorize,
-            authorize_consent,
-            token,
-            protected_resource,
-            refresh,
-        ])
+        .mount(
+            "/",
+            routes![authorize, authorize_consent, token, protected_resource, refresh,],
+        )
         // We only attach the test client here because there can only be one rocket.
         .attach(support::ClientFairing)
         .manage(MyState::preconfigured())
@@ -116,11 +121,15 @@ fn main() {
 impl MyState {
     pub fn preconfigured() -> Self {
         MyState {
-            registrar: Mutex::new(vec![
-                Client::public("LocalClient",
+            registrar: Mutex::new(
+                vec![Client::public(
+                    "LocalClient",
                     "http://localhost:8000/clientside/endpoint".parse().unwrap(),
-                    "default-scope".parse().unwrap())
-            ].into_iter().collect()),
+                    "default-scope".parse().unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            ),
             // Authorization tokens are 16 byte random keys to a memory hash map.
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
             // Bearer tokens are also random generated but 256-bit tokens, since they live longer
@@ -149,18 +158,20 @@ impl MyState {
 }
 
 fn consent_form<'r>(_: &mut OAuthRequest<'r>, grant: &PreGrant) -> OwnerConsent<OAuthResponse<'r>> {
-    OwnerConsent::InProgress(Response::build()
-        .status(http::Status::Ok)
-        .header(http::ContentType::HTML)
-        .sized_body(io::Cursor::new(support::consent_page_html("/authorize", grant)))
-        .finalize()
-        .into())
+    OwnerConsent::InProgress(
+        Response::build()
+            .status(http::Status::Ok)
+            .header(http::ContentType::HTML)
+            .sized_body(io::Cursor::new(support::consent_page_html("/authorize", grant)))
+            .finalize()
+            .into(),
+    )
 }
 
 fn consent_decision<'r>(allowed: bool, _: &PreGrant) -> OwnerConsent<OAuthResponse<'r>> {
-    if allowed { 
-        OwnerConsent::Authorized("dummy user".into()) 
+    if allowed {
+        OwnerConsent::Authorized("dummy user".into())
     } else {
-        OwnerConsent::Denied 
+        OwnerConsent::Denied
     }
 }
