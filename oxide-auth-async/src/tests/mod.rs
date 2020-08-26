@@ -227,6 +227,7 @@ pub mod defaults {
 
 mod authorization;
 mod access_token;
+mod type_properties;
 mod resource;
 mod refresh;
 // mod pkce;
