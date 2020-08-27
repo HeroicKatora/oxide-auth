@@ -87,7 +87,7 @@ pub mod resource {
         fn scopes(&mut self) -> &[Scope];
 
         /// Recover and test the provided refresh token then issue new tokens.
-        fn issuer(&mut self) -> &mut dyn crate::primitives::Issuer;
+        fn issuer(&mut self) -> &mut (dyn crate::primitives::Issuer + Send);
     }
 
     pub async fn protect(

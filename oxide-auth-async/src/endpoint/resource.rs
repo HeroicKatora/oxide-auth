@@ -146,7 +146,7 @@ where
         self.endpoint.scopes().unwrap().scopes(self.request)
     }
 
-    fn issuer(&mut self) -> &mut dyn Issuer {
+    fn issuer(&mut self) -> &mut (dyn Issuer + Send) {
         self.endpoint.issuer_mut().unwrap()
     }
 }
