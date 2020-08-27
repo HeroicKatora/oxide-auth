@@ -40,7 +40,7 @@ pub mod refresh {
                         .map_err(|()| Error::Primitive)?;
                     Input::Recovered {
                         scope: request.scope(),
-                        grant: recovered.map(|r| Box::new(r)),
+                        grant: recovered.map(Box::new),
                     }
                 }
                 Requested::Authenticate { client, pass } => {
@@ -78,7 +78,7 @@ pub mod refresh {
 }
 
 pub mod resource {
-    use oxide_auth::code_grant::resource::{Error, Input, Output, Resource, Request};
+    use oxide_auth::code_grant::resource::{Error, Input, Output, Request, Resource};
     use oxide_auth::primitives::grant::Grant;
     use oxide_auth::primitives::scope::Scope;
 
@@ -131,12 +131,12 @@ pub mod resource {
 pub mod access_token {
     use async_trait::async_trait;
     use oxide_auth::{
+        code_grant::accesstoken::{
+            AccessToken, BearerToken, Error, Input, Output, PrimitiveError, Request as TokenRequest,
+        },
         primitives::{
             grant::{Extensions, Grant},
             registrar::RegistrarError,
-        },
-        code_grant::accesstoken::{
-            AccessToken, BearerToken, Input, Output, Error, PrimitiveError, Request as TokenRequest,
         },
     };
     // use crate::endpoint::access_token::WrappedRequest;
@@ -224,7 +224,7 @@ pub mod access_token {
                             extensions: None,
                         }))
                     })?;
-                    Input::Recovered(opt_grant.map(|o| Box::new(o)))
+                    Input::Recovered(opt_grant.map(Box::new))
                 }
                 Requested::Extend { extensions } => {
                     let access_extensions = handler
@@ -263,20 +263,20 @@ pub mod access_token {
 
 pub mod authorization {
     use async_trait::async_trait;
+    use chrono::{Duration, Utc};
     use oxide_auth::{
-        primitives::{
-            prelude::ClientUrl,
-            grant::{Grant, Extensions},
-            registrar::{BoundClient, RegistrarError},
-        },
         code_grant::{
+            authorization::{Authorization, Error, ErrorUrl, Input, Output, Request},
             error::{AuthorizationError, AuthorizationErrorType},
-            authorization::{Request, Authorization, Input, Error, Output, ErrorUrl},
         },
         endpoint::{PreGrant, Scope},
+        primitives::{
+            grant::{Extensions, Grant},
+            prelude::ClientUrl,
+            registrar::{BoundClient, RegistrarError},
+        },
     };
     use url::Url;
-    use chrono::{Duration, Utc};
 
     use std::borrow::Cow;
 

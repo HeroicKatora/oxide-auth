@@ -95,14 +95,15 @@ pub trait OwnerSolicitor<Request: WebRequest> {
     ) -> OwnerConsent<Request::Response>;
 }
 
-// #[async_trait]
-// impl<T, Request: WebRequest> OwnerSolicitor<Request> for T
-// where
-//     T: oxide_auth::endpoint::OwnerSolicitor<Request> + ?Sized,
-// {
-//     async fn check_consent(
-//         &mut self, req: &mut Request, pre_grant: &PreGrant,
-//     ) -> OwnerConsent<Request::Response> {
-//         oxide_auth::endpoint::OwnerSolicitor::check_consent(self, req, pre_grant)
-//     }
-// }
+#[async_trait]
+impl<T, Request: WebRequest> OwnerSolicitor<Request> for T
+where
+    T: oxide_auth::endpoint::OwnerSolicitor<Request> + ?Sized + Send,
+    Request: Send,
+{
+    async fn check_consent(
+        &mut self, req: &mut Request, pre_grant: &PreGrant,
+    ) -> OwnerConsent<Request::Response> {
+        oxide_auth::endpoint::OwnerSolicitor::check_consent(self, req, pre_grant)
+    }
+}
