@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use oxide_auth::endpoint::{OAuthError, Template, WebRequest, OwnerConsent, PreGrant, Scopes};
 
-// pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
-pub use crate::code_grant::access_token::Extension as AccessTokenExtension;
+pub use crate::code_grant::access_token::{Extension as AccessTokenExtension};
 pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
 use crate::primitives::{Authorizer, Registrar, Issuer};
 
@@ -11,7 +10,10 @@ pub mod access_token;
 pub mod refresh;
 pub mod resource;
 
-pub trait Endpoint<Request: WebRequest> {
+pub trait Endpoint<Request>
+where
+    Request: WebRequest,
+{
     /// The error typed used as the error representation of each flow.
     type Error;
 
@@ -19,25 +21,25 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// Returning `None` will implicate failing any flow that requires a registrar but does not
     /// have any effect on flows that do not require one.
-    fn registrar(&self) -> Option<&dyn Registrar>;
+    fn registrar(&self) -> Option<&(dyn Registrar + Sync)>;
 
     /// An authorizer if this endpoint can access one.
     ///
     /// Returning `None` will implicate failing any flow that requires an authorizer but does not
     /// have any effect on flows that do not require one.
-    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer>;
+    fn authorizer_mut(&mut self) -> Option<&mut (dyn Authorizer + Send)>;
 
     /// An issuer if this endpoint can access one.
     ///
     /// Returning `None` will implicate failing any flow that requires an issuer but does not have
     /// any effect on flows that do not require one.
-    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer>;
+    fn issuer_mut(&mut self) -> Option<&mut (dyn Issuer + Send)>;
 
     /// Return the system that checks owner consent.
     ///
     /// Returning `None` will implicated failing the authorization code flow but does have any
     /// effect on other flows.
-    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<Request>>;
+    fn owner_solicitor(&mut self) -> Option<&mut (dyn OwnerSolicitor<Request> + Send)>;
 
     /// Determine the required scopes for a request.
     ///
@@ -62,19 +64,19 @@ pub trait Endpoint<Request: WebRequest> {
     /// Get the central extension instance this endpoint.
     ///
     /// Returning `None` is the default implementation and acts as simply providing any extensions.
-    fn extension(&mut self) -> Option<&mut dyn Extension> {
+    fn extension(&mut self) -> Option<&mut (dyn Extension + Send)> {
         None
     }
 }
 
 pub trait Extension {
     /// The handler for authorization code extensions.
-    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
+    fn authorization(&mut self) -> Option<&mut (dyn AuthorizationExtension + Send)> {
         None
     }
 
     /// The handler for access token extensions.
-    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
+    fn access_token(&mut self) -> Option<&mut (dyn AccessTokenExtension + Send)> {
         None
     }
 }
@@ -84,7 +86,7 @@ pub trait Extension {
 /// See [`frontends::simple`] for an implementation that permits arbitrary functions.
 ///
 /// [`frontends::simple`]: ../frontends/simple/endpoint/struct.FnSolicitor.html
-#[async_trait(?Send)]
+#[async_trait]
 pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
@@ -93,10 +95,11 @@ pub trait OwnerSolicitor<Request: WebRequest> {
     ) -> OwnerConsent<Request::Response>;
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<T, Request: WebRequest> OwnerSolicitor<Request> for T
 where
-    T: oxide_auth::endpoint::OwnerSolicitor<Request> + ?Sized,
+    T: oxide_auth::endpoint::OwnerSolicitor<Request> + ?Sized + Send,
+    Request: Send,
 {
     async fn check_consent(
         &mut self, req: &mut Request, pre_grant: &PreGrant,

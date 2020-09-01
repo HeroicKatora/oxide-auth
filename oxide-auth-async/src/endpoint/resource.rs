@@ -19,7 +19,10 @@ where
     endpoint: WrappedResource<E, R>,
 }
 
-struct WrappedResource<E: Endpoint<R>, R: WebRequest>(E, PhantomData<R>);
+struct WrappedResource<E, R>(E, PhantomData<R>)
+where
+    E: Endpoint<R>,
+    R: WebRequest;
 
 struct WrappedRequest<R: WebRequest> {
     /// Original request.
@@ -41,8 +44,9 @@ struct Scoped<'a, E: 'a, R: 'a> {
 
 impl<E, R> ResourceFlow<E, R>
 where
-    E: Endpoint<R>,
-    R: WebRequest,
+    E: Endpoint<R> + Send + Sync,
+    R: WebRequest + Send + Sync,
+    <R as WebRequest>::Error: Send + Sync,
 {
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
@@ -99,7 +103,7 @@ where
             }
         };
 
-        let mut response = self.endpoint.0.response(request, template.into())?;
+        let mut response = self.endpoint.0.response(request, template)?;
         response
             .unauthorized(&error.www_authenticate())
             .map_err(|err| self.endpoint.0.web_error(err))?;
@@ -133,12 +137,16 @@ impl<R: WebRequest> WrappedRequest<R> {
     }
 }
 
-impl<'a, E: Endpoint<R> + 'a, R: WebRequest + 'a> ResourceEndpoint for Scoped<'a, E, R> {
+impl<'a, E: 'a, R: 'a> ResourceEndpoint for Scoped<'a, E, R>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     fn scopes(&mut self) -> &[Scope] {
         self.endpoint.scopes().unwrap().scopes(self.request)
     }
 
-    fn issuer(&mut self) -> &mut dyn Issuer {
+    fn issuer(&mut self) -> &mut (dyn Issuer + Send) {
         self.endpoint.issuer_mut().unwrap()
     }
 }
@@ -149,6 +157,6 @@ impl<R: WebRequest> ResourceRequest for WrappedRequest<R> {
     }
 
     fn token(&self) -> Option<Cow<str>> {
-        self.authorization.as_ref().map(String::as_str).map(Cow::Borrowed)
+        self.authorization.as_deref().map(Cow::Borrowed)
     }
 }

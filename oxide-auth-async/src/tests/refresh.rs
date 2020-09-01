@@ -36,13 +36,13 @@ impl<'a> RefreshTokenEndpoint<'a> {
 impl<'a> Endpoint<CraftedRequest> for RefreshTokenEndpoint<'a> {
     type Error = Error<CraftedRequest>;
 
-    fn registrar(&self) -> Option<&dyn crate::primitives::Registrar> {
+    fn registrar(&self) -> Option<&(dyn crate::primitives::Registrar + Sync)> {
         Some(self.registrar)
     }
-    fn authorizer_mut(&mut self) -> Option<&mut dyn crate::primitives::Authorizer> {
+    fn authorizer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Authorizer + Send)> {
         None
     }
-    fn issuer_mut(&mut self) -> Option<&mut dyn crate::primitives::Issuer> {
+    fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
         Some(self.issuer)
     }
     fn response(
@@ -59,7 +59,9 @@ impl<'a> Endpoint<CraftedRequest> for RefreshTokenEndpoint<'a> {
     fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
         None
     }
-    fn owner_solicitor(&mut self) -> Option<&mut dyn crate::endpoint::OwnerSolicitor<CraftedRequest>> {
+    fn owner_solicitor(
+        &mut self,
+    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
         None
     }
 }

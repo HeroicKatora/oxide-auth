@@ -1,20 +1,23 @@
 //! Async versions of all primitives traits.
 use async_trait::async_trait;
-use oxide_auth::primitives::{authorizer, issuer, registrar, grant::Grant, scope::Scope};
+use oxide_auth::primitives::{grant::Grant, scope::Scope};
 use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken};
-use oxide_auth::primitives::registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant};
+use oxide_auth::primitives::{
+    authorizer, registrar, issuer,
+    registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant},
+};
 
-#[async_trait(?Send)]
+#[async_trait]
 pub trait Authorizer {
     async fn authorize(&mut self, _: Grant) -> Result<String, ()>;
 
     async fn extract(&mut self, _: &str) -> Result<Option<Grant>, ()>;
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<T> Authorizer for T
 where
-    T: authorizer::Authorizer + ?Sized,
+    T: authorizer::Authorizer + Send + ?Sized,
 {
     async fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
         authorizer::Authorizer::authorize(self, grant)
@@ -25,7 +28,7 @@ where
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 pub trait Issuer {
     async fn issue(&mut self, _: Grant) -> Result<IssuedToken, ()>;
 
@@ -36,10 +39,10 @@ pub trait Issuer {
     async fn recover_refresh(&mut self, _: &str) -> Result<Option<Grant>, ()>;
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<T> Issuer for T
 where
-    T: issuer::Issuer + ?Sized,
+    T: issuer::Issuer + Send + ?Sized,
 {
     async fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         issuer::Issuer::issue(self, grant)
@@ -58,7 +61,7 @@ where
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 pub trait Registrar {
     async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
 
@@ -69,10 +72,10 @@ pub trait Registrar {
     async fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError>;
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<T> Registrar for T
 where
-    T: registrar::Registrar + ?Sized,
+    T: registrar::Registrar + Send + Sync + ?Sized,
 {
     async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         registrar::Registrar::bound_redirect(self, bound)

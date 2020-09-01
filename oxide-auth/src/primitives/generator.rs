@@ -64,7 +64,7 @@ impl RandomGenerator {
 
     fn generate(&self) -> String {
         let mut result = vec![0; self.len];
-        let mut rnd = self.random.clone();
+        let mut rnd = self.random;
         rnd.try_fill_bytes(result.as_mut_slice())
             .expect("Failed to generate random token");
         encode(&result)

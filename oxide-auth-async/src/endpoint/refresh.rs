@@ -2,7 +2,7 @@ use std::{borrow::Cow, marker::PhantomData, str::from_utf8};
 
 use oxide_auth::{
     code_grant::refresh::{Error, Request},
-    endpoint::{WebRequest, WebResponse, OAuthError, QueryParameter, Template},
+    endpoint::{WebRequest, WebResponse, OAuthError, QueryParameter, Template, NormalizedParameter},
 };
 
 use super::Endpoint;
@@ -20,17 +20,18 @@ where
     endpoint: WrappedRefresh<E, R>,
 }
 
-struct WrappedRefresh<E: Endpoint<R>, R: WebRequest> {
+struct WrappedRefresh<E, R>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     inner: E,
     r_type: PhantomData<R>,
 }
 
-struct WrappedRequest<'a, R: WebRequest + 'a> {
-    /// Original request.
-    request: PhantomData<R>,
-
+struct WrappedRequest<R: WebRequest> {
     /// The query in the body.
-    body: Cow<'a, dyn QueryParameter + 'static>,
+    body: NormalizedParameter,
 
     /// The authorization token.
     authorization: Option<Authorization>,
@@ -43,8 +44,9 @@ struct Authorization(String, Vec<u8>);
 
 impl<E, R> RefreshFlow<E, R>
 where
-    E: Endpoint<R>,
-    R: WebRequest,
+    E: Endpoint<R> + Send + Sync,
+    R: WebRequest + Send + Sync,
+    <R as WebRequest>::Error: Send + Sync,
 {
     /// Wrap the endpoint if it supports handling refresh requests.
     ///
@@ -92,9 +94,11 @@ where
     }
 }
 
-fn token_error<E: Endpoint<R>, R: WebRequest>(
-    endpoint: &mut E, request: &mut R, error: Error,
-) -> Result<R::Response, E::Error> {
+fn token_error<E, R>(endpoint: &mut E, request: &mut R, error: Error) -> Result<R::Response, E::Error>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     Ok(match error {
         Error::Invalid(mut json) => {
             let mut response =
@@ -125,7 +129,7 @@ fn token_error<E: Endpoint<R>, R: WebRequest>(
     })
 }
 
-impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
+impl<'a, R: WebRequest> WrappedRequest<R> {
     pub fn new(request: &'a mut R) -> Self {
         Self::new_or_fail(request).unwrap_or_else(Self::from_err)
     }
@@ -139,8 +143,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
         };
 
         Ok(WrappedRequest {
-            request: PhantomData,
-            body: request.urlbody()?,
+            body: request.urlbody()?.into_owned(),
             authorization,
             error: None,
         })
@@ -148,8 +151,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
 
     fn from_err(err: Option<R::Error>) -> Self {
         WrappedRequest {
-            request: PhantomData,
-            body: Cow::Owned(Default::default()),
+            body: Default::default(),
             authorization: None,
             error: Some(err),
         }
@@ -188,17 +190,21 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
     }
 }
 
-impl<E: Endpoint<R>, R: WebRequest> RefreshEndpoint for WrappedRefresh<E, R> {
-    fn registrar(&self) -> &dyn Registrar {
+impl<E, R> RefreshEndpoint for WrappedRefresh<E, R>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
+    fn registrar(&self) -> &(dyn Registrar + Sync) {
         self.inner.registrar().unwrap()
     }
 
-    fn issuer(&mut self) -> &mut dyn Issuer {
+    fn issuer(&mut self) -> &mut (dyn Issuer + Send) {
         self.inner.issuer_mut().unwrap()
     }
 }
 
-impl<'a, R: WebRequest> Request for WrappedRequest<'a, R> {
+impl<R: WebRequest> Request for WrappedRequest<R> {
     fn valid(&self) -> bool {
         self.error.is_none()
     }

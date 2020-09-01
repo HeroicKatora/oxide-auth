@@ -4,10 +4,12 @@ use std::collections::HashMap;
 use oxide_auth::{
     primitives::generator::TagGrant,
     primitives::registrar::PreGrant,
-    endpoint::{WebRequest, OAuthError, WebResponse, OwnerConsent, QueryParameter, OwnerSolicitor},
+    endpoint::{WebRequest, OAuthError, WebResponse, OwnerConsent, QueryParameter},
     primitives::grant::Grant,
 };
 use url::Url;
+
+use crate::endpoint::OwnerSolicitor;
 
 /// Open and simple implementation of `WebRequest`.
 #[derive(Clone, Debug, Default)]
@@ -157,26 +159,38 @@ impl TagGrant for TestGenerator {
 struct Allow(String);
 struct Deny;
 
+#[async_trait::async_trait]
 impl OwnerSolicitor<CraftedRequest> for Allow {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant) -> OwnerConsent<CraftedResponse> {
+    async fn check_consent(
+        &mut self, _: &mut CraftedRequest, _: &PreGrant,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Authorized(self.0.clone())
     }
 }
 
+#[async_trait::async_trait]
 impl OwnerSolicitor<CraftedRequest> for Deny {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant) -> OwnerConsent<CraftedResponse> {
+    async fn check_consent(
+        &mut self, _: &mut CraftedRequest, _: &PreGrant,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Denied
     }
 }
 
+#[async_trait::async_trait]
 impl<'l> OwnerSolicitor<CraftedRequest> for &'l Allow {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant) -> OwnerConsent<CraftedResponse> {
+    async fn check_consent(
+        &mut self, _: &mut CraftedRequest, _: &PreGrant,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Authorized(self.0.clone())
     }
 }
 
+#[async_trait::async_trait]
 impl<'l> OwnerSolicitor<CraftedRequest> for &'l Deny {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant) -> OwnerConsent<CraftedResponse> {
+    async fn check_consent(
+        &mut self, _: &mut CraftedRequest, _: &PreGrant,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Denied
     }
 }
@@ -213,6 +227,7 @@ pub mod defaults {
 
 mod authorization;
 mod access_token;
+mod type_properties;
 mod resource;
 mod refresh;
 // mod pkce;
