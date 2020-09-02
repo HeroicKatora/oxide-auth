@@ -2,7 +2,7 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
-# v0.5.0-alpha.0 (2019-Sep-02)
+# v0.5.0-preview.1 (2019-Sep-02)
 
 Refactoring release
 
