@@ -72,7 +72,7 @@ impl Scope {
     }
 
     /// Create an iterator over the individual scopes.
-    pub fn iter(&self) -> impl Iterator<Item=&str> {
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
         self.tokens.iter().map(AsRef::as_ref)
     }
 }
