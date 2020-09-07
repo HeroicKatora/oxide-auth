@@ -46,6 +46,7 @@ pub use primitives::issuer::Issuer;
 pub use primitives::registrar::Registrar;
 pub use primitives::scope::Scope;
 
+use code_grant::authorization::Pending;
 use code_grant::resource::{Error as ResourceError};
 use code_grant::error::{AuthorizationError, AccessTokenError};
 
@@ -166,6 +167,40 @@ enum InnerTemplate<'a> {
     /// therefore it is constructed using the `WebResponse` trait methods. Try not to tamper with
     /// the format too much, such as unsetting a body etc. after the flow has finished.
     Ok,
+}
+
+/// A pending solicitation to a resource owner.
+///
+/// This encapsulates the information available to an [`OwnerSolicitor`] when querying consent
+/// information.
+///
+/// [`OwnerSolicitor`]: trait.OwnerSolicitor.html
+pub struct Solicitation<'flow> {
+    pub(crate) grant: &'flow PreGrant,
+    pub(crate) state: Option<&'flow str>,
+}
+
+impl<'flow> Solicitation<'flow> {
+    pub(crate) fn new(state: &'flow Pending) -> Self {
+        state.as_solicitation()
+    }
+
+    /// Return the pre-grant associated with the request.
+    ///
+    /// The information in the `PreGrant` is the authoritative information on the client and scopes
+    /// associated with the request. It has already been validated against those settings and
+    /// restrictions that were applied when registering the client.
+    pub fn pre_grant(&self) -> &PreGrant {
+        self.grant
+    }
+
+    /// The state provided by the client request.
+    ///
+    /// This will need to be provided to the response back to the client so it must be preserved
+    /// across a redirect or a consent screen presented by the user agent.
+    pub fn state(&self) -> Option<&str> {
+        self.state.clone()
+    }
 }
 
 /// Checks consent with the owner of a resource, identified in a request.

@@ -9,7 +9,7 @@ use code_grant::error::{AuthorizationError, AuthorizationErrorType};
 use primitives::authorizer::Authorizer;
 use primitives::registrar::{ClientUrl, Registrar, RegistrarError, PreGrant};
 use primitives::grant::{Extensions, Grant};
-use crate::{endpoint::Scope, primitives::registrar::BoundClient};
+use crate::{endpoint::Scope, endpoint::Solicitation, primitives::registrar::BoundClient};
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait Request {
@@ -436,6 +436,14 @@ pub struct Pending {
 }
 
 impl Pending {
+    /// Reference this pending state as a solicitation.
+    pub(crate) fn as_solicitation(&self) -> Solicitation<'_> {
+        Solicitation {
+            grant: &self.pre_grant,
+            state: self.state.as_ref().map(|s| &**s),
+        }
+    }
+
     /// Denies the request, which redirects to the client for which the request originated.
     pub fn deny(self) -> Result<Url> {
         let url = self.pre_grant.redirect_uri;
