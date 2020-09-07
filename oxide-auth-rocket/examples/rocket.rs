@@ -12,7 +12,7 @@ mod support;
 use std::io;
 use std::sync::Mutex;
 
-use oxide_auth::endpoint::{OwnerConsent, PreGrant};
+use oxide_auth::endpoint::{OwnerConsent, Solicitation};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_rocket::{OAuthResponse, OAuthRequest, OAuthFailure};
@@ -46,7 +46,7 @@ fn authorize_consent<'r>(
     let allowed = allow.unwrap_or(false);
     state
         .endpoint()
-        .with_solicitor(FnSolicitor(move |_: &mut _, grant: &_| {
+        .with_solicitor(FnSolicitor(move |_: &mut _, grant: Solicitation<'_>| {
             consent_decision(allowed, grant)
         }))
         .authorization_flow()
@@ -157,18 +157,23 @@ impl MyState {
     }
 }
 
-fn consent_form<'r>(_: &mut OAuthRequest<'r>, grant: &PreGrant) -> OwnerConsent<OAuthResponse<'r>> {
+fn consent_form<'r>(
+    _: &mut OAuthRequest<'r>, solicitation: Solicitation,
+) -> OwnerConsent<OAuthResponse<'r>> {
     OwnerConsent::InProgress(
         Response::build()
             .status(http::Status::Ok)
             .header(http::ContentType::HTML)
-            .sized_body(io::Cursor::new(support::consent_page_html("/authorize", grant)))
+            .sized_body(io::Cursor::new(support::consent_page_html(
+                "/authorize",
+                solicitation,
+            )))
             .finalize()
             .into(),
     )
 }
 
-fn consent_decision<'r>(allowed: bool, _: &PreGrant) -> OwnerConsent<OAuthResponse<'r>> {
+fn consent_decision<'r>(allowed: bool, _: Solicitation) -> OwnerConsent<OAuthResponse<'r>> {
     if allowed {
         OwnerConsent::Authorized("dummy user".into())
     } else {

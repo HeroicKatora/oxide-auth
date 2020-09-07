@@ -13,7 +13,7 @@
 /// Simplistic reqwest client.
 mod client;
 
-use oxide_auth::endpoint::PreGrant;
+use oxide_auth::endpoint::Solicitation;
 use std::fmt;
 
 pub use self::client::{Client, Config as ClientConfig, Error as ClientError};
@@ -47,22 +47,26 @@ pub fn open_in_browser() {
         .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
 }
 
-pub fn consent_page_html(route: &str, grant: &PreGrant) -> String {
+pub fn consent_page_html(route: &str, solicitation: Solicitation) -> String {
     macro_rules! template {
         () => {
 "<html>'{0:}' (at {1:}) is requesting permission for '{2:}'
 <form method=\"post\">
-    <input type=\"submit\" value=\"Accept\" formaction=\"{4:}?response_type=code&client_id={3:}&allow=true\">
-    <input type=\"submit\" value=\"Deny\" formaction=\"{4:}?response_type=code&client_id={3:}&deny=true\">
+    <input type=\"submit\" value=\"Accept\" formaction=\"{5:}?response_type=code&client_id={3:}{4:}&allow=true\">
+    <input type=\"submit\" value=\"Deny\" formaction=\"{5:}?response_type=code&client_id={3:}{4:}&deny=true\">
 </form>
 </html>"
         };
     }
+
+    let grant = solicitation.pre_grant();
+    let state = solicitation.state();
     
     format!(template!(), 
         grant.client_id,
         grant.redirect_uri,
         grant.scope,
         grant.client_id,
+        if let Some(state) = state { format!("&state={}", state) } else { String::new() },
         &route)
 }

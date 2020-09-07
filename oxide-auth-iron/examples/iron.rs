@@ -11,7 +11,7 @@ use iron::headers::ContentType;
 use iron::status::Status;
 use iron::middleware::Handler;
 
-use oxide_auth::endpoint::{OwnerConsent};
+use oxide_auth::endpoint::{OwnerConsent, Solicitation};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_iron::{OAuthRequest, OAuthResponse, OAuthError};
@@ -184,15 +184,15 @@ here</a> to begin the authorization process.
     }
 }
 
-fn consent_form(_: &mut OAuthRequest, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+fn consent_form(_: &mut OAuthRequest, solication: Solicitation) -> OwnerConsent<OAuthResponse> {
     let mut response = OAuthResponse::new();
     response.set_status(Status::Ok);
     response.set_header(ContentType::html());
-    response.set_body(&support::consent_page_html("/authorize", grant));
+    response.set_body(&support::consent_page_html("/authorize", solication));
     OwnerConsent::InProgress(response)
 }
 
-fn consent_decision(request: &mut OAuthRequest, _: &PreGrant) -> OwnerConsent<OAuthResponse> {
+fn consent_decision(request: &mut OAuthRequest, _: Solicitation) -> OwnerConsent<OAuthResponse> {
     // Authenticate the request better in a real app!
     let allowed = request.url().query_pairs().any(|(key, _)| key == "allow");
     if allowed {

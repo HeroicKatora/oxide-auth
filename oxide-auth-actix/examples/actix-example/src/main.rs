@@ -4,7 +4,7 @@ use actix::{Actor, Addr, Context, Handler};
 use actix_rt;
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
 use oxide_auth::{
-    endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
+    endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
     primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
 };
@@ -188,7 +188,7 @@ where
 
         match ex {
             Extras::AuthGet => {
-                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, pre_grant: &PreGrant| {
+                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, pre_grant: Solicitation| {
                     // This will display a page to the user asking for his permission to proceed. The submitted form
                     // will then trigger the other authorization handler which actually completes the flow.
                     OwnerConsent::InProgress(
@@ -202,7 +202,7 @@ where
                 op.run(self.with_solicitor(solicitor))
             }
             Extras::AuthPost(query_string) => {
-                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, _: &PreGrant| {
+                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, _: Solicitation| {
                     if query_string.contains("allow") {
                         OwnerConsent::Authorized("dummy user".to_owned())
                     } else {
