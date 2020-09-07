@@ -1,6 +1,5 @@
 use endpoint::*;
 use primitives::generator::TagGrant;
-use primitives::registrar::PreGrant;
 use primitives::grant::Grant;
 
 use std::borrow::Cow;
@@ -157,25 +156,33 @@ struct Allow(String);
 struct Deny;
 
 impl OwnerSolicitor<CraftedRequest> for Allow {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant) -> OwnerConsent<CraftedResponse> {
+    fn check_consent(
+        &mut self, _: &mut CraftedRequest, _: Solicitation,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Authorized(self.0.clone())
     }
 }
 
 impl OwnerSolicitor<CraftedRequest> for Deny {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant) -> OwnerConsent<CraftedResponse> {
+    fn check_consent(
+        &mut self, _: &mut CraftedRequest, _: Solicitation,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Denied
     }
 }
 
 impl<'l> OwnerSolicitor<CraftedRequest> for &'l Allow {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant) -> OwnerConsent<CraftedResponse> {
+    fn check_consent(
+        &mut self, _: &mut CraftedRequest, _: Solicitation,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Authorized(self.0.clone())
     }
 }
 
 impl<'l> OwnerSolicitor<CraftedRequest> for &'l Deny {
-    fn check_consent(&mut self, _: &mut CraftedRequest, _: &PreGrant) -> OwnerConsent<CraftedResponse> {
+    fn check_consent(
+        &mut self, _: &mut CraftedRequest, _: Solicitation,
+    ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Denied
     }
 }

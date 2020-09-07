@@ -14,7 +14,7 @@ use primitives::scope::Scope;
 
 use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow, RefreshFlow};
 use endpoint::{Endpoint, Extension, OAuthError, PreGrant, Template, Scopes};
-use endpoint::{OwnerConsent, OwnerSolicitor};
+use endpoint::{OwnerConsent, OwnerSolicitor, Solicitation};
 use endpoint::WebRequest;
 
 use std::marker::PhantomData;
@@ -630,7 +630,7 @@ impl OptIssuer for Vacant {
 }
 
 impl<W: WebRequest> OwnerSolicitor<W> for Vacant {
-    fn check_consent(&mut self, _: &mut W, _: &PreGrant) -> OwnerConsent<W::Response> {
+    fn check_consent(&mut self, _: &mut W, _: Solicitation) -> OwnerConsent<W::Response> {
         OwnerConsent::Denied
     }
 }
@@ -645,10 +645,12 @@ impl<W: WebRequest> Scopes<W> for Vacant {
 impl<W, F> OwnerSolicitor<W> for FnSolicitor<F>
 where
     W: WebRequest,
-    F: FnMut(&mut W, &PreGrant) -> OwnerConsent<W::Response>,
+    F: FnMut(&mut W, Solicitation) -> OwnerConsent<W::Response>,
 {
-    fn check_consent(&mut self, request: &mut W, grant: &PreGrant) -> OwnerConsent<W::Response> {
-        (self.0)(request, grant)
+    fn check_consent(
+        &mut self, request: &mut W, solicitation: Solicitation,
+    ) -> OwnerConsent<W::Response> {
+        (self.0)(request, solicitation)
     }
 }
 
@@ -658,8 +660,8 @@ impl<W: WebRequest> OwnerSolicitor<W> for ApprovedGrant {
     /// That is, `client_id`, `redirect_uri`, and `scope` of the pre-grant are all equivalent. In
     /// particular, the requested scope must match exactly not only be a subset of the approved
     /// scope.
-    fn check_consent(&mut self, _: &mut W, grant: &PreGrant) -> OwnerConsent<W::Response> {
-        if &self.grant == grant {
+    fn check_consent(&mut self, _: &mut W, solicitation: Solicitation) -> OwnerConsent<W::Response> {
+        if &self.grant == solicitation.pre_grant() {
             OwnerConsent::Authorized(self.owner.clone())
         } else {
             OwnerConsent::Denied

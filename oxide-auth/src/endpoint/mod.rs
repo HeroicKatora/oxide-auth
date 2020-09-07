@@ -211,7 +211,7 @@ impl<'flow> Solicitation<'flow> {
 pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
-    fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
+    fn check_consent(&mut self, _: &mut Request, _: Solicitation) -> OwnerConsent<Request::Response>;
 }
 
 /// Determine the scopes applying to a request of a resource.
@@ -605,14 +605,18 @@ impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
 impl Extension for () {}
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for &'a mut S {
-    fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
-        (**self).check_consent(request, pre)
+    fn check_consent(
+        &mut self, request: &mut W, solicitation: Solicitation,
+    ) -> OwnerConsent<W::Response> {
+        (**self).check_consent(request, solicitation)
     }
 }
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for Box<S> {
-    fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
-        (**self).check_consent(request, pre)
+    fn check_consent(
+        &mut self, request: &mut W, solicitation: Solicitation,
+    ) -> OwnerConsent<W::Response> {
+        (**self).check_consent(request, solicitation)
     }
 }
 
