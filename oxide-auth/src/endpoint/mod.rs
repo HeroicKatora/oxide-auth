@@ -46,7 +46,6 @@ pub use primitives::issuer::Issuer;
 pub use primitives::registrar::Registrar;
 pub use primitives::scope::Scope;
 
-use code_grant::authorization::Pending;
 use code_grant::resource::{Error as ResourceError};
 use code_grant::error::{AuthorizationError, AccessTokenError};
 
@@ -176,13 +175,19 @@ enum InnerTemplate<'a> {
 ///
 /// [`OwnerSolicitor`]: trait.OwnerSolicitor.html
 pub struct Solicitation<'flow> {
-    pub(crate) grant: &'flow PreGrant,
-    pub(crate) state: Option<&'flow str>,
+    pub(crate) grant: Cow<'flow, PreGrant>,
+    pub(crate) state: Option<Cow<'flow, str>>,
 }
 
 impl<'flow> Solicitation<'flow> {
-    pub(crate) fn new(state: &'flow Pending) -> Self {
-        state.as_solicitation()
+    /// Clone the solicitation into an owned structure.
+    ///
+    /// This mainly helps with sending it across threads.
+    pub fn into_owned(self) -> Solicitation<'static> {
+        Solicitation {
+            grant: Cow::Owned(self.grant.into_owned()),
+            state: self.state.map(|state| Cow::Owned(state.into_owned())),
+        }
     }
 
     /// Return the pre-grant associated with the request.
@@ -191,7 +196,7 @@ impl<'flow> Solicitation<'flow> {
     /// associated with the request. It has already been validated against those settings and
     /// restrictions that were applied when registering the client.
     pub fn pre_grant(&self) -> &PreGrant {
-        self.grant
+        self.grant.as_ref()
     }
 
     /// The state provided by the client request.
@@ -199,7 +204,29 @@ impl<'flow> Solicitation<'flow> {
     /// This will need to be provided to the response back to the client so it must be preserved
     /// across a redirect or a consent screen presented by the user agent.
     pub fn state(&self) -> Option<&str> {
-        self.state.clone()
+        match self.state {
+            None => None,
+            Some(ref state) => Some(&state),
+        }
+    }
+
+    /// Create a new solicitation request from a pre grant.
+    ///
+    /// You usually wouldn't need to call this manually as it is called by the endpoint's flow and
+    /// then handed with all available information to the solicitor.
+    pub fn new(grant: &'flow PreGrant) -> Self {
+        Solicitation {
+            grant: Cow::Borrowed(grant),
+            state: None,
+        }
+    }
+
+    /// Add a client state to the solicitation.
+    pub fn with_state(self, state: &'flow str) -> Self {
+        Solicitation {
+            state: Some(Cow::Borrowed(state)),
+            ..self
+        }
     }
 }
 

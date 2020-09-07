@@ -269,7 +269,7 @@ pub mod authorization {
             authorization::{Authorization, Error, ErrorUrl, Input, Output, Request},
             error::{AuthorizationError, AuthorizationErrorType},
         },
-        endpoint::{PreGrant, Scope},
+        endpoint::{PreGrant, Scope, Solicitation},
         primitives::{
             grant::{Extensions, Grant},
             prelude::ClientUrl,
@@ -326,6 +326,15 @@ pub mod authorization {
     }
 
     impl Pending {
+        /// Reference this pending state as a solicitation.
+        pub fn as_solicitation(&self) -> Solicitation<'_> {
+            let base = Solicitation::new(&self.pre_grant);
+            match self.state {
+                None => base,
+                Some(ref state) => base.with_state(state),
+            }
+        }
+
         /// Denies the request, which redirects to the client for which the request originated.
         pub fn deny(self) -> Result<Url, Error> {
             let url = self.pre_grant.redirect_uri;

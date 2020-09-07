@@ -437,10 +437,10 @@ pub struct Pending {
 
 impl Pending {
     /// Reference this pending state as a solicitation.
-    pub(crate) fn as_solicitation(&self) -> Solicitation<'_> {
+    pub fn as_solicitation(&self) -> Solicitation<'_> {
         Solicitation {
-            grant: &self.pre_grant,
-            state: self.state.as_ref().map(|s| &**s),
+            grant: Cow::Borrowed(&self.pre_grant),
+            state: self.state.as_ref().map(|s| Cow::Borrowed(&**s)),
         }
     }
 
