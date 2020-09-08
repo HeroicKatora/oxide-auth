@@ -6,4 +6,6 @@ members = [
 	"oxide-auth-iron",
 	"oxide-auth-rocket",
 	"oxide-auth-rouille",
+	"oxide-auth-db",
 ]
+
