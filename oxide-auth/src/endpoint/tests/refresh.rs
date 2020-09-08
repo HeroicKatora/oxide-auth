@@ -1,7 +1,7 @@
 use primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap};
 use primitives::generator::RandomGenerator;
 use primitives::grant::{Grant, Extensions};
-use primitives::registrar::{Client, ClientMap};
+use primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use std::collections::HashMap;
 
@@ -33,7 +33,7 @@ impl RefreshTokenSetup {
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes(),
         );
@@ -71,7 +71,7 @@ impl RefreshTokenSetup {
 
         let client = Client::public(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Exact(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
         );
 
@@ -247,7 +247,7 @@ fn public_private_invalid_grant() {
     let mut setup = RefreshTokenSetup::public_client();
     let client = Client::confidential(
         "PrivateClient".into(),
-        EXAMPLE_REDIRECT_URI.parse().unwrap(),
+        RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
         EXAMPLE_SCOPE.parse().unwrap(),
         EXAMPLE_PASSPHRASE.as_bytes(),
     );

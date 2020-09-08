@@ -248,11 +248,29 @@ impl From<RegisteredUrl> for Url {
     }
 }
 
+/// Compares the registered url as an exact string if it was registered as exact, otherwise
+/// semantically.
 impl cmp::PartialEq<ExactUrl> for RegisteredUrl {
     fn eq(&self, exact: &ExactUrl) -> bool {
         match self {
             RegisteredUrl::Exact(url) => url == exact,
             RegisteredUrl::Semantic(url) => *url == exact.to_url(),
+        }
+    }
+}
+
+/// Compares the registered url semantically.
+impl cmp::PartialEq<Url> for RegisteredUrl {
+    fn eq(&self, semantic: &Url) -> bool {
+        self.to_url() == *semantic
+    }
+}
+
+impl fmt::Display for RegisteredUrl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RegisteredUrl::Exact(url) => write!(f, "{}", url.to_url()),
+            RegisteredUrl::Semantic(url) => write!(f, "{}", url),
         }
     }
 }
@@ -639,8 +657,11 @@ mod tests {
         let private_id = "PublicClientId";
         let private_passphrase = b"WOJJCcS8WyS2aGmJK6ZADg==";
 
-        let public_client =
-            Client::public(public_id, client_url.parse().unwrap(), "default".parse().unwrap());
+        let public_client = Client::public(
+            public_id,
+            client_url.parse::<Url>().unwrap().into(),
+            "default".parse().unwrap(),
+        );
 
         register(registrar, public_client);
 
@@ -656,7 +677,7 @@ mod tests {
 
         let private_client = Client::confidential(
             private_id,
-            client_url.parse().unwrap(),
+            client_url.parse::<Url>().unwrap().into(),
             "default".parse().unwrap(),
             private_passphrase,
         );
@@ -679,7 +700,7 @@ mod tests {
         let policy = Argon2::default();
         let client = Client::public(
             "ClientId",
-            "https://example.com".parse().unwrap(),
+            "https://example.com".parse::<Url>().unwrap().into(),
             "default".parse().unwrap(),
         )
         .encode(&policy);
@@ -697,7 +718,7 @@ mod tests {
         let pass = b"AB3fAj6GJpdxmEVeNCyPoA==";
         let client = Client::confidential(
             "ClientId",
-            "https://example.com".parse().unwrap(),
+            "https://example.com".parse::<Url>().unwrap().into(),
             "default".parse().unwrap(),
             pass,
         )
@@ -713,9 +734,10 @@ mod tests {
     fn with_additional_redirect_uris() {
         let client_id = "ClientId";
         let redirect_uri: Url = "https://example.com/foo".parse().unwrap();
-        let additional_redirect_uris: Vec<Url> = vec!["https://example.com/bar".parse().unwrap()];
+        let additional_redirect_uris: Vec<RegisteredUrl> =
+            vec!["https://example.com/bar".parse::<Url>().unwrap().into()];
         let default_scope = "default".parse().unwrap();
-        let client = Client::public(client_id, redirect_uri, default_scope)
+        let client = Client::public(client_id, redirect_uri.into(), default_scope)
             .with_additional_redirect_uris(additional_redirect_uris);
         let mut client_map = ClientMap::new();
         client_map.register_client(client);
@@ -728,7 +750,7 @@ mod tests {
                 })
                 .unwrap()
                 .redirect_uri,
-            Cow::Owned("https://example.com/foo".parse().unwrap())
+            Cow::<Url>::Owned("https://example.com/foo".parse().unwrap())
         );
 
         assert_eq!(
@@ -739,7 +761,7 @@ mod tests {
                 })
                 .unwrap()
                 .redirect_uri,
-            Cow::Owned("https://example.com/bar".parse().unwrap())
+            Cow::<Url>::Owned("https://example.com/bar".parse().unwrap())
         );
 
         assert!(client_map

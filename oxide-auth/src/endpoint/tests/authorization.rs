@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use primitives::authorizer::AuthMap;
-use primitives::registrar::{Client, ClientMap};
+use primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use endpoint::{OwnerSolicitor};
 
@@ -23,7 +23,7 @@ impl AuthorizationSetup {
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes(),
         );

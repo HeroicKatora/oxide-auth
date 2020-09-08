@@ -148,7 +148,10 @@ here</a> to begin the authorization process.
             registrar: Mutex::new(
                 vec![Client::public(
                     "LocalClient",
-                    "http://localhost:8021/endpoint".parse().unwrap(),
+                    "http://localhost:8021/endpoint"
+                        .parse::<url::Url>()
+                        .unwrap()
+                        .into(),
                     "default-scope".parse().unwrap(),
                 )]
                 .into_iter()
