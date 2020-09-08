@@ -7,7 +7,7 @@ use chrono::{Duration, Utc};
 
 use code_grant::error::{AuthorizationError, AuthorizationErrorType};
 use primitives::authorizer::Authorizer;
-use primitives::registrar::{ClientUrl, Registrar, RegistrarError, PreGrant};
+use primitives::registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant};
 use primitives::grant::{Extensions, Grant};
 use crate::{endpoint::Scope, endpoint::Solicitation, primitives::registrar::BoundClient};
 
@@ -81,7 +81,7 @@ enum AuthorizationState {
     /// State after request is validated
     Binding {
         client_id: String,
-        redirect_uri: Option<Url>,
+        redirect_uri: Option<ExactUrl>,
     },
     Extending {
         bound_client: BoundClient<'static>,
@@ -132,7 +132,7 @@ pub enum Output<'machine> {
         /// The to-be-bound client.
         client_id: String,
         /// The redirect_uri to check if any
-        redirect_uri: Option<Url>,
+        redirect_uri: Option<ExactUrl>,
     },
     /// Ask for extensions if any
     Extend,
@@ -232,7 +232,7 @@ impl Authorization {
             _ => {
                 let prepared_error = ErrorUrl::with_request(
                     request,
-                    (*bound_client.redirect_uri).clone(),
+                    (*bound_client.redirect_uri).to_url(),
                     AuthorizationErrorType::UnsupportedResponseType,
                 );
                 return Err(Error::Redirect(prepared_error));
@@ -248,7 +248,7 @@ impl Authorization {
             Some(Err(_)) => {
                 let prepared_error = ErrorUrl::with_request(
                     request,
-                    (*bound_client.redirect_uri).clone(),
+                    (*bound_client.redirect_uri).to_url(),
                     AuthorizationErrorType::InvalidScope,
                 );
                 return Err(Error::Redirect(prepared_error));
@@ -285,10 +285,10 @@ impl Authorization {
 
         // Check preconditions
         let client_id = request.client_id().ok_or(Error::Ignore)?;
-        let redirect_uri: Option<Cow<Url>> = match request.redirect_uri() {
+        let redirect_uri: Option<Cow<ExactUrl>> = match request.redirect_uri() {
             None => None,
             Some(ref uri) => {
-                let parsed = Url::parse(&uri).map_err(|_| Error::Ignore)?;
+                let parsed = uri.parse().map_err(|_| Error::Ignore)?;
                 Some(Cow::Owned(parsed))
             }
         };
@@ -314,7 +314,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
         None,
         Bind {
             client_id: String,
-            redirect_uri: Option<Url>,
+            redirect_uri: Option<ExactUrl>,
         },
         Extend,
         Negotiate {
@@ -356,7 +356,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                     Err(()) => {
                         let prepared_error = ErrorUrl::with_request(
                             request,
-                            the_redirect_uri.unwrap(),
+                            the_redirect_uri.unwrap().into(),
                             AuthorizationErrorType::InvalidRequest,
                         );
                         return Err(Error::Redirect(prepared_error));
@@ -371,7 +371,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
             } => {
                 let bound_client = BoundClient {
                     client_id: Cow::Owned(client_id),
-                    redirect_uri: Cow::Owned(redirect_uri.clone()),
+                    redirect_uri: Cow::Owned(redirect_uri.clone().into()),
                 };
                 let pre_grant = handler
                     .registrar()
@@ -405,7 +405,7 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
             Output::Extend => Requested::Extend,
             Output::Negotiate { bound_client, scope } => Requested::Negotiate {
                 client_id: bound_client.client_id.clone().into_owned(),
-                redirect_uri: bound_client.redirect_uri.clone().into_owned(),
+                redirect_uri: bound_client.redirect_uri.to_url(),
                 scope,
             },
             Output::Ok {
@@ -449,7 +449,7 @@ impl Pending {
         let url = self.pre_grant.redirect_uri;
         let mut error = AuthorizationError::default();
         error.set_type(AuthorizationErrorType::AccessDenied);
-        let error = ErrorUrl::new_generic(url, self.state, error);
+        let error = ErrorUrl::new_generic(url.into_url(), self.state, error);
         Err(Error::Redirect(error))
     }
 
@@ -458,14 +458,14 @@ impl Pending {
     /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
     /// same endpoint as was used to create the pending request.
     pub fn authorize(self, handler: &mut dyn Endpoint, owner_id: Cow<str>) -> Result<Url> {
-        let mut url = self.pre_grant.redirect_uri.clone();
+        let mut url = self.pre_grant.redirect_uri.to_url();
 
         let grant = handler
             .authorizer()
             .authorize(Grant {
                 owner_id: owner_id.into_owned(),
                 client_id: self.pre_grant.client_id,
-                redirect_uri: self.pre_grant.redirect_uri,
+                redirect_uri: self.pre_grant.redirect_uri.into_url(),
                 scope: self.pre_grant.scope,
                 until: Utc::now() + Duration::minutes(10),
                 extensions: self.extensions,
