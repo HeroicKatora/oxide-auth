@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::thread;
 
 use oxide_auth::endpoint::{
-    AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, RefreshFlow, ResourceFlow,
+    AuthorizationFlow, AccessTokenFlow, OwnerConsent, RefreshFlow, ResourceFlow, Solicitation,
 };
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_rouille::{Request, Response as OAuthResponse};
@@ -131,7 +131,7 @@ here</a> to begin the authorization process.
 /// In a POST request, this will display a page to the user asking for his permission to proceed.
 /// The submitted form will then trigger the other authorization handler which actually completes
 /// the flow.
-fn solicitor(request: &mut Request, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+fn solicitor(request: &mut Request, grant: Solicitation<'_>) -> OwnerConsent<OAuthResponse> {
     if request.method() == "GET" {
         let text = support::consent_page_html("/authorize".into(), grant);
         let response = Response::html(text);

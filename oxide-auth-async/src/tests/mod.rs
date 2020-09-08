@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use oxide_auth::{
     primitives::generator::TagGrant,
     primitives::registrar::PreGrant,
-    endpoint::{WebRequest, OAuthError, WebResponse, OwnerConsent, QueryParameter},
+    endpoint::{WebRequest, OAuthError, WebResponse, OwnerConsent, QueryParameter, Solicitation},
     primitives::grant::Grant,
 };
 use url::Url;
@@ -162,7 +162,7 @@ struct Deny;
 #[async_trait::async_trait]
 impl OwnerSolicitor<CraftedRequest> for Allow {
     async fn check_consent(
-        &mut self, _: &mut CraftedRequest, _: &PreGrant,
+        &mut self, _: &mut CraftedRequest, _: Solicitation<'_>,
     ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Authorized(self.0.clone())
     }
@@ -171,7 +171,7 @@ impl OwnerSolicitor<CraftedRequest> for Allow {
 #[async_trait::async_trait]
 impl OwnerSolicitor<CraftedRequest> for Deny {
     async fn check_consent(
-        &mut self, _: &mut CraftedRequest, _: &PreGrant,
+        &mut self, _: &mut CraftedRequest, _: Solicitation<'_>,
     ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Denied
     }
@@ -180,7 +180,7 @@ impl OwnerSolicitor<CraftedRequest> for Deny {
 #[async_trait::async_trait]
 impl<'l> OwnerSolicitor<CraftedRequest> for &'l Allow {
     async fn check_consent(
-        &mut self, _: &mut CraftedRequest, _: &PreGrant,
+        &mut self, _: &mut CraftedRequest, _: Solicitation<'_>,
     ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Authorized(self.0.clone())
     }
@@ -189,7 +189,7 @@ impl<'l> OwnerSolicitor<CraftedRequest> for &'l Allow {
 #[async_trait::async_trait]
 impl<'l> OwnerSolicitor<CraftedRequest> for &'l Deny {
     async fn check_consent(
-        &mut self, _: &mut CraftedRequest, _: &PreGrant,
+        &mut self, _: &mut CraftedRequest, _: Solicitation<'_>,
     ) -> OwnerConsent<CraftedResponse> {
         OwnerConsent::Denied
     }

@@ -168,6 +168,68 @@ enum InnerTemplate<'a> {
     Ok,
 }
 
+/// A pending solicitation to a resource owner.
+///
+/// This encapsulates the information available to an [`OwnerSolicitor`] when querying consent
+/// information.
+///
+/// [`OwnerSolicitor`]: trait.OwnerSolicitor.html
+pub struct Solicitation<'flow> {
+    pub(crate) grant: Cow<'flow, PreGrant>,
+    pub(crate) state: Option<Cow<'flow, str>>,
+}
+
+impl<'flow> Solicitation<'flow> {
+    /// Clone the solicitation into an owned structure.
+    ///
+    /// This mainly helps with sending it across threads.
+    pub fn into_owned(self) -> Solicitation<'static> {
+        Solicitation {
+            grant: Cow::Owned(self.grant.into_owned()),
+            state: self.state.map(|state| Cow::Owned(state.into_owned())),
+        }
+    }
+
+    /// Return the pre-grant associated with the request.
+    ///
+    /// The information in the `PreGrant` is the authoritative information on the client and scopes
+    /// associated with the request. It has already been validated against those settings and
+    /// restrictions that were applied when registering the client.
+    pub fn pre_grant(&self) -> &PreGrant {
+        self.grant.as_ref()
+    }
+
+    /// The state provided by the client request.
+    ///
+    /// This will need to be provided to the response back to the client so it must be preserved
+    /// across a redirect or a consent screen presented by the user agent.
+    pub fn state(&self) -> Option<&str> {
+        match self.state {
+            None => None,
+            Some(ref state) => Some(&state),
+        }
+    }
+
+    /// Create a new solicitation request from a pre grant.
+    ///
+    /// You usually wouldn't need to call this manually as it is called by the endpoint's flow and
+    /// then handed with all available information to the solicitor.
+    pub fn new(grant: &'flow PreGrant) -> Self {
+        Solicitation {
+            grant: Cow::Borrowed(grant),
+            state: None,
+        }
+    }
+
+    /// Add a client state to the solicitation.
+    pub fn with_state(self, state: &'flow str) -> Self {
+        Solicitation {
+            state: Some(Cow::Borrowed(state)),
+            ..self
+        }
+    }
+}
+
 /// Checks consent with the owner of a resource, identified in a request.
 ///
 /// See [`frontends::simple`] for an implementation that permits arbitrary functions.
@@ -176,7 +238,7 @@ enum InnerTemplate<'a> {
 pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
-    fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
+    fn check_consent(&mut self, _: &mut Request, _: Solicitation) -> OwnerConsent<Request::Response>;
 }
 
 /// Determine the scopes applying to a request of a resource.
@@ -570,14 +632,18 @@ impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
 impl Extension for () {}
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for &'a mut S {
-    fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
-        (**self).check_consent(request, pre)
+    fn check_consent(
+        &mut self, request: &mut W, solicitation: Solicitation,
+    ) -> OwnerConsent<W::Response> {
+        (**self).check_consent(request, solicitation)
     }
 }
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for Box<S> {
-    fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
-        (**self).check_consent(request, pre)
+    fn check_consent(
+        &mut self, request: &mut W, solicitation: Solicitation,
+    ) -> OwnerConsent<W::Response> {
+        (**self).check_consent(request, solicitation)
     }
 }
 

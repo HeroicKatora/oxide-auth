@@ -223,7 +223,7 @@ where
         let checked = self
             .endpoint
             .owner_solicitor()
-            .check_consent(&mut self.request, self.pending.pre_grant())
+            .check_consent(&mut self.request, self.pending.as_solicitation())
             .await;
 
         match checked {
