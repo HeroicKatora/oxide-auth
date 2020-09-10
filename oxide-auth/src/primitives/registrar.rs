@@ -54,11 +54,36 @@ pub trait Registrar {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RegisteredUrl {
+    /// An exact URL that must be match literally when the client uses it.
+    ///
+    /// The string still needs to form a valid URL. See the documentation of [`ExactUrl`] for more
+    /// information on when to use this variant and guarantees.
+    ///
+    /// [`ExactUrl`]: struct.ExactUrl.html
     Exact(ExactUrl),
+    /// An URL that needs to match the redirect URL semantically.
     Semantic(Url),
 }
 
 /// A redirect URL that must be matched exactly by the client.
+///
+/// Semantically these URLs are all the same:
+///
+/// * `https://client.example/oauth2/redirect`
+/// * `https://client.example/oauth2/redirect/`
+/// * `https://client.example/oauth2/../oauth2/redirect/`
+/// * `https://client.example:443/oauth2/redirect`
+///
+/// When the URL is parsed then typically one canonical form is chosen by the parsing library. When
+/// a string comparison is done then all other do not match the expected value that was originally
+/// passed to the registration. This type always stores the original string instead.
+///
+/// The comparison is done character-by-character, i.e. it's not constant time. While this entry is
+/// not sensitive like a password, it is reasonable for a server to e.g. apply bloom filters or
+/// store an URL in a compressed form such as a hash. However, such a transition would not be
+/// possible if clients are allowed to provide any semantically matching URL as there are
+/// infinitely many with different hashes. (Note: a hashed form of URL storage is not currently
+/// supported).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExactUrl(String);
 
@@ -287,7 +312,9 @@ impl ExactUrl {
         &self.0
     }
 
+    /// Turn the url into a semantic `Url`.
     pub fn to_url(&self) -> Url {
+        // TODO: maybe we should store the parsing result?
         self.0.parse().expect("was validated")
     }
 }
