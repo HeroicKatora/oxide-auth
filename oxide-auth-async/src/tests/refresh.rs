@@ -4,7 +4,7 @@ use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{
     code_grant::accesstoken::TokenResponse,
     endpoint::{WebRequest},
-    primitives::registrar::{Client, ClientMap},
+    primitives::registrar::{Client, ClientMap, RegisteredUrl},
     frontends::simple::endpoint::Error,
 };
 
@@ -81,7 +81,7 @@ impl RefreshTokenSetup {
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes(),
         );
@@ -119,7 +119,7 @@ impl RefreshTokenSetup {
 
         let client = Client::public(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
         );
 
@@ -295,7 +295,7 @@ fn public_private_invalid_grant() {
     let mut setup = RefreshTokenSetup::public_client();
     let client = Client::confidential(
         "PrivateClient".into(),
-        EXAMPLE_REDIRECT_URI.parse().unwrap(),
+        RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
         EXAMPLE_SCOPE.parse().unwrap(),
         EXAMPLE_PASSPHRASE.as_bytes(),
     );

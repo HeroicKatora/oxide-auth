@@ -1,7 +1,7 @@
 use primitives::authorizer::AuthMap;
 use primitives::issuer::TokenMap;
 use primitives::generator::RandomGenerator;
-use primitives::registrar::{Client, ClientMap};
+use primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use code_grant::accesstoken::TokenResponse;
 use endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
@@ -26,7 +26,7 @@ impl PkceSetup {
     fn new() -> PkceSetup {
         let client = Client::public(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
         );
 

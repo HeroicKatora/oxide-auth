@@ -3,7 +3,7 @@ use oxide_auth::primitives::issuer::TokenMap;
 use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{
     frontends::simple::endpoint::Error,
-    primitives::registrar::{Client, ClientMap},
+    primitives::registrar::{Client, ClientMap, RegisteredUrl},
     endpoint::WebRequest,
 };
 
@@ -90,7 +90,7 @@ impl AccessTokenSetup {
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes(),
         );
@@ -126,7 +126,7 @@ impl AccessTokenSetup {
 
         let client = Client::public(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
         );
 
@@ -273,7 +273,7 @@ fn access_equivalent_url() {
 
     let confusing_client = Client::public(
         CLIENT_ID,
-        REDIRECT_URL.parse().unwrap(),
+        RegisteredUrl::Semantic(REDIRECT_URL.parse().unwrap()),
         EXAMPLE_SCOPE.parse().unwrap(),
     );
 

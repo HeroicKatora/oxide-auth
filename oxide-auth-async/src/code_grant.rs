@@ -273,7 +273,7 @@ pub mod authorization {
         primitives::{
             grant::{Extensions, Grant},
             prelude::ClientUrl,
-            registrar::{BoundClient, RegistrarError},
+            registrar::{BoundClient, ExactUrl, RegistrarError},
         },
     };
     use url::Url;
@@ -340,7 +340,7 @@ pub mod authorization {
             let url = self.pre_grant.redirect_uri;
             let mut error = AuthorizationError::default();
             error.set_type(AuthorizationErrorType::AccessDenied);
-            let error = ErrorUrl::new(url, self.state.as_deref(), error);
+            let error = ErrorUrl::new(url.into(), self.state.as_deref(), error);
             Err(Error::Redirect(error))
         }
 
@@ -351,14 +351,14 @@ pub mod authorization {
         pub async fn authorize(
             self, handler: &mut (dyn Endpoint + Send), owner_id: Cow<'_, str>,
         ) -> Result<Url, Error> {
-            let mut url = self.pre_grant.redirect_uri.clone();
+            let mut url = self.pre_grant.redirect_uri.to_url();
 
             let grant = handler
                 .authorizer()
                 .authorize(Grant {
                     owner_id: owner_id.into_owned(),
                     client_id: self.pre_grant.client_id,
-                    redirect_uri: self.pre_grant.redirect_uri,
+                    redirect_uri: self.pre_grant.redirect_uri.into(),
                     scope: self.pre_grant.scope,
                     until: Utc::now() + Duration::minutes(10),
                     extensions: self.extensions,
@@ -396,7 +396,7 @@ pub mod authorization {
             None,
             Bind {
                 client_id: String,
-                redirect_uri: Option<Url>,
+                redirect_uri: Option<ExactUrl>,
             },
             Extend,
             Negotiate {
@@ -438,7 +438,7 @@ pub mod authorization {
                         Err(()) => {
                             let prepared_error = ErrorUrl::with_request(
                                 request,
-                                the_redirect_uri.unwrap(),
+                                the_redirect_uri.unwrap().into_url(),
                                 AuthorizationErrorType::InvalidRequest,
                             );
                             return Err(Error::Redirect(prepared_error));
@@ -453,7 +453,7 @@ pub mod authorization {
                 } => {
                     let bound_client = BoundClient {
                         client_id: Cow::Owned(client_id),
-                        redirect_uri: Cow::Owned(redirect_uri.clone()),
+                        redirect_uri: Cow::Owned(redirect_uri.clone().into()),
                     };
                     let pre_grant = handler.registrar().negotiate(bound_client, scope).await.map_err(
                         |err| match err {
@@ -461,7 +461,7 @@ pub mod authorization {
                             RegistrarError::Unspecified => {
                                 let prepared_error = ErrorUrl::with_request(
                                     request,
-                                    redirect_uri.clone(),
+                                    redirect_uri,
                                     AuthorizationErrorType::InvalidScope,
                                 );
                                 Error::Redirect(prepared_error)
@@ -486,7 +486,7 @@ pub mod authorization {
                 Output::Extend => Requested::Extend,
                 Output::Negotiate { bound_client, scope } => Requested::Negotiate {
                     client_id: bound_client.client_id.clone().into_owned(),
-                    redirect_uri: bound_client.redirect_uri.clone().into_owned(),
+                    redirect_uri: bound_client.redirect_uri.to_url(),
                     scope,
                 },
                 Output::Ok {

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use primitives::authorizer::AuthMap;
-use primitives::registrar::{Client, ClientMap};
+use primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use endpoint::{OwnerSolicitor};
 
@@ -23,7 +23,7 @@ impl AuthorizationSetup {
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes(),
         );
@@ -160,6 +160,55 @@ fn auth_request_silent_mismatching_redirect() {
     };
 
     AuthorizationSetup::new().test_silent_error(mismatching_redirect);
+}
+
+#[test]
+fn auth_request_silent_mismatching_literal_redirect() {
+    // The redirect_uri does not match if stringly matched.
+    let mut setup = AuthorizationSetup::new();
+    const UNIQUE_CLIENT: &'static str = "client_auth_request_silent_mismatching_literal_redirect";
+    const REGISTERED_URL: &'static str = "https://right.client.example/endpoint";
+    const TRIED_URL: &'static str = "https://right.client.example/endpoint/";
+
+    let client = Client::confidential(
+        UNIQUE_CLIENT,
+        RegisteredUrl::Exact(REGISTERED_URL.parse().unwrap()),
+        EXAMPLE_SCOPE.parse().unwrap(),
+        EXAMPLE_PASSPHRASE.as_bytes(),
+    );
+    setup.registrar.register_client(client);
+
+    let mismatching_redirect = CraftedRequest {
+        query: Some(
+            vec![
+                ("response_type", "code"),
+                ("client_id", UNIQUE_CLIENT),
+                ("redirect_uri", TRIED_URL),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        urlbody: None,
+        auth: None,
+    };
+
+    setup.test_silent_error(mismatching_redirect);
+
+    let valid_redirect = CraftedRequest {
+        query: Some(
+            vec![
+                ("response_type", "code"),
+                ("client_id", UNIQUE_CLIENT),
+                ("redirect_uri", REGISTERED_URL),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        urlbody: None,
+        auth: None,
+    };
+
+    setup.test_success(valid_redirect);
 }
 
 #[test]

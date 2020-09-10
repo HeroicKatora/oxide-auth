@@ -16,7 +16,7 @@ use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use argon2::{self, Config};
 use once_cell::sync::Lazy;
 use rand::{RngCore, thread_rng};
-use url::Url;
+use url::{Url, ParseError as ParseUrlError};
 
 /// Registrars provie a way to interact with clients.
 ///
@@ -45,6 +45,48 @@ pub trait Registrar {
     fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError>;
 }
 
+/// An url that has been registered.
+///
+/// There are two ways to create this url:
+///
+/// 1. By supplying a string to match _exactly_
+/// 2. By an URL which needs to match semantically.
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RegisteredUrl {
+    /// An exact URL that must be match literally when the client uses it.
+    ///
+    /// The string still needs to form a valid URL. See the documentation of [`ExactUrl`] for more
+    /// information on when to use this variant and guarantees.
+    ///
+    /// [`ExactUrl`]: struct.ExactUrl.html
+    Exact(ExactUrl),
+    /// An URL that needs to match the redirect URL semantically.
+    Semantic(Url),
+}
+
+/// A redirect URL that must be matched exactly by the client.
+///
+/// Semantically these URLs are all the same:
+///
+/// * `https://client.example/oauth2/redirect`
+/// * `https://client.example/oauth2/redirect/`
+/// * `https://client.example/oauth2/../oauth2/redirect/`
+/// * `https://client.example:443/oauth2/redirect`
+///
+/// When the URL is parsed then typically one canonical form is chosen by the parsing library. When
+/// a string comparison is done then all other do not match the expected value that was originally
+/// passed to the registration. This type always stores the original string instead.
+///
+/// The comparison is done character-by-character, i.e. it's not constant time. While this entry is
+/// not sensitive like a password, it is reasonable for a server to e.g. apply bloom filters or
+/// store an URL in a compressed form such as a hash. However, such a transition would not be
+/// possible if clients are allowed to provide any semantically matching URL as there are
+/// infinitely many with different hashes. (Note: a hashed form of URL storage is not currently
+/// supported).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExactUrl(String);
+
 /// A pair of `client_id` and an optional `redirect_uri`.
 ///
 /// Such a pair is received in an Authorization Code Request. A registrar which allows multiple
@@ -58,7 +100,7 @@ pub struct ClientUrl<'a> {
     pub client_id: Cow<'a, str>,
 
     /// The parsed url, if any.
-    pub redirect_uri: Option<Cow<'a, Url>>,
+    pub redirect_uri: Option<Cow<'a, ExactUrl>>,
 }
 
 /// A client and its chosen redirection endpoint.
@@ -71,7 +113,7 @@ pub struct BoundClient<'a> {
     pub client_id: Cow<'a, str>,
 
     /// The chosen redirection endpoint url, moved from the request or overwritten.
-    pub redirect_uri: Cow<'a, Url>,
+    pub redirect_uri: Cow<'a, RegisteredUrl>,
 }
 
 /// These are the parameters presented to the resource owner when confirming or denying a grant
@@ -84,7 +126,7 @@ pub struct PreGrant {
     pub client_id: String,
 
     /// The redirection url associated with the above client.
-    pub redirect_uri: Url,
+    pub redirect_uri: RegisteredUrl,
 
     /// A scope admissible for the above client.
     pub scope: Scope,
@@ -120,8 +162,8 @@ pub enum RegistrarError {
 #[derive(Clone, Debug)]
 pub struct Client {
     client_id: String,
-    redirect_uri: Url,
-    additional_redirect_uris: Vec<Url>,
+    redirect_uri: RegisteredUrl,
+    additional_redirect_uris: Vec<RegisteredUrl>,
     default_scope: Scope,
     client_type: ClientType,
 }
@@ -139,11 +181,11 @@ pub struct EncodedClient {
     /// The registered redirect uri.
     /// Unlike `additional_redirect_uris`, this is registered as the default redirect uri
     /// and will be replaced if, for example, no `redirect_uri` is specified in the request parameter.
-    pub redirect_uri: Url,
+    pub redirect_uri: RegisteredUrl,
 
     /// The redirect uris that can be registered in addition to the `redirect_uri`.
     /// If you want to register multiple redirect uris, register them together with `redirect_uri`.
-    pub additional_redirect_uris: Vec<Url>,
+    pub additional_redirect_uris: Vec<RegisteredUrl>,
 
     /// The scope the client gets if none was given.
     pub default_scope: Scope,
@@ -187,9 +229,107 @@ impl fmt::Debug for ClientType {
     }
 }
 
+impl RegisteredUrl {
+    /// View the url as a string.
+    pub fn as_str(&self) -> &str {
+        match self {
+            RegisteredUrl::Exact(exact) => &exact.0,
+            RegisteredUrl::Semantic(url) => url.as_str(),
+        }
+    }
+
+    /// Turn the url into a semantic `Url`.
+    pub fn to_url(&self) -> Url {
+        match self {
+            RegisteredUrl::Exact(exact) => exact.to_url(),
+            RegisteredUrl::Semantic(url) => url.clone(),
+        }
+    }
+
+    /// Turn the url into a semantic `Url`.
+    pub fn into_url(self) -> Url {
+        self.into()
+    }
+}
+
+impl From<Url> for RegisteredUrl {
+    fn from(url: Url) -> Self {
+        RegisteredUrl::Semantic(url)
+    }
+}
+
+impl From<ExactUrl> for RegisteredUrl {
+    fn from(url: ExactUrl) -> Self {
+        RegisteredUrl::Exact(url)
+    }
+}
+
+impl From<RegisteredUrl> for Url {
+    fn from(url: RegisteredUrl) -> Self {
+        match url {
+            RegisteredUrl::Exact(exact) => exact.0.parse().expect("was validated"),
+            RegisteredUrl::Semantic(url) => url,
+        }
+    }
+}
+
+/// Compares the registered url as an exact string if it was registered as exact, otherwise
+/// semantically.
+impl cmp::PartialEq<ExactUrl> for RegisteredUrl {
+    fn eq(&self, exact: &ExactUrl) -> bool {
+        match self {
+            RegisteredUrl::Exact(url) => url == exact,
+            RegisteredUrl::Semantic(url) => *url == exact.to_url(),
+        }
+    }
+}
+
+/// Compares the registered url semantically.
+impl cmp::PartialEq<Url> for RegisteredUrl {
+    fn eq(&self, semantic: &Url) -> bool {
+        self.to_url() == *semantic
+    }
+}
+
+impl fmt::Display for RegisteredUrl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RegisteredUrl::Exact(url) => write!(f, "{}", url.to_url()),
+            RegisteredUrl::Semantic(url) => write!(f, "{}", url),
+        }
+    }
+}
+
+impl ExactUrl {
+    /// Try to create an exact url from a string.
+    pub fn new(url: String) -> Result<Self, ParseUrlError> {
+        let _: Url = url.parse()?;
+        Ok(ExactUrl(url))
+    }
+
+    /// View the url as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Turn the url into a semantic `Url`.
+    pub fn to_url(&self) -> Url {
+        // TODO: maybe we should store the parsing result?
+        self.0.parse().expect("was validated")
+    }
+}
+
+impl core::str::FromStr for ExactUrl {
+    type Err = ParseUrlError;
+    fn from_str(st: &str) -> Result<Self, Self::Err> {
+        let _: Url = st.parse()?;
+        Ok(ExactUrl(st.to_string()))
+    }
+}
+
 impl Client {
     /// Create a public client.
-    pub fn public(client_id: &str, redirect_uri: Url, default_scope: Scope) -> Client {
+    pub fn public(client_id: &str, redirect_uri: RegisteredUrl, default_scope: Scope) -> Client {
         Client {
             client_id: client_id.to_string(),
             redirect_uri,
@@ -201,7 +341,7 @@ impl Client {
 
     /// Create a confidential client.
     pub fn confidential(
-        client_id: &str, redirect_uri: Url, default_scope: Scope, passphrase: &[u8],
+        client_id: &str, redirect_uri: RegisteredUrl, default_scope: Scope, passphrase: &[u8],
     ) -> Client {
         Client {
             client_id: client_id.to_string(),
@@ -215,7 +355,7 @@ impl Client {
     }
 
     /// Add additional redirect uris.
-    pub fn with_additional_redirect_uris(mut self, uris: Vec<Url>) -> Self {
+    pub fn with_additional_redirect_uris(mut self, uris: Vec<RegisteredUrl>) -> Self {
         self.additional_redirect_uris = uris;
         self
     }
@@ -479,19 +619,25 @@ impl Registrar for ClientMap {
         };
 
         // Perform exact matching as motivated in the rfc
-        match bound.redirect_uri {
-            None => (),
-            Some(ref url)
-                if url.as_ref().as_str() == client.redirect_uri.as_str()
-                    || client.additional_redirect_uris.contains(url) => {}
-            _ => return Err(RegistrarError::Unspecified),
-        }
+        let registered_url = match bound.redirect_uri {
+            None => client.redirect_uri.clone(),
+            Some(ref url) => {
+                let original = std::iter::once(&client.redirect_uri);
+                let alternatives = client.additional_redirect_uris.iter();
+                if let Some(registered) = original
+                    .chain(alternatives)
+                    .find(|&registered| *registered == *url.as_ref())
+                {
+                    registered.clone()
+                } else {
+                    return Err(RegistrarError::Unspecified);
+                }
+            }
+        };
 
         Ok(BoundClient {
             client_id: bound.client_id,
-            redirect_uri: bound
-                .redirect_uri
-                .unwrap_or_else(|| Cow::Owned(client.redirect_uri.clone())),
+            redirect_uri: Cow::Owned(registered_url),
         })
     }
 
@@ -538,8 +684,11 @@ mod tests {
         let private_id = "PublicClientId";
         let private_passphrase = b"WOJJCcS8WyS2aGmJK6ZADg==";
 
-        let public_client =
-            Client::public(public_id, client_url.parse().unwrap(), "default".parse().unwrap());
+        let public_client = Client::public(
+            public_id,
+            client_url.parse::<Url>().unwrap().into(),
+            "default".parse().unwrap(),
+        );
 
         register(registrar, public_client);
 
@@ -555,7 +704,7 @@ mod tests {
 
         let private_client = Client::confidential(
             private_id,
-            client_url.parse().unwrap(),
+            client_url.parse::<Url>().unwrap().into(),
             "default".parse().unwrap(),
             private_passphrase,
         );
@@ -578,7 +727,7 @@ mod tests {
         let policy = Argon2::default();
         let client = Client::public(
             "ClientId",
-            "https://example.com".parse().unwrap(),
+            "https://example.com".parse::<Url>().unwrap().into(),
             "default".parse().unwrap(),
         )
         .encode(&policy);
@@ -596,7 +745,7 @@ mod tests {
         let pass = b"AB3fAj6GJpdxmEVeNCyPoA==";
         let client = Client::confidential(
             "ClientId",
-            "https://example.com".parse().unwrap(),
+            "https://example.com".parse::<Url>().unwrap().into(),
             "default".parse().unwrap(),
             pass,
         )
@@ -612,9 +761,10 @@ mod tests {
     fn with_additional_redirect_uris() {
         let client_id = "ClientId";
         let redirect_uri: Url = "https://example.com/foo".parse().unwrap();
-        let additional_redirect_uris: Vec<Url> = vec!["https://example.com/bar".parse().unwrap()];
+        let additional_redirect_uris: Vec<RegisteredUrl> =
+            vec!["https://example.com/bar".parse::<Url>().unwrap().into()];
         let default_scope = "default".parse().unwrap();
-        let client = Client::public(client_id, redirect_uri, default_scope)
+        let client = Client::public(client_id, redirect_uri.into(), default_scope)
             .with_additional_redirect_uris(additional_redirect_uris);
         let mut client_map = ClientMap::new();
         client_map.register_client(client);
@@ -627,7 +777,7 @@ mod tests {
                 })
                 .unwrap()
                 .redirect_uri,
-            Cow::Owned("https://example.com/foo".parse().unwrap())
+            Cow::<Url>::Owned("https://example.com/foo".parse().unwrap())
         );
 
         assert_eq!(
@@ -638,7 +788,7 @@ mod tests {
                 })
                 .unwrap()
                 .redirect_uri,
-            Cow::Owned("https://example.com/bar".parse().unwrap())
+            Cow::<Url>::Owned("https://example.com/bar".parse().unwrap())
         );
 
         assert!(client_map

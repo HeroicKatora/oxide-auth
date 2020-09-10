@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use oxide_auth::primitives::authorizer::AuthMap;
 use oxide_auth::{
-    primitives::registrar::{Client, ClientMap},
+    primitives::registrar::{Client, ClientMap, RegisteredUrl},
     frontends::simple::endpoint::Error,
     endpoint::WebRequest,
 };
@@ -75,7 +75,7 @@ impl AuthorizationSetup {
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            RegisteredUrl::Exact(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
             EXAMPLE_PASSPHRASE.as_bytes(),
         );

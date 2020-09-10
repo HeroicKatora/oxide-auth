@@ -131,7 +131,10 @@ impl State {
                 // A registrar with one pre-registered client
                 registrar: vec![Client::public(
                     "LocalClient",
-                    "http://localhost:8021/endpoint".parse().unwrap(),
+                    "http://localhost:8021/endpoint"
+                        .parse::<url::Url>()
+                        .unwrap()
+                        .into(),
                     "default-scope".parse().unwrap(),
                 )]
                 .into_iter()

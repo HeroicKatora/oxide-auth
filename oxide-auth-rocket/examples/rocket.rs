@@ -15,6 +15,7 @@ use std::sync::Mutex;
 use oxide_auth::endpoint::{OwnerConsent, Solicitation};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
+use oxide_auth::primitives::registrar::RegisteredUrl;
 use oxide_auth_rocket::{OAuthResponse, OAuthRequest, OAuthFailure};
 
 use rocket::{Data, State, Response, http};
@@ -124,7 +125,9 @@ impl MyState {
             registrar: Mutex::new(
                 vec![Client::public(
                     "LocalClient",
-                    "http://localhost:8000/clientside/endpoint".parse().unwrap(),
+                    RegisteredUrl::Semantic(
+                        "http://localhost:8000/clientside/endpoint".parse().unwrap(),
+                    ),
                     "default-scope".parse().unwrap(),
                 )]
                 .into_iter()
