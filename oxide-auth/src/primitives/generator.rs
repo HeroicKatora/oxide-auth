@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use base64::{encode, decode};
-use hmac::{crypto_mac::MacResult, Mac, Hmac};
+use hmac::{crypto_mac::Output, Mac, Hmac, NewMac};
 use rand::{rngs::OsRng, RngCore, thread_rng};
 use rmp_serde;
 
@@ -167,7 +167,7 @@ impl Assertion {
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
 
         let mut hasher = self.hasher.clone();
-        hasher.input(&assertion.0);
+        hasher.update(&assertion.0);
         hasher.verify(assertion.1.as_slice()).map_err(|_| ())?;
 
         let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String) =
@@ -176,24 +176,24 @@ impl Assertion {
         Ok((serde_grant.grant(), tag))
     }
 
-    fn signature(&self, data: &[u8]) -> MacResult<<hmac::Hmac<sha2::Sha256> as Mac>::OutputSize> {
+    fn signature(&self, data: &[u8]) -> Output<hmac::Hmac<sha2::Sha256>> {
         let mut hasher = self.hasher.clone();
-        hasher.input(data);
-        hasher.result()
+        hasher.update(data);
+        hasher.finalize()
     }
 
     fn counted_signature(&self, counter: u64, grant: &Grant) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
         let signature = self.signature(&tosign);
-        Ok(base64::encode(&signature.code()))
+        Ok(base64::encode(&signature.into_bytes()))
     }
 
     fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(counter, serde_grant, tag)).unwrap();
         let signature = self.signature(&tosign);
-        let assert = AssertGrant(tosign, signature.code().to_vec());
+        let assert = AssertGrant(tosign, signature.into_bytes().to_vec());
 
         Ok(encode(&rmp_serde::to_vec(&assert).unwrap()))
     }

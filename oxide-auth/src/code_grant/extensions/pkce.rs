@@ -173,8 +173,8 @@ impl Method {
             }
             Method::Sha256(encoded) => {
                 let mut hasher = Sha256::new();
-                hasher.input(verifier.as_bytes());
-                let b64digest = b64encode(&hasher.result());
+                hasher.update(verifier.as_bytes());
+                let b64digest = b64encode(&hasher.finalize());
                 if encoded.as_bytes().ct_eq(b64digest.as_bytes()).into() {
                     Ok(())
                 } else {
