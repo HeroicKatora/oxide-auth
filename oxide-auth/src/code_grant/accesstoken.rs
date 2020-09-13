@@ -453,7 +453,7 @@ pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result
                         extensions: None,
                     }))
                 })?;
-                Input::Recovered(opt_grant.map(|o| Box::new(o)))
+                Input::Recovered(opt_grant.map(Box::new))
             }
             Requested::Extend { extensions } => {
                 let access_extensions = handler

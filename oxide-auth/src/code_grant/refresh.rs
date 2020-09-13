@@ -354,7 +354,7 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
                     .map_err(|()| Error::Primitive)?;
                 Input::Recovered {
                     scope: request.scope(),
-                    grant: recovered.map(|r| Box::new(r)),
+                    grant: recovered.map(Box::new),
                 }
             }
             Requested::Authenticate { client, pass } => {

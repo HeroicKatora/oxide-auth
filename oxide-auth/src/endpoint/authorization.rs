@@ -51,9 +51,6 @@ where
     R: WebRequest,
 {
     inner: AuthorizationPartialInner<'a, E, R>,
-
-    /// TODO: offer this in the public api instead of dropping the request.
-    _with_request: Option<Box<dyn FnOnce(R) -> ()>>,
 }
 
 /// Result type from processing an authentication request.
@@ -149,10 +146,7 @@ where
             },
         };
 
-        let partial = AuthorizationPartial {
-            inner,
-            _with_request: None,
-        };
+        let partial = AuthorizationPartial { inner };
 
         partial.finish()
     }

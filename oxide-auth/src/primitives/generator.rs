@@ -85,14 +85,13 @@ pub struct Assertion {
 }
 
 /// The cryptographic suite ensuring integrity of tokens.
+#[non_exhaustive]
 pub enum AssertionKind {
     /// Uses [HMAC (RFC 2104)][HMAC] with [SHA-256 (FIPS 180-4)][SHA256] hash.
     ///
     /// [HMAC]: https://tools.ietf.org/html/rfc2104
     /// [SHA256]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf
     HmacSha256,
-    #[doc(hidden)]
-    __NonExhaustive,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -143,7 +142,6 @@ impl Assertion {
             AssertionKind::HmacSha256 => Assertion {
                 hasher: Hmac::<sha2::Sha256>::new_varkey(key).unwrap(),
             },
-            AssertionKind::__NonExhaustive => unreachable!(),
         }
     }
 
