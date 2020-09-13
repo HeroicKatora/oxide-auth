@@ -509,13 +509,10 @@ impl<'a> Credentials<'a> {
     }
 
     fn add(&mut self, new: Self) {
-        use std::mem::replace;
-        let old = replace(self, Credentials::None);
-        let next = match old {
+        *self = match self {
             Credentials::None => new,
             _ => Credentials::Duplicate,
         };
-        replace(self, next);
     }
 }
 
