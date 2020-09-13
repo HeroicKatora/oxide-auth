@@ -12,7 +12,7 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.21"
-oxide-auth = { version = "0.5.0-preview.1", path = "../oxide-auth" }
+oxide-auth = { version = "0.5.0-rc.0", path = "../oxide-auth" }
 base64 = "0.9"
 url = "1.7"
 chrono = "0.4.2"

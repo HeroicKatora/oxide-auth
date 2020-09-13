@@ -2,6 +2,24 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.5.0-rc.0 (2019-Sep-13)
+
+Cleanup release
+
+Updates
+- The public `url` dependency has been bumped to `2.0`.
+
+Interface refactors
+- Encapsulated the `OwnerSolicitor`'s consent check argument as `Solicitation`.
+  This new type also contains a method to the state of the client and can be
+  extended without breaking the SemVer interface.
+- The `Client` constructors now take a `RegisteredUrl` instead of an `Url`.
+  This enum has one additional variant, `ExactUrl`, that requires uses to match
+  the URI precisely with the registered character sequence, not semantically.
+
+Interface improvements
+- The `AssertionKind` is now non-exhaustive using the core attribute.
+
 # v0.5.0-preview.1 (2019-Sep-02)
 
 Refactoring release
