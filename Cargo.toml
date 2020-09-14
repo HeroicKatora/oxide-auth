@@ -7,5 +7,6 @@ members = [
 	"oxide-auth-rocket",
 	"oxide-auth-rouille",
 	"oxide-auth-db",
+	"oxide-auth-db/examples/db-examples",
 ]
 
