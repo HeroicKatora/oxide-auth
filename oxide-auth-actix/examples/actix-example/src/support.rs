@@ -13,6 +13,7 @@ pub fn dummy_client() {
     HttpServer::new(move || {
         let config = ClientConfig {
             client_id: "LocalClient".into(),
+            client_secret: None,
             protected_url: "http://localhost:8020/".into(),
             token_url: "http://localhost:8020/token".into(),
             refresh_url: "http://localhost:8020/refresh".into(),
