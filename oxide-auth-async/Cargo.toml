@@ -1,0 +1,24 @@
+[package]
+name = "oxide-auth-async"
+version = "0.1.0-alpha"
+authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
+repository = "https://github.com/HeroicKatora/oxide-auth.git"
+
+description = "Combines oxide-auth with async and futures"
+
+license = "MIT OR Apache-2.0"
+
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.21"
+oxide-auth = { version = "0.5.0-preview.1", path = "../oxide-auth" }
+base64 = "0.9"
+url = "1.7"
+chrono = "0.4.2"
+
+[dev-dependencies]
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+smol = "0.1.18"
