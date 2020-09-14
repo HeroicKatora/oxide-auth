@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 use std::iter::Extend;
-use argon2::{self};
 use once_cell::sync::Lazy;
-use oxide_auth::primitives::registrar::{Argon2, BoundClient, Client, EncodedClient, PasswordPolicy, RegisteredClient, Registrar, RegistrarError, RegisteredUrl};
+use oxide_auth::primitives::registrar::{
+    Argon2, BoundClient, Client, EncodedClient, PasswordPolicy, RegisteredClient, Registrar,
+    RegistrarError,
+};
 use oxide_auth::primitives::prelude::{ClientUrl, PreGrant, Scope};
 use crate::db_service::DataSource;
 
@@ -23,7 +25,6 @@ pub trait OauthClientDBRepository {
 
     fn regist_from_encoded_client(&self, client: EncodedClient) -> anyhow::Result<()>;
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                             Implementations of DB Registrars                                  //
@@ -90,39 +91,21 @@ impl Registrar for DBRegistrar {
                 if let Some(registered) = original
                     .chain(alternatives)
                     .find(|&registered| *registered == *url.as_ref())
-                    {
-                        registered.clone()
-                    } else {
+                {
+                    registered.clone()
+                } else {
                     return Err(RegistrarError::Unspecified);
                 }
             }
         };
-       /*     Some(ref url)
-                if url.as_ref().as_str() == client.redirect_uri.as_str()
-                    || client.additional_redirect_uris.contains(RegisteredUrl::from(*url.to_url())) =>
-            {
-                ()
-            }
-            _ => return Err(RegistrarError::Unspecified),
-        }
-        Ok(BoundClient {
-            client_id: bound.client_id,
-            redirect_uri: bound
-                .redirect_uri
-                .unwrap_or_else(|| Cow::Owned(client.redirect_uri.clone())),
-        })*/
-
         Ok(BoundClient {
             client_id: bound.client_id,
             redirect_uri: Cow::Owned(registered_url),
         })
     }
 
-    /// Always overrides the scope with a default scope.
     fn negotiate<'a>(
-        &self,
-        bound: BoundClient<'a>,
-        _scope: Option<Scope>,
+        &self, bound: BoundClient<'a>, _scope: Option<Scope>,
     ) -> Result<PreGrant, RegistrarError> {
         let client = self
             .repo
@@ -186,17 +169,18 @@ mod tests {
         let client = RegisteredClient::new(&client, &policy);
         assert!(client.check_authentication(None).is_err());
         assert!(client.check_authentication(Some(pass)).is_ok());
-        assert!(client
-            .check_authentication(Some(b"not the passphrase"))
-            .is_err());
+        assert!(client.check_authentication(Some(b"not the passphrase")).is_err());
         assert!(client.check_authentication(Some(b"")).is_err());
     }
 
     #[test]
     fn with_additional_redirect_uris() {
         let client_id = "ClientId";
-        let redirect_uri = RegisteredUrl::from(ExactUrl::new("https://example.com/foo".parse().unwrap()));
-        let additional_redirect_uris: Vec<RegisteredUrl> = vec![RegisteredUrl::from(ExactUrl::new("https://example.com/bar".parse().unwrap()))];
+        let redirect_uri =
+            RegisteredUrl::from(ExactUrl::new("https://example.com/foo".parse().unwrap()));
+        let additional_redirect_uris: Vec<RegisteredUrl> = vec![RegisteredUrl::from(ExactUrl::new(
+            "https://example.com/bar".parse().unwrap(),
+        ))];
         let default_scope = "default-scope".parse().unwrap();
         let client = Client::public(client_id, redirect_uri, default_scope)
             .with_additional_redirect_uris(additional_redirect_uris);
@@ -242,11 +226,8 @@ mod tests {
         let private_id = "PublicClientId";
         let private_passphrase = b"WOJJCcS8WyS2aGmJK6ZADg==";
 
-        let public_client = Client::public(
-            public_id,
-            client_url.parse().unwrap(),
-            "default".parse().unwrap(),
-        );
+        let public_client =
+            Client::public(public_id, client_url.parse().unwrap(), "default".parse().unwrap());
 
         println!("test register_client");
 

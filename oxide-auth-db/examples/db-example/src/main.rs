@@ -1,4 +1,3 @@
-#[path = "../../../../oxide-auth-actix/examples/actix-example/src/support.rs"]
 mod support;
 
 use actix::{Actor, Addr, Context, Handler};

@@ -62,10 +62,7 @@ impl StringfiedEncodedClient {
             redirect_uri,
             additional_redirect_uris,
             default_scope: Scope::from_str(
-                self.default_scope
-                    .as_ref()
-                    .unwrap_or(&"".to_string())
-                    .as_ref(),
+                self.default_scope.as_ref().unwrap_or(&"".to_string()).as_ref(),
             )
             .unwrap(),
             encoded_client: client_type,
@@ -81,9 +78,7 @@ impl StringfiedEncodedClient {
         let default_scope = Some(encoded_client.default_scope.to_string());
         let client_secret = match &encoded_client.encoded_client {
             ClientType::Public => None,
-            ClientType::Confidential { passdata } => {
-                Some(String::from_utf8(passdata.to_vec()).unwrap())
-            }
+            ClientType::Confidential { passdata } => Some(String::from_utf8(passdata.to_vec()).unwrap()),
         };
         StringfiedEncodedClient {
             client_id: encoded_client.client_id.to_owned(),
@@ -116,8 +111,7 @@ impl RedisDataSource {
 impl RedisDataSource {
     /// users can regist to redis a custom client struct which can be Serialized and Deserialized.
     pub fn regist_from_stringfied_encoded_client(
-        &self,
-        detail: &StringfiedEncodedClient,
+        &self, detail: &StringfiedEncodedClient,
     ) -> anyhow::Result<()> {
         let mut pool = self.pool.get().unwrap();
         let client_str = serde_json::to_string(&detail)?;

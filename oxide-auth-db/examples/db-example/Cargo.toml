@@ -1,5 +1,5 @@
 [package]
-name = "db-examples"
+name = "db-example"
 version = "0.1.0"
 authors = ["liujing <liujingb@mail.taiji.com.cn>"]
 edition = "2018"
