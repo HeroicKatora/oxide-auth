@@ -1,15 +1,13 @@
-use r2d2_redis::RedisConnectionManager;
-use r2d2::Pool;
-use std::env;
-use r2d2_redis::redis::Commands;
-use oxide_auth::primitives::registrar::{EncodedClient, ClientType};
 use crate::primitives::db_registrar::OauthClientDBRepository;
-use dotenv::dotenv;
-use url::Url;
 use oxide_auth::primitives::prelude::Scope;
+use oxide_auth::primitives::registrar::{ClientType, EncodedClient, RegisteredUrl, ExactUrl};
+use r2d2::Pool;
+use r2d2_redis::redis::Commands;
+use r2d2_redis::RedisConnectionManager;
 use std::str::FromStr;
 
-pub const REDIS_POOL_SIZE: u32 = 32;
+// TODO 参数化
+pub const CLIENT_PREFIX: &str = "client:";
 
 /// redis datasource to Client entries.
 
@@ -17,42 +15,6 @@ pub const REDIS_POOL_SIZE: u32 = 32;
 pub struct RedisDataSource {
     pub url: String,
     pub pool: Pool<RedisConnectionManager>,
-}
-
-impl RedisDataSource {
-
-    pub fn new() -> Self {
-        dotenv().ok();
-        let url = env::var("REDIS_URL").expect("REDIS_URL must be set");
-        let pool = REDIS_POOL.clone();
-        RedisDataSource { url, pool }
-    }
-
-    pub fn get_url(&self) -> String {
-        self.url.to_string()
-    }
-    pub fn get_pool(self) -> Pool<RedisConnectionManager> {
-        self.pool
-    }
-}
-
-
-lazy_static! {
-    pub static ref REDIS_POOL: r2d2::Pool<r2d2_redis::RedisConnectionManager> = {
-        dotenv::dotenv().ok();
-        let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
-        let manager = r2d2_redis::RedisConnectionManager::new(redis_url).unwrap();
-        let max_pool_size: u32 = env::var("REDIS_POOL_SIZE")
-            .unwrap_or_else(|_| REDIS_POOL_SIZE.to_string())
-            .parse::<u32>()
-            .unwrap_or(REDIS_POOL_SIZE);
-
-        r2d2::Pool::builder()
-            .max_size(max_pool_size)
-            .build(manager)
-            .expect("Failed to create redis pool.")
-    };
-
 }
 
 /// A client whose credentials have been wrapped by a password policy.
@@ -83,70 +45,109 @@ pub struct StringfiedEncodedClient {
 
 impl StringfiedEncodedClient {
     pub fn to_encoded_client(&self) -> EncodedClient {
-        let redirect_uri =  Url::parse(&self.redirect_uri).unwrap();
-        let uris =  &self.additional_redirect_uris;
-        let additional_redirect_uris = uris.into_iter().fold(vec![], |mut us, u| { us.push(Url::parse(u).unwrap()); us});
+        let redirect_uri = RegisteredUrl::from(ExactUrl::from_str(&self.redirect_uri).unwrap());
+        let uris = &self.additional_redirect_uris;
+        let additional_redirect_uris = uris.iter().fold(vec![], |mut us, u| {
+            us.push(RegisteredUrl::from(ExactUrl::from_str(u).unwrap()));
+            us
+        });
         let client_type = match &self.client_secret {
             None => ClientType::Public,
-            Some(secret) => ClientType::Confidential {passdata: secret.to_owned().into_bytes()},
+            Some(secret) => ClientType::Confidential {
+                passdata: secret.to_owned().into_bytes(),
+            },
         };
-        EncodedClient{
+        EncodedClient {
             client_id: (&self.client_id).parse().unwrap(),
             redirect_uri,
             additional_redirect_uris,
-            default_scope: Scope::from_str(self.default_scope.as_ref().unwrap_or(&"".to_string()).as_ref()).unwrap(),
-            encoded_client: client_type
+            default_scope: Scope::from_str(
+                self.default_scope
+                    .as_ref()
+                    .unwrap_or(&"".to_string())
+                    .as_ref(),
+            )
+            .unwrap(),
+            encoded_client: client_type,
         }
     }
 
     pub fn from_encoded_client(encoded_client: &EncodedClient) -> Self {
-        let additional_redirect_uris = encoded_client.additional_redirect_uris
+        let additional_redirect_uris = encoded_client
+            .additional_redirect_uris
             .iter()
-            .map(|u| u.to_owned().into_string())
+            .map(|u| u.to_owned().as_str().parse().unwrap())
             .collect();
         let default_scope = Some(encoded_client.default_scope.to_string());
-        let client_secret = match &encoded_client.encoded_client{
+        let client_secret = match &encoded_client.encoded_client {
             ClientType::Public => None,
-            ClientType::Confidential { passdata} => Some(String::from_utf8(passdata.to_vec()).unwrap())
+            ClientType::Confidential { passdata } => {
+                Some(String::from_utf8(passdata.to_vec()).unwrap())
+            }
         };
-        StringfiedEncodedClient{
+        StringfiedEncodedClient {
             client_id: encoded_client.client_id.to_owned(),
-            redirect_uri: encoded_client.redirect_uri.to_owned().into_string(),
+            redirect_uri: encoded_client.redirect_uri.to_owned().as_str().parse().unwrap(),
             additional_redirect_uris,
             default_scope,
-            client_secret
+            client_secret,
         }
     }
 }
 
+impl RedisDataSource {
+    pub fn from_url(url: String, max_pool_size: u32) -> RedisDataSource {
+        let manager = r2d2_redis::RedisConnectionManager::new(url.to_owned()).unwrap();
+        let pool = r2d2::Pool::builder()
+            .max_size(max_pool_size)
+            .build(manager)
+            .expect("Failed to create redis pool.");
+        RedisDataSource { url, pool }
+    }
+
+    pub fn get_url(&self) -> String {
+        self.url.to_string()
+    }
+    pub fn get_pool(self) -> Pool<RedisConnectionManager> {
+        self.pool
+    }
+}
 
 impl RedisDataSource {
     /// users can regist to redis a custom client struct which can be Serialized and Deserialized.
-    pub fn regist_from_stringfied_encoded_client(&self, detail: &StringfiedEncodedClient) -> anyhow::Result<()>{
+    pub fn regist_from_stringfied_encoded_client(
+        &self,
+        detail: &StringfiedEncodedClient,
+    ) -> anyhow::Result<()> {
         let mut pool = self.pool.get().unwrap();
         let client_str = serde_json::to_string(&detail)?;
-        pool.set(&detail.client_id, client_str)?;
+        pool.set(&(CLIENT_PREFIX.to_owned() + &detail.client_id), client_str)?;
         Ok(())
     }
 }
 
-impl OauthClientDBRepository for RedisDataSource{
-    fn list(&self, salt: String) -> anyhow::Result<Vec<EncodedClient>> {
-        unimplemented!()
+impl OauthClientDBRepository for RedisDataSource {
+    fn list(&self) -> anyhow::Result<Vec<EncodedClient>> {
+        let mut encoded_clients: Vec<EncodedClient> = vec![];
+        let mut r = self.pool.get().unwrap();
+        let keys = r.keys::<&str, Vec<String>>(CLIENT_PREFIX)?;
+        for key in keys {
+            let clients_str = r.get::<String, String>(key)?;
+            let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&clients_str)?;
+            encoded_clients.push(stringfied_client.to_encoded_client());
+        }
+        Ok(encoded_clients)
     }
 
     fn find_client_by_id(&self, id: &str) -> anyhow::Result<EncodedClient> {
         let mut r = self.pool.get().unwrap();
-        let client_str = r.get::<&str, String>(id)?;
+        let client_str = r.get::<&str, String>(&(CLIENT_PREFIX.to_owned() + id))?;
         let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;
         Ok(stringfied_client.to_encoded_client())
     }
 
-    fn regist_from_encoded_client(&self, client: EncodedClient)  -> anyhow::Result<()>{
-        let mut pool = self.pool.get().unwrap();
+    fn regist_from_encoded_client(&self, client: EncodedClient) -> anyhow::Result<()> {
         let detail = StringfiedEncodedClient::from_encoded_client(&client);
         self.regist_from_stringfied_encoded_client(&detail)
     }
-
 }
-

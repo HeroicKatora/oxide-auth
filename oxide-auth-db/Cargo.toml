@@ -20,15 +20,16 @@ serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 rust-argon2 = "0.8.2"
-r2d2 = "0.8"
-r2d2_redis = {version = "0.13"}
-lazy_static = "1.4"
+r2d2 = {version ="0.8", optional = true }
+r2d2_redis = {version = "0.13", optional = true }
 url = "1.7"
-
 anyhow = "1.0"
 tokio = { version = "0.2", features = ["full"] }
 reqwest = "^0.9"
-dotenv = "0.15"
-
 log = "0.4.8"
 log4rs = "0.10.0"
+
+
+[features]
+default = ["with-redis"]
+with-redis = ["r2d2", "r2d2_redis"]

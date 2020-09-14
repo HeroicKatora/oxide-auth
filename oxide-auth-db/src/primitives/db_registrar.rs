@@ -1,93 +1,53 @@
-use url::quirks::password;
-use std::borrow::Borrow;
-use std::str::FromStr;
-use reqwest::Url;
-// use super::scope::Scope;
-use oxide_auth::primitives::prelude::{Scope, ClientUrl, PreGrant};
-
 use std::borrow::Cow;
-use std::{cmp, env};
-use std::collections::HashMap;
-use std::fmt;
-use std::iter::{Extend, FromIterator};
-use std::rc::Rc;
-use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
-
-use argon2::{self, Config};
+use std::iter::Extend;
+use argon2::{self};
 use once_cell::sync::Lazy;
-use rand::{RngCore, thread_rng};
-use std::ops::Deref;
-use crate::db_service::redis::RedisDataSource;
-use std::net::ToSocketAddrs;
-use r2d2_redis::RedisConnectionManager;
-use r2d2::Pool;
-use serde::{Serialize, Deserialize};
-use oxide_auth::primitives::registrar::{PasswordPolicy, EncodedClient, Argon2, RegistrarError, Client, BoundClient, Registrar, RegisteredClient};
+use oxide_auth::primitives::registrar::{Argon2, BoundClient, Client, EncodedClient, PasswordPolicy, RegisteredClient, Registrar, RegistrarError, RegisteredUrl};
+use oxide_auth::primitives::prelude::{ClientUrl, PreGrant, Scope};
+use crate::db_service::DataSource;
 
-/// a db client service which implemented Registrar.
-/// db: DataSource stored clients
+/// A database client service which implemented Registrar.
+/// db: repository service to query stored clients or regist new client.
 /// password_policy: to encode client_secret.
-pub struct Oauth2ClientService{
-    pub db: RegistrarDataSource,
+pub struct DBRegistrar {
+    pub repo: DataSource,
     password_policy: Option<Box<dyn PasswordPolicy>>,
 }
 
-/// A datasource service to restore clients;
-/// users can change to another database like mysql or postgresql.
-pub type RegistrarDataSource = RedisDataSource;
-
 /// methods to search and regist clients from DataSource.
-/// which should be implemented for all RegistrarDataSource.
+/// which should be implemented for all DataSource type.
 pub trait OauthClientDBRepository {
-
-    fn list(&self, salt: String) -> anyhow::Result<Vec<EncodedClient>>;
+    fn list(&self) -> anyhow::Result<Vec<EncodedClient>>;
 
     fn find_client_by_id(&self, id: &str) -> anyhow::Result<EncodedClient>;
 
-    fn regist_from_encoded_client(&self, client: EncodedClient)  -> anyhow::Result<()>;
-
+    fn regist_from_encoded_client(&self, client: EncodedClient) -> anyhow::Result<()>;
 }
 
 
-// this will be needed when you have features of different RegistrarDataSource
-// impl OauthClientDBRepository for RegistrarDataSource{
-//     fn list(&self, salt: String) -> anyhow::Result<Vec<EncodedClient>> {
-//         (**self).list(salt)
-//     }
-//
-//     fn find_client_by_id(&self, id: &str) -> anyhow::Result<EncodedClient> {
-//         (**self).find_client_by_id(id)
-//     }
-//
-//     fn regist_from_encoded_client(&self, client: EncodedClient) -> anyhow::Result<()> {
-//         (**self).regist_from_encoded_client(client)
-//     }
-//
-// }
-
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-//                             Standard Implementations of Registrars                            //
+//                             Implementations of DB Registrars                                  //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| { Argon2::default() });
+static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| Argon2::default());
 
-impl Oauth2ClientService {
+impl DBRegistrar {
     /// Create an DB connection recording to features.
-    pub fn new() -> Self {
-        Oauth2ClientService{
-            db: RegistrarDataSource::new(),
-            password_policy: None
+    pub fn from_url(url: String, max_pool_size: u32) -> Self {
+        DBRegistrar {
+            repo: DataSource::from_url(url, max_pool_size),
+            password_policy: None,
         }
     }
 
     /// Insert or update the client record.
-    pub fn register_client(&mut self, client: Client) -> Result<(), RegistrarError>  {
+    pub fn register_client(&mut self, client: Client) -> Result<(), RegistrarError> {
         let password_policy = Self::current_policy(&self.password_policy);
         let encoded_client = client.encode(password_policy);
 
-        self.db.regist_from_encoded_client(encoded_client)
-            .map_err(|e| RegistrarError::Unspecified)
+        self.repo
+            .regist_from_encoded_client(encoded_client)
+            .map_err(|_e| RegistrarError::Unspecified)
     }
 
     /// Change how passwords are encoded while stored.
@@ -98,51 +58,76 @@ impl Oauth2ClientService {
     // This is not an instance method because it needs to borrow the box but register needs &mut
     fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> &'a dyn PasswordPolicy {
         policy
-            .as_ref().map(|boxed| &**boxed)
+            .as_ref()
+            .map(|boxed| &**boxed)
             .unwrap_or(&*DEFAULT_PASSWORD_POLICY)
     }
 }
 
-
-impl Extend<Client> for Oauth2ClientService {
-    fn extend<I>(&mut self, iter: I) where I: IntoIterator<Item=Client> {
+impl Extend<Client> for DBRegistrar {
+    fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = Client>,
+    {
         iter.into_iter().for_each(|client| {
-           self.register_client(client);
+            self.register_client(client);
         })
     }
 }
 
-impl FromIterator<Client> for Oauth2ClientService {
-    fn from_iter<I>(iter: I) -> Self where I: IntoIterator<Item=Client> {
-        let mut into = Oauth2ClientService::new();
-        into.extend(iter);
-        into
-    }
-}
-
-impl Registrar for Oauth2ClientService {
+impl Registrar for DBRegistrar {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
-        let client = match self.db.find_client_by_id(bound.client_id.as_ref()){
+        let client = match self.repo.find_client_by_id(bound.client_id.as_ref()) {
             Ok(detail) => detail,
-            _ => return Err(RegistrarError::Unspecified)
+            _ => return Err(RegistrarError::Unspecified),
         };
         // Perform exact matching as motivated in the rfc
-        match bound.redirect_uri {
-            None => (),
-            Some(ref url) if url.as_ref().as_str() == client.redirect_uri.as_str() || client.additional_redirect_uris.contains(url) => (),
+        let registered_url = match bound.redirect_uri {
+            None => client.redirect_uri.clone(),
+            Some(ref url) => {
+                let original = std::iter::once(&client.redirect_uri);
+                let alternatives = client.additional_redirect_uris.iter();
+                if let Some(registered) = original
+                    .chain(alternatives)
+                    .find(|&registered| *registered == *url.as_ref())
+                    {
+                        registered.clone()
+                    } else {
+                    return Err(RegistrarError::Unspecified);
+                }
+            }
+        };
+       /*     Some(ref url)
+                if url.as_ref().as_str() == client.redirect_uri.as_str()
+                    || client.additional_redirect_uris.contains(RegisteredUrl::from(*url.to_url())) =>
+            {
+                ()
+            }
             _ => return Err(RegistrarError::Unspecified),
         }
         Ok(BoundClient {
             client_id: bound.client_id,
-            redirect_uri: bound.redirect_uri.unwrap_or_else(
-                || Cow::Owned(client.redirect_uri.clone())),
+            redirect_uri: bound
+                .redirect_uri
+                .unwrap_or_else(|| Cow::Owned(client.redirect_uri.clone())),
+        })*/
+
+        Ok(BoundClient {
+            client_id: bound.client_id,
+            redirect_uri: Cow::Owned(registered_url),
         })
     }
 
     /// Always overrides the scope with a default scope.
-    fn negotiate<'a>(&self, bound: BoundClient<'a>, _scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
-        let client = self.db.find_client_by_id(&bound.client_id)
-            .map_err(|e| RegistrarError::Unspecified)
+    fn negotiate<'a>(
+        &self,
+        bound: BoundClient<'a>,
+        _scope: Option<Scope>,
+    ) -> Result<PreGrant, RegistrarError> {
+        let client = self
+            .repo
+            .find_client_by_id(&bound.client_id)
+            .map_err(|_e| RegistrarError::Unspecified)
             .unwrap();
         Ok(PreGrant {
             client_id: bound.client_id.into_owned(),
@@ -154,21 +139,21 @@ impl Registrar for Oauth2ClientService {
     fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
         let password_policy = Self::current_policy(&self.password_policy);
 
-        let client = self.db.find_client_by_id(client_id)
-            .map_err(|e| RegistrarError::Unspecified);
+        let client = self
+            .repo
+            .find_client_by_id(client_id)
+            .map_err(|_e| RegistrarError::Unspecified);
         client.and_then(|op_client| {
-            RegisteredClient::new(&op_client, password_policy)
-                .check_authentication(passphrase)
+            RegisteredClient::new(&op_client, password_policy).check_authentication(passphrase)
         })?;
-
         Ok(())
     }
-
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxide_auth::primitives::registrar::ExactUrl;
 
     #[test]
     fn public_client() {
@@ -178,7 +163,7 @@ mod tests {
             "https://example.com".parse().unwrap(),
             "default".parse().unwrap(),
         )
-            .encode(&policy);
+        .encode(&policy);
         let client = RegisteredClient::new(&client, &policy);
 
         // Providing no authentication data is ok
@@ -197,23 +182,25 @@ mod tests {
             "default".parse().unwrap(),
             pass,
         )
-            .encode(&policy);
+        .encode(&policy);
         let client = RegisteredClient::new(&client, &policy);
         assert!(client.check_authentication(None).is_err());
         assert!(client.check_authentication(Some(pass)).is_ok());
-        assert!(client.check_authentication(Some(b"not the passphrase")).is_err());
+        assert!(client
+            .check_authentication(Some(b"not the passphrase"))
+            .is_err());
         assert!(client.check_authentication(Some(b"")).is_err());
     }
 
     #[test]
     fn with_additional_redirect_uris() {
         let client_id = "ClientId";
-        let redirect_uri: Url = "https://example.com/foo".parse().unwrap();
-        let additional_redirect_uris: Vec<Url> = vec!["https://example.com/bar".parse().unwrap()];
+        let redirect_uri = RegisteredUrl::from(ExactUrl::new("https://example.com/foo".parse().unwrap()));
+        let additional_redirect_uris: Vec<RegisteredUrl> = vec![RegisteredUrl::from(ExactUrl::new("https://example.com/bar".parse().unwrap()))];
         let default_scope = "default-scope".parse().unwrap();
         let client = Client::public(client_id, redirect_uri, default_scope)
             .with_additional_redirect_uris(additional_redirect_uris);
-        let mut client_map = Oauth2ClientService::new();
+        let mut client_map = DBRegistrar::from_url("redis://localhost/3".parse().unwrap(), 32);
         client_map.register_client(client);
 
         assert_eq!(
@@ -247,16 +234,19 @@ mod tests {
     }
 
     #[test]
-    fn client_service(){
-        let mut oauth_service = Oauth2ClientService::new();
+    fn client_service() {
+        let mut oauth_service = DBRegistrar::from_url("redis://localhost/3".parse().unwrap(), 32);
         let public_id = "PrivateClientId";
         let client_url = "https://example.com";
 
         let private_id = "PublicClientId";
         let private_passphrase = b"WOJJCcS8WyS2aGmJK6ZADg==";
 
-        let public_client =
-            Client::public(public_id, client_url.parse().unwrap(), "default".parse().unwrap());
+        let public_client = Client::public(
+            public_id,
+            client_url.parse().unwrap(),
+            "default".parse().unwrap(),
+        );
 
         println!("test register_client");
 
@@ -275,7 +265,6 @@ mod tests {
             "default".parse().unwrap(),
             private_passphrase,
         );
-
 
         oauth_service.register_client(private_client);
 
