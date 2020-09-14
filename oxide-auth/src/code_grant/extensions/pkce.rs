@@ -71,9 +71,9 @@ impl Pkce {
     /// The resulting string MUST NOT be publicly available to the client. Otherwise, it would be
     /// trivial for a third party to impersonate the client in the access token request phase. For
     /// a SHA256 methods the results would not be quite as severe but still bad practice.
-    pub fn challenge(&self, method: Option<Cow<str>>, challenge: Option<Cow<str>>)
-        -> Result<Option<Value>, ()>
-    {
+    pub fn challenge(
+        &self, method: Option<Cow<str>>, challenge: Option<Cow<str>>,
+    ) -> Result<Option<Value>, ()> {
         let method = method.unwrap_or(Cow::Borrowed("plain"));
 
         let challenge = match challenge {
@@ -96,8 +96,7 @@ impl Pkce {
     ///
     /// When a challenge was agreed upon but no verifier is present, this method will return an
     /// error.
-    pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), ()>
-    {
+    pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), ()> {
         let (method, verifier) = match (method, verifier) {
             (None, _) if self.required => return Err(()),
             (None, _) => return Ok(()),
@@ -159,19 +158,28 @@ impl Method {
             None => Err(()),
             Some('p') => Ok(Method::Plain(encoded)),
             Some('S') => Ok(Method::Sha256(encoded)),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
     fn verify(&self, verifier: &str) -> Result<(), ()> {
         match self {
-            Method::Plain(encoded) =>
-               if encoded.as_bytes().ct_eq(verifier.as_bytes()).into() { Ok(()) } else { Err(()) },
+            Method::Plain(encoded) => {
+                if encoded.as_bytes().ct_eq(verifier.as_bytes()).into() {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            }
             Method::Sha256(encoded) => {
                 let mut hasher = Sha256::new();
                 hasher.input(verifier.as_bytes());
                 let b64digest = b64encode(&hasher.result());
-                if encoded.as_bytes().ct_eq(b64digest.as_bytes()).into()  { Ok(()) } else { Err(()) }
+                if encoded.as_bytes().ct_eq(b64digest.as_bytes()).into() {
+                    Ok(())
+                } else {
+                    Err(())
+                }
             }
         }
     }

@@ -1,13 +1,16 @@
 #[macro_use]
 extern crate rouille;
 
+#[rustfmt::skip]
 #[path = "../../examples/support/rouille.rs"]
 mod support;
 
 use std::sync::Mutex;
 use std::thread;
 
-use oxide_auth::endpoint::{AuthorizationFlow, AccessTokenFlow, OwnerConsent, PreGrant, RefreshFlow, ResourceFlow};
+use oxide_auth::endpoint::{
+    AuthorizationFlow, AccessTokenFlow, OwnerConsent, RefreshFlow, ResourceFlow, Solicitation,
+};
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_rouille::{Request, Response as OAuthResponse};
 use oxide_auth_rouille::{FnSolicitor, GenericEndpoint};
@@ -19,9 +22,14 @@ pub fn main() {
     let registrar = {
         let mut clients = ClientMap::new();
         // Register a dummy client instance
-        let client = Client::public("LocalClient", // Client id
-            "http://localhost:8021/endpoint".parse().unwrap(), // Redirection url
-            "default".parse().unwrap()); // Allowed client scope
+        let client = Client::public(
+            "LocalClient", // Client id
+            "http://localhost:8021/endpoint"
+                .parse::<url::Url>()
+                .unwrap()
+                .into(), // Redirection url
+            "default".parse().unwrap(),
+        ); // Allowed client scope
         clients.register_client(client);
         clients
     };
@@ -49,74 +57,71 @@ pub fn main() {
     // Create the main server instance
     let server = Server::new(("localhost", 8020), move |request| {
         router!(request,
-            (GET) ["/"] => {
-                let mut locked = endpoint.lock().unwrap();
-                if let Err(err) = ResourceFlow::prepare(&mut *locked)
-                    .expect("Can not fail")
-                    .execute(Request::new(request))
-                { // Does not have the proper authorization token
-                    let mut response = err
-                        .map(OAuthResponse::into_inner)
-                        .unwrap_or_else(|_| Response::empty_400());
-let text = "<html>
+                    (GET) ["/"] => {
+                        let mut locked = endpoint.lock().unwrap();
+                        if let Err(err) = ResourceFlow::prepare(&mut *locked)
+                            .expect("Can not fail")
+                            .execute(Request::new(request))
+                        { // Does not have the proper authorization token
+                            let mut response = err
+                                .map(OAuthResponse::into_inner)
+                                .unwrap_or_else(|_| Response::empty_400());
+        let text = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
 <a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
 here</a> to begin the authorization process.
 </html>
 ";
-                    response.data = ResponseBody::from_string(text);
-                    response.with_unique_header("Content-Type", "text/html; charset=utf8")
-                } else { // Allowed to access!
-                    Response::text("Hello world!")
-                }
-            },
-            (GET) ["/authorize"] => {
-                let mut locked = endpoint.lock().unwrap();
-                AuthorizationFlow::prepare(&mut *locked)
-                    .expect("Can not fail")
-                    .execute(Request::new(request))
-                    .map(OAuthResponse::into_inner)
-                    .unwrap_or_else(|_| Response::empty_400())
-            },
-            (POST) ["/authorize"] => {
-                let mut locked = endpoint.lock().unwrap();
-                AuthorizationFlow::prepare(&mut *locked)
-                    .expect("Can not fail")
-                    .execute(Request::new(request))
-                    .map(OAuthResponse::into_inner)
-                    .unwrap_or_else(|_| Response::empty_400())
-            },
-            (POST) ["/token"] => {
-                let mut locked = endpoint.lock().unwrap();
-                AccessTokenFlow::prepare(&mut *locked)
-                    .expect("Can not fail")
-                    .execute(Request::new(request))
-                    .map(OAuthResponse::into_inner)
-                    .unwrap_or_else(|_| Response::empty_400())
-            },
-            (POST) ["/refresh"] => {
-                let mut locked = endpoint.lock().unwrap();
-                RefreshFlow::prepare(&mut *locked)
-                    .expect("Can not fail")
-                    .execute(Request::new(request))
-                    .map(OAuthResponse::into_inner)
-                    .unwrap_or_else(|_| Response::empty_400())
-            },
-            _ => Response::empty_404()
-        )
+                            response.data = ResponseBody::from_string(text);
+                            response.with_unique_header("Content-Type", "text/html; charset=utf8")
+                        } else { // Allowed to access!
+                            Response::text("Hello world!")
+                        }
+                    },
+                    (GET) ["/authorize"] => {
+                        let mut locked = endpoint.lock().unwrap();
+                        AuthorizationFlow::prepare(&mut *locked)
+                            .expect("Can not fail")
+                            .execute(Request::new(request))
+                            .map(OAuthResponse::into_inner)
+                            .unwrap_or_else(|_| Response::empty_400())
+                    },
+                    (POST) ["/authorize"] => {
+                        let mut locked = endpoint.lock().unwrap();
+                        AuthorizationFlow::prepare(&mut *locked)
+                            .expect("Can not fail")
+                            .execute(Request::new(request))
+                            .map(OAuthResponse::into_inner)
+                            .unwrap_or_else(|_| Response::empty_400())
+                    },
+                    (POST) ["/token"] => {
+                        let mut locked = endpoint.lock().unwrap();
+                        AccessTokenFlow::prepare(&mut *locked)
+                            .expect("Can not fail")
+                            .execute(Request::new(request))
+                            .map(OAuthResponse::into_inner)
+                            .unwrap_or_else(|_| Response::empty_400())
+                    },
+                    (POST) ["/refresh"] => {
+                        let mut locked = endpoint.lock().unwrap();
+                        RefreshFlow::prepare(&mut *locked)
+                            .expect("Can not fail")
+                            .execute(Request::new(request))
+                            .map(OAuthResponse::into_inner)
+                            .unwrap_or_else(|_| Response::empty_400())
+                    },
+                    _ => Response::empty_404()
+                )
     });
 
     // Run the server main loop in another thread
-    let join = thread::spawn(move ||
-        server.expect("Failed to start server")
-            .run()
-    );
+    let join = thread::spawn(move || server.expect("Failed to start server").run());
     // Start a dummy client instance which simply relays the token/response
-    let client = thread::spawn(||
+    let client = thread::spawn(|| {
         Server::new(("localhost", 8021), support::dummy_client())
             .expect("Failed to start client")
             .run()
-    );
+    });
 
     // Try to direct the browser to an url initiating the flow
     support::open_in_browser();
@@ -129,7 +134,7 @@ here</a> to begin the authorization process.
 /// In a POST request, this will display a page to the user asking for his permission to proceed.
 /// The submitted form will then trigger the other authorization handler which actually completes
 /// the flow.
-fn solicitor(request: &mut Request, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+fn solicitor(request: &mut Request, grant: Solicitation<'_>) -> OwnerConsent<OAuthResponse> {
     if request.method() == "GET" {
         let text = support::consent_page_html("/authorize".into(), grant);
         let response = Response::html(text);

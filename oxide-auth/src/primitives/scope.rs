@@ -70,6 +70,11 @@ impl Scope {
     pub fn allow_access(&self, rhs: &Scope) -> bool {
         self <= rhs
     }
+
+    /// Create an iterator over the individual scopes.
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.tokens.iter().map(AsRef::as_ref)
+    }
 }
 
 /// Error returned from parsing a scope as encoded in an authorization token request.
@@ -92,33 +97,36 @@ impl str::FromStr for Scope {
 
     fn from_str(string: &str) -> Result<Scope, ParseScopeErr> {
         if let Some(ch) = string.chars().find(|&ch| Scope::invalid_scope_char(ch)) {
-            return Err(ParseScopeErr::InvalidCharacter(ch))
+            return Err(ParseScopeErr::InvalidCharacter(ch));
         }
         let tokens = string.split(' ').filter(|s| !s.is_empty());
-        Ok(Scope{ tokens: tokens.map(str::to_string).collect() })
+        Ok(Scope {
+            tokens: tokens.map(str::to_string).collect(),
+        })
     }
 }
 
 impl fmt::Display for ParseScopeErr {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            ParseScopeErr::InvalidCharacter(chr)
-                => write!(fmt, "Encountered invalid character in scope: {}", chr)
+            ParseScopeErr::InvalidCharacter(chr) => {
+                write!(fmt, "Encountered invalid character in scope: {}", chr)
+            }
         }
     }
 }
 
 impl fmt::Debug for Scope {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_tuple("Scope")
-            .field(&self.tokens)
-            .finish()
+        fmt.debug_tuple("Scope").field(&self.tokens).finish()
     }
 }
 
 impl fmt::Display for Scope {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        let output = self.tokens.iter()
+        let output = self
+            .tokens
+            .iter()
             .map(String::as_str)
             .collect::<Vec<_>>()
             .join(" ");
@@ -146,7 +154,12 @@ mod tests {
     use super::*;
     #[test]
     fn test_parsing() {
-        let scope = Scope { tokens: ["default", "password", "email"].iter().map(|s| s.to_string()).collect() };
+        let scope = Scope {
+            tokens: ["default", "password", "email"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+        };
         let formatted = scope.to_string();
         let parsed = formatted.parse::<Scope>().unwrap();
         assert_eq!(scope, parsed);
@@ -181,5 +194,15 @@ mod tests {
         assert!(!scope_base.priviledged_to(&scope_uncmp));
         assert!(!scope_uncmp.allow_access(&scope_less));
         assert!(!scope_uncmp.allow_access(&scope_base));
+    }
+
+    #[test]
+    fn test_iterating() {
+        let scope = "cap1 cap2 cap3".parse::<Scope>().unwrap();
+        let all = scope.iter().collect::<Vec<_>>();
+        assert_eq!(all.len(), 3);
+        assert!(all.contains(&"cap1"));
+        assert!(all.contains(&"cap2"));
+        assert!(all.contains(&"cap3"));
     }
 }

@@ -55,8 +55,9 @@ pub struct NormalizedParameter {
 
 unsafe impl QueryParameter for NormalizedParameter {
     fn unique_value(&self, key: &str) -> Option<Cow<str>> {
-        self.inner.get(key).and_then(|val| 
-            val.as_ref().map(Cow::as_ref).map(Cow::Borrowed))
+        self.inner
+            .get(key)
+            .and_then(|val| val.as_ref().map(Cow::as_ref).map(Cow::Borrowed))
     }
 
     fn normalize(&self) -> NormalizedParameter {
@@ -76,7 +77,8 @@ impl NormalizedParameter {
     /// the key as having a duplicate entry.
     pub fn insert_or_poison(&mut self, key: Cow<'static, str>, val: Cow<'static, str>) {
         let unique_val = Some(val);
-        self.inner.entry(key)
+        self.inner
+            .entry(key)
             .and_modify(|val| *val = None)
             .or_insert(unique_val);
     }
@@ -88,9 +90,16 @@ impl Borrow<dyn QueryParameter> for NormalizedParameter {
     }
 }
 
+impl Borrow<dyn QueryParameter + Send> for NormalizedParameter {
+    fn borrow(&self) -> &(dyn QueryParameter + Send + 'static) {
+        self
+    }
+}
+
 impl<'de> de::Deserialize<'de> for NormalizedParameter {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         struct Visitor(NormalizedParameter);
 
@@ -102,7 +111,8 @@ impl<'de> de::Deserialize<'de> for NormalizedParameter {
             }
 
             fn visit_seq<A>(mut self, mut access: A) -> Result<Self::Value, A::Error>
-                where A: de::SeqAccess<'a>
+            where
+                A: de::SeqAccess<'a>,
             {
                 while let Some((key, value)) = access.next_element::<(String, String)>()? {
                     self.0.insert_or_poison(key.into(), value.into())
@@ -117,20 +127,31 @@ impl<'de> de::Deserialize<'de> for NormalizedParameter {
     }
 }
 
-impl<K, V> FromIterator<(K, V)> for NormalizedParameter 
+impl<K, V> FromIterator<(K, V)> for NormalizedParameter
 where
     K: Into<Cow<'static, str>>,
     V: Into<Cow<'static, str>>,
 {
-   fn from_iter<T>(iter: T) -> Self where T: IntoIterator<Item=(K, V)> {
-       let mut target = NormalizedParameter::default();
-       iter.into_iter()
-           .for_each(|(k, v)| target.insert_or_poison(k.into(), v.into()));
-       target
-   }
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = (K, V)>,
+    {
+        let mut target = NormalizedParameter::default();
+        iter.into_iter()
+            .for_each(|(k, v)| target.insert_or_poison(k.into(), v.into()));
+        target
+    }
 }
 
 impl ToOwned for dyn QueryParameter {
+    type Owned = NormalizedParameter;
+
+    fn to_owned(&self) -> Self::Owned {
+        self.normalize()
+    }
+}
+
+impl ToOwned for dyn QueryParameter + Send {
     type Owned = NormalizedParameter;
 
     fn to_owned(&self) -> Self::Owned {
@@ -163,16 +184,16 @@ where
         let inner = self
             .iter()
             .filter_map(|(key, val)| {
-                val.get_unique().map(|value| (
-                    Cow::Owned(key.borrow().to_string()),
-                    Some(Cow::Owned(value.to_string()))
-                ))
+                val.get_unique().map(|value| {
+                    (
+                        Cow::Owned(key.borrow().to_string()),
+                        Some(Cow::Owned(value.to_string())),
+                    )
+                })
             })
             .collect();
 
-        NormalizedParameter {
-            inner,
-        }
+        NormalizedParameter { inner }
     }
 }
 
@@ -199,9 +220,12 @@ where
     fn normalize(&self) -> NormalizedParameter {
         let mut params = NormalizedParameter::default();
         self.iter()
-            .map(|&(ref key, ref val)| (
+            .map(|&(ref key, ref val)| {
+                (
                     Cow::Owned(key.borrow().to_string()),
-                    Cow::Owned(val.borrow().to_string())))
+                    Cow::Owned(val.borrow().to_string()),
+                )
+            })
             .for_each(|(key, val)| params.insert_or_poison(key, val));
         params
     }
@@ -239,8 +263,9 @@ unsafe impl UniqueValue for String {
     }
 }
 
-unsafe impl<'a, V> UniqueValue for &'a V 
-    where V: AsRef<str> + ?Sized
+unsafe impl<'a, V> UniqueValue for &'a V
+where
+    V: AsRef<str> + ?Sized,
 {
     fn get_unique(&self) -> Option<&str> {
         Some(self.as_ref())

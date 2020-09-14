@@ -1,3 +1,4 @@
+#[path = "../../../../oxide-auth-actix/examples/actix-example/src/support.rs"]
 mod support;
 
 use actix::{Actor, Addr, Context, Handler};
@@ -100,7 +101,6 @@ pub fn main() {
         "MAX_POOL_SIZE",
         "32",
     );
-
     env_logger::init();
 
     let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");

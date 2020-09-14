@@ -1,16 +1,18 @@
 use std::borrow::Cow;
 
 use code_grant::resource::{
-    protect,
-    Error as ResourceError,
-    Endpoint as ResourceEndpoint,
-    Request as ResourceRequest};
+    protect, Error as ResourceError, Endpoint as ResourceEndpoint, Request as ResourceRequest,
+};
 use primitives::grant::Grant;
 
 use super::*;
 
 /// Guards resources by requiring OAuth authorization.
-pub struct ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+pub struct ResourceFlow<E, R>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     endpoint: WrappedResource<E, R>,
 }
 
@@ -34,7 +36,11 @@ struct Scoped<'a, E: 'a, R: 'a> {
     endpoint: &'a mut E,
 }
 
-impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+impl<E, R> ResourceFlow<E, R>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
     /// Binds the endpoint to a particular type of request that it supports, for many
@@ -43,7 +49,7 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     /// ## Panics
     ///
     /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
-    /// endpoint, for details see the documentation of `Endpoint` and `execute`. For 
+    /// endpoint, for details see the documentation of `Endpoint` and `execute`. For
     /// consistent endpoints, the panic is instead caught as an error here.
     pub fn prepare(mut endpoint: E) -> Result<Self, E::Error> {
         if endpoint.issuer_mut().is_none() {
@@ -63,7 +69,7 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     ///
     /// ## Panics
     ///
-    /// When the issuer returned by the endpoint is suddenly `None` when previously it 
+    /// When the issuer returned by the endpoint is suddenly `None` when previously it
     /// was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<Grant, Result<R::Response, E::Error>> {
         let protected = {
@@ -93,12 +99,14 @@ impl<E, R> ResourceFlow<E, R> where E: Endpoint<R>, R: WebRequest {
             ResourceError::InvalidRequest { .. } => InnerTemplate::BadRequest {
                 access_token_error: None,
             },
-            ResourceError::PrimitiveError 
-                => return Err(self.endpoint.0.error(OAuthError::PrimitiveError)),
+            ResourceError::PrimitiveError => {
+                return Err(self.endpoint.0.error(OAuthError::PrimitiveError))
+            }
         };
 
         let mut response = self.endpoint.0.response(request, template.into())?;
-        response.unauthorized(&error.www_authenticate())
+        response
+            .unauthorized(&error.www_authenticate())
             .map_err(|err| self.endpoint.0.web_error(err))?;
 
         Ok(response)
@@ -146,6 +154,6 @@ impl<R: WebRequest> ResourceRequest for WrappedRequest<R> {
     }
 
     fn token(&self) -> Option<Cow<str>> {
-        self.authorization.as_ref().map(String::as_str).map(Cow::Borrowed)
+        self.authorization.as_deref().map(Cow::Borrowed)
     }
 }

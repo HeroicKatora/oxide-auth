@@ -4,7 +4,7 @@ use actix::{Actor, Addr, Context, Handler};
 use actix_rt;
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
 use oxide_auth::{
-    endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
+    endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
     primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
 };
@@ -56,9 +56,7 @@ async fn post_authorize(
         .await?
 }
 
-async fn token(
-    (req, state): (OAuthRequest, web::Data<Addr<State>>),
-) -> Result<OAuthResponse, WebError> {
+async fn token((req, state): (OAuthRequest, web::Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
     state.send(Token(req).wrap(Extras::Nothing)).await?
 }
 
@@ -133,7 +131,10 @@ impl State {
                 // A registrar with one pre-registered client
                 registrar: vec![Client::public(
                     "LocalClient",
-                    "http://localhost:8021/endpoint".parse().unwrap(),
+                    "http://localhost:8021/endpoint"
+                        .parse::<url::Url>()
+                        .unwrap()
+                        .into(),
                     "default-scope".parse().unwrap(),
                 )]
                 .into_iter()
@@ -159,8 +160,7 @@ impl State {
     }
 
     pub fn with_solicitor<'a, S>(
-        &'a mut self,
-        solicitor: S,
+        &'a mut self, solicitor: S,
     ) -> impl Endpoint<OAuthRequest, Error = WebError> + 'a
     where
         S: OwnerSolicitor<OAuthRequest> + 'static,
@@ -191,20 +191,21 @@ where
 
         match ex {
             Extras::AuthGet => {
-                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, pre_grant: &PreGrant| {
+                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, pre_grant: Solicitation| {
                     // This will display a page to the user asking for his permission to proceed. The submitted form
                     // will then trigger the other authorization handler which actually completes the flow.
                     OwnerConsent::InProgress(
-                        OAuthResponse::ok().content_type("text/html").unwrap().body(
-                            &crate::support::consent_page_html("/authorize".into(), pre_grant),
-                        ),
+                        OAuthResponse::ok()
+                            .content_type("text/html")
+                            .unwrap()
+                            .body(&crate::support::consent_page_html("/authorize".into(), pre_grant)),
                     )
                 });
 
                 op.run(self.with_solicitor(solicitor))
             }
             Extras::AuthPost(query_string) => {
-                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, _: &PreGrant| {
+                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, _: Solicitation| {
                     if query_string.contains("allow") {
                         OwnerConsent::Authorized("dummy user".to_owned())
                     } else {

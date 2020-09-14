@@ -70,8 +70,7 @@ impl<'a> WebRequest for Request<'a> {
 
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         let query = self.inner.raw_query_string();
-        let data = serde_urlencoded::from_str(query)
-            .map_err(|_| WebError::Encoding)?;
+        let data = serde_urlencoded::from_str(query).map_err(|_| WebError::Encoding)?;
         Ok(Cow::Owned(data))
     }
 
@@ -82,8 +81,7 @@ impl<'a> WebRequest for Request<'a> {
         }
 
         let body = self.inner.data().ok_or(WebError::Encoding)?;
-        let data = serde_urlencoded::from_reader(body)
-            .map_err(|_| WebError::Encoding)?;
+        let data = serde_urlencoded::from_reader(body).map_err(|_| WebError::Encoding)?;
         Ok(Cow::Owned(data))
     }
 
@@ -102,8 +100,12 @@ impl WebResponse for Response {
 
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.inner.status_code = 302;
-        self.inner.headers.retain(|header| !header.0.eq_ignore_ascii_case("Location"));
-        self.inner.headers.push(("Location".into(), url.into_string().into()));
+        self.inner
+            .headers
+            .retain(|header| !header.0.eq_ignore_ascii_case("Location"));
+        self.inner
+            .headers
+            .push(("Location".into(), url.into_string().into()));
         Ok(())
     }
 
@@ -114,21 +116,33 @@ impl WebResponse for Response {
 
     fn unauthorized(&mut self, kind: &str) -> Result<(), Self::Error> {
         self.inner.status_code = 401;
-        self.inner.headers.retain(|header| !header.0.eq_ignore_ascii_case("www-authenticate"));
-        self.inner.headers.push(("WWW-Authenticate".into(), kind.to_string().into()));
+        self.inner
+            .headers
+            .retain(|header| !header.0.eq_ignore_ascii_case("www-authenticate"));
+        self.inner
+            .headers
+            .push(("WWW-Authenticate".into(), kind.to_string().into()));
         Ok(())
     }
 
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
-        self.inner.headers.retain(|header| !header.0.eq_ignore_ascii_case("Content-Type"));
-        self.inner.headers.push(("Content-Type".into(), "text/plain".into()));
+        self.inner
+            .headers
+            .retain(|header| !header.0.eq_ignore_ascii_case("Content-Type"));
+        self.inner
+            .headers
+            .push(("Content-Type".into(), "text/plain".into()));
         self.inner.data = rouille::ResponseBody::from_string(text);
         Ok(())
     }
 
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
-        self.inner.headers.retain(|header| !header.0.eq_ignore_ascii_case("Content-Type"));
-        self.inner.headers.push(("Content-Type".into(), "application/json".into()));
+        self.inner
+            .headers
+            .retain(|header| !header.0.eq_ignore_ascii_case("Content-Type"));
+        self.inner
+            .headers
+            .push(("Content-Type".into(), "application/json".into()));
         self.inner.data = rouille::ResponseBody::from_string(data);
         Ok(())
     }
@@ -145,10 +159,11 @@ impl Deref for Request<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn multi_query() {
-        let request = &rouille::Request::fake_http("GET", "/authorize?fine=val&param=a&param=b", vec![], vec![]);
+        let request =
+            &rouille::Request::fake_http("GET", "/authorize?fine=val&param=a&param=b", vec![], vec![]);
         let mut request = Request::new(request);
         let query = WebRequest::query(&mut request).unwrap();
 

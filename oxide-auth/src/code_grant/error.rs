@@ -71,7 +71,8 @@ impl AuthorizationError {
         }
     }
 
-    pub(crate) fn set_type(&mut self, new_type: AuthorizationErrorType) {
+    /// Set the error type
+    pub fn set_type(&mut self, new_type: AuthorizationErrorType) {
         self.error = new_type;
     }
 

@@ -1,7 +1,7 @@
 use primitives::authorizer::{AuthMap, Authorizer};
 use primitives::issuer::TokenMap;
 use primitives::grant::{Grant, Extensions};
-use primitives::registrar::{Client, ClientMap};
+use primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use frontends::simple::endpoint::access_token_flow;
 
@@ -13,7 +13,6 @@ use serde_json;
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery};
 use super::defaults::*;
-
 
 struct AccessTokenSetup {
     registrar: ClientMap,
@@ -29,10 +28,12 @@ impl AccessTokenSetup {
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
-        let client = Client::confidential(EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
+        let client = Client::confidential(
+            EXAMPLE_CLIENT_ID,
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
             EXAMPLE_SCOPE.parse().unwrap(),
-            EXAMPLE_PASSPHRASE.as_bytes());
+            EXAMPLE_PASSPHRASE.as_bytes(),
+        );
 
         let authrequest = Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
@@ -46,8 +47,8 @@ impl AccessTokenSetup {
         let authtoken = authorizer.authorize(authrequest).unwrap();
         registrar.register_client(client);
 
-        let basic_authorization = base64::encode(&format!("{}:{}",
-            EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+        let basic_authorization =
+            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
 
         AccessTokenSetup {
             registrar,
@@ -63,9 +64,11 @@ impl AccessTokenSetup {
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
-        let client = Client::public(EXAMPLE_CLIENT_ID,
-            EXAMPLE_REDIRECT_URI.parse().unwrap(),
-            EXAMPLE_SCOPE.parse().unwrap());
+        let client = Client::public(
+            EXAMPLE_CLIENT_ID,
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
+            EXAMPLE_SCOPE.parse().unwrap(),
+        );
 
         let authrequest = Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
@@ -79,8 +82,8 @@ impl AccessTokenSetup {
         let authtoken = authorizer.authorize(authrequest).unwrap();
         registrar.register_client(client);
 
-        let basic_authorization = base64::encode(&format!("{}:{}",
-            EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+        let basic_authorization =
+            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
 
         AccessTokenSetup {
             registrar,
@@ -96,10 +99,10 @@ impl AccessTokenSetup {
             Some(Body::Json(ref json)) => {
                 let content: HashMap<String, String> = serde_json::from_str(json).unwrap();
                 assert!(content.get("error").is_some(), "Error not set in json response");
-            },
+            }
             other => panic!("Expected json encoded body, got {:?}", other),
         }
-        
+
         match response.status {
             Status::Unauthorized => (),
             Status::BadRequest => (),
@@ -108,11 +111,9 @@ impl AccessTokenSetup {
     }
 
     fn test_simple_error(&mut self, request: CraftedRequest) {
-        match access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer)
-            .execute(request)
+        match access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer).execute(request)
         {
-            Ok(ref response) =>
-                Self::assert_json_error_set(response),
+            Ok(ref response) => Self::assert_json_error_set(response),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
     }
@@ -128,8 +129,7 @@ impl AccessTokenSetup {
     fn test_success_body_credentials(&mut self, request: CraftedRequest) {
         let mut flow = access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer);
         flow.allow_credentials_in_body(true);
-        let response = flow.execute(request)
-            .expect("Expected non-error response");
+        let response = flow.execute(request).expect("Expected non-error response");
         self.assert_ok_access_token(response);
     }
 
@@ -144,12 +144,16 @@ fn access_valid_public() {
 
     let valid_public = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "authorization_code"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("code", &setup.authtoken),
-                ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -162,11 +166,15 @@ fn access_valid_private() {
 
     let valid_public = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
-                ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ".to_string() + &setup.basic_authorization),
     };
 
@@ -188,9 +196,11 @@ fn access_equivalent_url() {
 
     let mut setup = AccessTokenSetup::public_client();
 
-    let confusing_client = Client::public(CLIENT_ID,
-        REDIRECT_URL.parse().unwrap(),
-        EXAMPLE_SCOPE.parse().unwrap());
+    let confusing_client = Client::public(
+        CLIENT_ID,
+        RegisteredUrl::Semantic(REDIRECT_URL.parse().unwrap()),
+        EXAMPLE_SCOPE.parse().unwrap(),
+    );
 
     setup.registrar.register_client(confusing_client);
 
@@ -206,24 +216,32 @@ fn access_equivalent_url() {
     let authtoken = setup.authorizer.authorize(authrequest.clone()).unwrap();
     setup.test_success(CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "authorization_code"),
                 ("client_id", CLIENT_ID),
                 ("code", &authtoken),
-                ("redirect_uri", REDIRECT_URL)]
-            .iter().to_single_value_query()),
+                ("redirect_uri", REDIRECT_URL),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     });
 
     let authtoken = setup.authorizer.authorize(authrequest).unwrap();
     setup.test_success(CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "authorization_code"),
                 ("client_id", CLIENT_ID),
                 ("code", &authtoken),
-                ("redirect_uri", ALTERNATIVE_URL)]
-            .iter().to_single_value_query()),
+                ("redirect_uri", ALTERNATIVE_URL),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     });
 }
@@ -234,12 +252,19 @@ fn access_request_unknown_client() {
     // Trying to autenticate as some unknown client with the passphrase
     let unknown_client = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
-        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}",
-            "SomeOtherClient", EXAMPLE_PASSPHRASE))),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: Some(
+            "Basic ".to_string()
+                + &base64::encode(&format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE)),
+        ),
     };
 
     setup.test_simple_error(unknown_client);
@@ -251,10 +276,15 @@ fn access_request_wrong_authentication() {
     // Trying to autenticate with an unsupported method (instead of Basic)
     let wrong_authentication = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("NotBasic ".to_string() + &setup.basic_authorization),
     };
 
@@ -267,12 +297,19 @@ fn access_request_wrong_password() {
     // Trying to autenticate with the wrong password
     let wrong_password = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
-        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}",
-            EXAMPLE_CLIENT_ID, "NotTheRightPassphrase"))),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: Some(
+            "Basic ".to_string()
+                + &base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, "NotTheRightPassphrase")),
+        ),
     };
 
     setup.test_simple_error(wrong_password);
@@ -284,12 +321,16 @@ fn access_request_empty_password() {
     // Trying to autenticate with an empty password
     let empty_password = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
-        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}",
-            EXAMPLE_CLIENT_ID, ""))),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, ""))),
     };
 
     setup.test_simple_error(empty_password);
@@ -301,11 +342,16 @@ fn access_request_multiple_client_indications() {
     // Trying to autenticate with an unsupported method (instead of Basic)
     let multiple_client_indications = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("client_id", EXAMPLE_CLIENT_ID),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ".to_string() + &setup.basic_authorization),
     };
 
@@ -318,10 +364,15 @@ fn access_request_public_authorization() {
     // Trying to autenticate a public client
     let public_authorization = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ".to_string() + &setup.basic_authorization),
     };
 
@@ -334,16 +385,20 @@ fn access_request_public_missing_client() {
     // Trying to autenticate with an unsupported method (instead of Basic)
     let public_missing_client = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
     setup.test_simple_error(public_missing_client);
 }
-
 
 #[test]
 fn access_request_invalid_basic() {
@@ -351,10 +406,15 @@ fn access_request_invalid_basic() {
     // Trying to autenticate with an invalid basic authentication header
     let invalid_basic = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ;;;#Non-base64".to_string()),
     };
 
@@ -367,10 +427,15 @@ fn access_request_wrong_redirection() {
     // Trying to get an access token with an incorrect redirection url
     let wrong_redirection = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", "https://wrong.client.example/endpoint")]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", "https://wrong.client.example/endpoint"),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ".to_string() + &setup.basic_authorization),
     };
 
@@ -383,10 +448,15 @@ fn access_request_invalid_redirection() {
     // Trying to get an access token with a redirection url which is not an uri
     let invalid_redirection = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", "\\://")]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", "\\://"),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ".to_string() + &setup.basic_authorization),
     };
 
@@ -399,9 +469,14 @@ fn access_request_no_code() {
     // Trying to get an access token without a code
     let no_code = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "authorization_code"),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ".to_string() + &setup.basic_authorization),
     };
 
@@ -412,11 +487,16 @@ fn access_request_no_code() {
 fn access_request_multiple_codes() {
     let mut setup = AccessTokenSetup::private_client();
     let mut urlbody = vec![
-            ("grant_type", "authorization_code"),
-            ("code", &setup.authtoken),
-            ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-        .iter().to_single_value_query();
-    urlbody.get_mut("code").unwrap().push("AnotherAuthToken".to_string());
+        ("grant_type", "authorization_code"),
+        ("code", &setup.authtoken),
+        ("redirect_uri", EXAMPLE_REDIRECT_URI),
+    ]
+    .iter()
+    .to_single_value_query();
+    urlbody
+        .get_mut("code")
+        .unwrap()
+        .push("AnotherAuthToken".to_string());
     // Trying to get an access token with mutiple codes, even if one is correct
     let multiple_codes = CraftedRequest {
         query: None,
@@ -433,10 +513,15 @@ fn access_request_wrong_grant_type() {
     // Trying to get an access token without a code
     let wrong_grant_type = CraftedRequest {
         query: None,
-        urlbody: Some(vec![("grant_type", "another_grant_type"),
-                         ("code", &setup.authtoken),
-                         ("redirect_uri", EXAMPLE_REDIRECT_URI)]
-            .iter().to_single_value_query()),
+        urlbody: Some(
+            vec![
+                ("grant_type", "another_grant_type"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ".to_string() + &setup.basic_authorization),
     };
 
@@ -449,13 +534,17 @@ fn private_in_body() {
 
     let valid_public = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
                 ("client_id", EXAMPLE_CLIENT_ID),
-                ("client_secret", EXAMPLE_PASSPHRASE)]
-            .iter().to_single_value_query()),
+                ("client_secret", EXAMPLE_PASSPHRASE),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -468,13 +557,17 @@ fn unwanted_private_in_body_fails() {
 
     let valid_public = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
                 ("client_id", EXAMPLE_CLIENT_ID),
-                ("client_secret", EXAMPLE_PASSPHRASE)]
-            .iter().to_single_value_query()),
+                ("client_secret", EXAMPLE_PASSPHRASE),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: None,
     };
 
@@ -488,13 +581,17 @@ fn private_duplicate_authentication() {
 
     let valid_public = CraftedRequest {
         query: None,
-        urlbody: Some(vec![
+        urlbody: Some(
+            vec![
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
                 ("client_id", EXAMPLE_CLIENT_ID),
-                ("client_secret", EXAMPLE_PASSPHRASE)]
-            .iter().to_single_value_query()),
+                ("client_secret", EXAMPLE_PASSPHRASE),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
         auth: Some("Basic ".to_string() + &setup.basic_authorization),
     };
 

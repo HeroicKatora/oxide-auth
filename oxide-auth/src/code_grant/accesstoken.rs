@@ -1,8 +1,9 @@
 //! Provides the handling for Access Token Requests
+use std::mem;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use serde_json;
 
 use code_grant::error::{AccessTokenError, AccessTokenErrorType};
@@ -13,29 +14,29 @@ use primitives::registrar::{Registrar, RegistrarError};
 
 /// Token Response
 #[derive(Deserialize, Serialize)]
-pub(crate) struct TokenResponse {
+pub struct TokenResponse {
     /// The access token issued by the authorization server.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
 
     /// The refresh token, which can be used to obtain new access tokens.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
 
     /// The type of the token issued.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub token_type: Option<String>,
 
     /// The lifetime in seconds of the access token.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_in: Option<i64>,
 
     /// The scope, which limits the permissions on the access token.
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
 
     /// Error code
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
@@ -65,7 +66,7 @@ pub trait Request {
     /// Retrieve an additional parameter used in an extension
     fn extension(&self, key: &str) -> Option<Cow<str>>;
 
-    /// Credentials in body should only be enabled if use of HTTP Basic is not possible. 
+    /// Credentials in body should only be enabled if use of HTTP Basic is not possible.
     ///
     /// Allows the request body to contain the `client_secret` as a form parameter. This is NOT
     /// RECOMMENDED and need not be supported. The parameters MUST NOT appear in the request URI
@@ -85,7 +86,8 @@ pub trait Extension {
     ///
     /// The input data comes from the extension data produced in the handling of the
     /// authorization code request.
-    fn extend(&mut self, request: &dyn Request, data: Extensions) -> std::result::Result<Extensions, ()>;
+    fn extend(&mut self, request: &dyn Request, data: Extensions)
+        -> std::result::Result<Extensions, ()>;
 }
 
 impl Extension for () {
@@ -112,7 +114,7 @@ pub trait Endpoint {
     /// The system of used extension, extending responses.
     ///
     /// It is possible to use `&mut ()`.
-    fn extension(&mut self) -> & mut dyn Extension;
+    fn extension(&mut self) -> &mut dyn Extension;
 }
 
 enum Credentials<'a> {
@@ -127,118 +129,368 @@ enum Credentials<'a> {
     ///
     /// This must happen only when the credentials were part of the request body but used to
     /// indicate the name of a public client.
-    Unauthenticated {
-        client_id: &'a str,
-    },
+    Unauthenticated { client_id: &'a str },
     /// Multiple possible credentials were offered.
     ///
     /// This is a security issue, only one attempt must be made per request.
     Duplicate,
 }
 
-/// Try to redeem an authorization code.
-pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
-    if !request.valid() {
-        return Err(Error::invalid())
-    }
+/// Access token issuing process
+///
+/// This state machine will go through four phases. On creation, the request will be validated and
+/// parameters for the first step will be extracted from it. It will pose some requests in the form
+/// of [`Output`] which should be satisfied with the next [`Input`] data. This will eventually
+/// produce a [`BearerToken`] or an [`Error`]. Note that the executing environment will need to use
+/// a [`Registrar`], an [`Authorizer`], an optionnal [`Extension`] and an [`Issuer`] to which some
+/// requests should be forwarded.
+///
+/// [`Input`]: struct.Input.html
+/// [`Output`]: struct.Output.html
+/// [`BearerToken`]: struct.BearerToken.html
+/// [`Error`]: struct.Error.html
+/// [`Issuer`] ../primitives/issuer/trait.Issuer.html
+/// [`Registrar`] ../primitives/registrar/trait.Registrar.html
+/// [`Authorizer`] ../primitives/authorizer/trait.Authorizer.html
+/// [`Extension`] trait.Extension.html
+///
+/// A rough sketch of the operational phases:
+///
+/// 1. Ensure the request is valid based on the basic requirements (includes required parameters)
+/// 2. Try to produce a new token
+///     2.1. Authenticate the client
+///     2.2. If there was no authentication, assert token does not require authentication
+///     2.3. Recover the current grant corresponding to the `code`
+///     2.4. Check the intrinsic validity (scope)
+/// 3. Query the backend for a new (bearer) token
+pub struct AccessToken {
+    state: AccessTokenState,
+}
 
-    let authorization = request.authorization();
-    let client_id = request.client_id();
-    let client_secret = request.extension("client_secret");
+/// Inner state machine for access token
+enum AccessTokenState {
+    /// State after the request has been validated.
+    Authenticate {
+        client: String,
+        passdata: Option<Vec<u8>>,
+        code: String,
+        // TODO: parsing here is unnecessary if we compare a string representation.
+        redirect_uri: url::Url,
+    },
+    Recover {
+        client: String,
+        code: String,
+        redirect_uri: url::Url,
+    },
+    Extend {
+        saved_params: Box<Grant>,
+        extensions: Extensions,
+    },
+    Issue {
+        grant: Box<Grant>,
+    },
+    Err(Error),
+}
 
-    let mut credentials = Credentials::None;
-    if let Some((client_id, auth)) = &authorization {
-        credentials.authenticate(client_id.as_ref(), auth.as_ref());
-    }
+/// Input injected by the executor into the state machine.
+pub enum Input<'req> {
+    /// The request to be processed.
+    Request(&'req dyn Request),
+    /// Positively answer an authentication query.
+    Authenticated,
+    /// Provide the queried refresh token.
+    Recovered(Option<Box<Grant>>),
+    /// Provide extensions
+    Extended {
+        /// The grant extension
+        access_extensions: Extensions,
+    },
+    /// The token produced by the backend
+    Issued(IssuedToken),
+    /// Advance without input as far as possible, or just retrieve the output again.
+    None,
+}
 
-    if let Some(client_id) = &client_id {
-        match &client_secret {
-            Some(auth) if request.allow_credentials_in_body() => {
-                credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes())
-            },
-            // Ignore parameter if not allowed.
-            Some(_) | None => {
-                credentials.unauthenticated(client_id.as_ref())
-            },
+/// A request by the statemachine to the executor.
+///
+/// Each variant is fulfilled by certain variants of the next inputs as an argument to
+/// `AccessToken::advance`. The output of most states is simply repeated if `Input::None` is
+/// provided instead but note that the successful bearer token response is **not** repeated.
+pub enum Output<'machine> {
+    /// The registrar should authenticate a client.
+    ///
+    /// Fulfilled by `Input::Authenticated`. In an unsuccessful case, the executor should not
+    /// continue and discard the flow.
+    Authenticate {
+        /// The to-be-authenticated client.
+        client: &'machine str,
+        /// The supplied passdata/password.
+        passdata: Option<&'machine [u8]>,
+    },
+    /// The issuer should try to recover the grant for this `code`
+    ///
+    /// Fulfilled by `Input::Recovered`.
+    Recover {
+        /// The `code` from current request
+        code: &'machine str,
+    },
+    /// The extension (if any) should provide the extensions
+    ///
+    /// Fullfilled by `Input::Extended`
+    Extend {
+        /// The grant extensions if any
+        extensions: &'machine mut Extensions,
+    },
+    /// The issue should issue a new access token
+    ///
+    /// Fullfilled by `Input::Issued`
+    Issue {
+        /// The grant to be used in the token generation
+        grant: &'machine Grant,
+    },
+    /// The state machine finished and a new bearer token was generated
+    ///
+    /// This output **can not** be requested repeatedly, any future `Input` will yield a primitive
+    /// error instead.
+    Ok(BearerToken),
+    /// The state machine finished in an error.
+    ///
+    /// The error will be repeated on *any* following input.
+    Err(Box<Error>),
+}
+
+impl AccessToken {
+    /// Create the state machine. validating the request in the process
+    pub fn new(request: &dyn Request) -> Self {
+        AccessToken {
+            state: Self::validate(request).unwrap_or_else(AccessTokenState::Err),
         }
     }
 
-    let (client_id, auth) = credentials
-        .into_client()
-        .ok_or_else(Error::invalid)?;
+    /// Go to next state
+    pub fn advance(&mut self, input: Input) -> Output<'_> {
+        self.state = match (self.take(), input) {
+            (current, Input::None) => current,
+            (
+                AccessTokenState::Authenticate {
+                    client,
+                    code,
+                    redirect_uri,
+                    ..
+                },
+                Input::Authenticated,
+            ) => Self::authencicated(client, code, redirect_uri),
+            (
+                AccessTokenState::Recover {
+                    client, redirect_uri, ..
+                },
+                Input::Recovered(grant),
+            ) => Self::recovered(client, redirect_uri, grant).unwrap_or_else(AccessTokenState::Err),
+            (AccessTokenState::Extend { saved_params, .. }, Input::Extended { access_extensions }) => {
+                Self::issue(saved_params, access_extensions)
+            }
+            (AccessTokenState::Issue { grant }, Input::Issued(token)) => {
+                return Output::Ok(Self::finish(grant, token));
+            }
+            (AccessTokenState::Err(err), _) => AccessTokenState::Err(err),
+            (_, _) => AccessTokenState::Err(Error::Primitive(Box::new(PrimitiveError::empty()))),
+        };
 
-    handler.registrar()
-        .check(&client_id, auth)
-        .map_err(|err| match err {
-            RegistrarError::Unspecified => Error::unauthorized("basic"),
-            RegistrarError::PrimitiveError => Error::Primitive(PrimitiveError {
-                grant: None,
-                extensions: None,
-            }),
-        })?;
-
-    match request.grant_type() {
-        Some(ref cow) if cow == "authorization_code" => (),
-        None => return Err(Error::invalid()),
-        Some(_) => return Err(Error::invalid_with(AccessTokenErrorType::UnsupportedGrantType)),
-    };
-
-    let code = request
-        .code()
-        .ok_or_else(Error::invalid)?;
-    let code = code.as_ref();
-
-    let saved_params = match handler.authorizer().extract(code) {
-        Err(()) => return Err(Error::Primitive(PrimitiveError {
-            grant: None,
-            extensions: None,
-        })),
-        Ok(None) => return Err(Error::invalid()),
-        Ok(Some(v)) => v,
-    };
-
-    let redirect_uri = request
-        .redirect_uri()
-        .ok_or_else(Error::invalid)?;
-    let redirect_uri = redirect_uri
-        .as_ref()
-        .parse()
-        .map_err(|_| Error::invalid())?;
-
-    if (saved_params.client_id.as_ref(), &saved_params.redirect_uri) != (client_id, &redirect_uri) {
-        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant))
+        self.output()
     }
 
-    if saved_params.until < Utc::now() {
-        return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant))
+    fn output(&mut self) -> Output<'_> {
+        match &mut self.state {
+            AccessTokenState::Err(err) => Output::Err(Box::new(err.clone())),
+            AccessTokenState::Authenticate { client, passdata, .. } => Output::Authenticate {
+                client,
+                passdata: passdata.as_ref().map(Vec::as_slice),
+            },
+            AccessTokenState::Recover { code, .. } => Output::Recover { code },
+            AccessTokenState::Extend { extensions, .. } => Output::Extend { extensions },
+            AccessTokenState::Issue { grant } => Output::Issue { grant },
+        }
     }
 
-    let code_extensions = saved_params.extensions;
-    let access_extensions = handler.extension().extend(request, code_extensions);
-    let access_extensions = match access_extensions {
-        Ok(extensions) => extensions,
-        Err(_) =>  return Err(Error::invalid()),
-    };
+    fn take(&mut self) -> AccessTokenState {
+        mem::replace(
+            &mut self.state,
+            AccessTokenState::Err(Error::Primitive(Box::new(PrimitiveError::empty()))),
+        )
+    }
 
-    let token = handler.issuer().issue(Grant {
-        client_id: saved_params.client_id,
-        owner_id: saved_params.owner_id,
-        redirect_uri: saved_params.redirect_uri,
-        scope: saved_params.scope.clone(),
-        until: Utc::now() + Duration::hours(1),
-        extensions: access_extensions,
-    }).map_err(|()| Error::Primitive(PrimitiveError {
-        // FIXME: endpoint should get and handle these.
-        grant: None,
-        extensions: None,
-    }))?;
+    fn validate(request: &dyn Request) -> Result<AccessTokenState> {
+        if !request.valid() {
+            return Err(Error::invalid());
+        }
 
-    Ok(BearerToken{ 0: token, 1: saved_params.scope.to_string() })
+        let authorization = request.authorization();
+        let client_id = request.client_id();
+        let client_secret = request.extension("client_secret");
+
+        let mut credentials = Credentials::None;
+        if let Some((client_id, auth)) = &authorization {
+            credentials.authenticate(client_id.as_ref(), auth.as_ref());
+        }
+
+        if let Some(client_id) = &client_id {
+            match &client_secret {
+                Some(auth) if request.allow_credentials_in_body() => {
+                    credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes())
+                }
+                // Ignore parameter if not allowed.
+                Some(_) | None => credentials.unauthenticated(client_id.as_ref()),
+            }
+        }
+
+        match request.grant_type() {
+            Some(ref cow) if cow == "authorization_code" => (),
+            None => return Err(Error::invalid()),
+            Some(_) => return Err(Error::invalid_with(AccessTokenErrorType::UnsupportedGrantType)),
+        };
+
+        let (client_id, passdata) = credentials.into_client().ok_or_else(Error::invalid)?;
+
+        let redirect_uri = request
+            .redirect_uri()
+            .ok_or_else(Error::invalid)?
+            .parse()
+            .map_err(|_| Error::invalid())?;
+
+        let code = request.code().ok_or_else(Error::invalid)?;
+
+        Ok(AccessTokenState::Authenticate {
+            client: client_id.to_string(),
+            passdata: passdata.map(Vec::from),
+            redirect_uri,
+            code: code.into_owned(),
+        })
+    }
+
+    fn authencicated(client: String, code: String, redirect_uri: url::Url) -> AccessTokenState {
+        AccessTokenState::Recover {
+            client,
+            code,
+            redirect_uri,
+        }
+    }
+
+    fn recovered(
+        client_id: String, redirect_uri: url::Url, grant: Option<Box<Grant>>,
+    ) -> Result<AccessTokenState> {
+        let mut saved_params = match grant {
+            None => return Err(Error::invalid()),
+            Some(v) => v,
+        };
+
+        if (saved_params.client_id.as_str(), &saved_params.redirect_uri) != (&client_id, &redirect_uri) {
+            return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
+        }
+
+        if saved_params.until < Utc::now() {
+            return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
+        }
+
+        let extensions = mem::take(&mut saved_params.extensions);
+        Ok(AccessTokenState::Extend {
+            saved_params,
+            extensions,
+        })
+    }
+
+    fn issue(grant: Box<Grant>, extensions: Extensions) -> AccessTokenState {
+        AccessTokenState::Issue {
+            grant: Box::new(Grant { extensions, ..*grant }),
+        }
+    }
+
+    fn finish(grant: Box<Grant>, token: IssuedToken) -> BearerToken {
+        BearerToken(token, grant.scope.to_string())
+    }
+}
+
+// FiXME: use state machine instead
+/// Try to redeem an authorization code.
+pub fn access_token(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
+    enum Requested<'a> {
+        None,
+        Authenticate {
+            client: &'a str,
+            passdata: Option<&'a [u8]>,
+        },
+        Recover(&'a str),
+        Extend {
+            extensions: &'a mut Extensions,
+        },
+        Issue {
+            grant: &'a Grant,
+        },
+    }
+
+    let mut access_token = AccessToken::new(request);
+    let mut requested = Requested::None;
+
+    loop {
+        let input = match requested {
+            Requested::None => Input::None,
+            Requested::Authenticate { client, passdata } => {
+                handler
+                    .registrar()
+                    .check(client, passdata)
+                    .map_err(|err| match err {
+                        RegistrarError::Unspecified => Error::unauthorized("basic"),
+                        RegistrarError::PrimitiveError => Error::Primitive(Box::new(PrimitiveError {
+                            grant: None,
+                            extensions: None,
+                        })),
+                    })?;
+                Input::Authenticated
+            }
+            Requested::Recover(code) => {
+                let opt_grant = handler.authorizer().extract(code).map_err(|_| {
+                    Error::Primitive(Box::new(PrimitiveError {
+                        grant: None,
+                        extensions: None,
+                    }))
+                })?;
+                Input::Recovered(opt_grant.map(|o| Box::new(o)))
+            }
+            Requested::Extend { extensions } => {
+                let access_extensions = handler
+                    .extension()
+                    .extend(request, extensions.clone())
+                    .map_err(|_| Error::invalid())?;
+                Input::Extended { access_extensions }
+            }
+            Requested::Issue { grant } => {
+                let token = handler.issuer().issue(grant.clone()).map_err(|_| {
+                    Error::Primitive(Box::new(PrimitiveError {
+                        // FIXME: endpoint should get and handle these.
+                        grant: None,
+                        extensions: None,
+                    }))
+                })?;
+                Input::Issued(token)
+            }
+        };
+
+        requested = match access_token.advance(input) {
+            Output::Authenticate { client, passdata } => Requested::Authenticate { client, passdata },
+            Output::Recover { code } => Requested::Recover(code),
+            Output::Extend { extensions } => Requested::Extend { extensions },
+            Output::Issue { grant } => Requested::Issue { grant },
+            Output::Ok(token) => return Ok(token),
+            Output::Err(e) => return Err(*e),
+        };
+    }
 }
 
 impl<'a> Credentials<'a> {
     pub fn authenticate(&mut self, client_id: &'a str, passphrase: &'a [u8]) {
-        self.add(Credentials::Authenticated { client_id, passphrase })
+        self.add(Credentials::Authenticated {
+            client_id,
+            passphrase,
+        })
     }
 
     pub fn unauthenticated(&mut self, client_id: &'a str) {
@@ -247,10 +499,11 @@ impl<'a> Credentials<'a> {
 
     pub fn into_client(self) -> Option<(&'a str, Option<&'a [u8]>)> {
         match self {
-            Credentials::Authenticated { client_id, passphrase, }
-                => Some((client_id, Some(passphrase))),
-            Credentials::Unauthenticated { client_id }
-                => Some((client_id, None)),
+            Credentials::Authenticated {
+                client_id,
+                passphrase,
+            } => Some((client_id, Some(passphrase))),
+            Credentials::Unauthenticated { client_id } => Some((client_id, None)),
             _ => None,
         }
     }
@@ -267,6 +520,7 @@ impl<'a> Credentials<'a> {
 }
 
 /// Defines actions for the response to an access token request.
+#[derive(Clone)]
 pub enum Error {
     /// The token did not represent a valid token.
     Invalid(ErrorDescription),
@@ -278,13 +532,13 @@ pub enum Error {
     ///
     /// This is expected to occur with some endpoints. See `PrimitiveError` for
     /// more details on when this is returned.
-    Primitive(PrimitiveError),
+    Primitive(Box<PrimitiveError>),
 }
 
 /// The endpoint should have enough control over its primitives to find
-/// out what has gone wrong, e.g. they may externall supply error 
+/// out what has gone wrong, e.g. they may externall supply error
 /// information.
-/// 
+///
 /// In this case, all previous results returned by the primitives are
 /// included in the return value. Through this mechanism, one can
 /// accomodate async handlers by implementing a sync-based result cache
@@ -295,6 +549,7 @@ pub enum Error {
 ///
 /// Note that `token` is not included in this list, since the handler
 /// can never fail after supplying a token to the backend.
+#[derive(Clone)]
 pub struct PrimitiveError {
     /// The already extracted grant.
     ///
@@ -308,6 +563,7 @@ pub struct PrimitiveError {
 
 /// Simple wrapper around AccessTokenError to imbue the type with addtional json functionality. In
 /// addition this enforces backend specific behaviour for obtaining or handling the access error.
+#[derive(Clone)]
 pub struct ErrorDescription {
     error: AccessTokenError,
 }
@@ -318,9 +574,10 @@ type Result<T> = std::result::Result<T, Error>;
 pub struct BearerToken(IssuedToken, String);
 
 impl Error {
-    fn invalid() -> Self {
+    /// Create invalid error type
+    pub fn invalid() -> Self {
         Error::Invalid(ErrorDescription {
-            error: AccessTokenError::default()
+            error: AccessTokenError::default(),
         })
     }
 
@@ -334,15 +591,18 @@ impl Error {
         })
     }
 
-    fn unauthorized(authtype: &str) -> Error {
-        Error::Unauthorized(ErrorDescription {
+    /// Create unauthorized error type
+    pub fn unauthorized(authtype: &str) -> Error {
+        Error::Unauthorized(
+            ErrorDescription {
                 error: {
                     let mut error = AccessTokenError::default();
                     error.set_type(AccessTokenErrorType::InvalidClient);
                     error
                 },
             },
-            authtype.to_string())
+            authtype.to_string(),
+        )
     }
 
     /// Get a handle to the description the client will receive.
@@ -358,11 +618,21 @@ impl Error {
     }
 }
 
+impl PrimitiveError {
+    fn empty() -> Self {
+        PrimitiveError {
+            grant: None,
+            extensions: None,
+        }
+    }
+}
+
 impl ErrorDescription {
     /// Convert the error into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(&self) -> String {
-        let asmap = self.error
+        let asmap = self
+            .error
             .iter()
             .map(|(k, v)| (k.to_string(), v.into_owned()))
             .collect::<HashMap<String, String>>();
@@ -400,11 +670,14 @@ mod tests {
 
     #[test]
     fn bearer_token_encoding() {
-        let token = BearerToken(IssuedToken {
-            token: "access".into(),
-            refresh: Some("refresh".into()),
-            until: Utc::now(),
-        }, "scope".into());
+        let token = BearerToken(
+            IssuedToken {
+                token: "access".into(),
+                refresh: Some("refresh".into()),
+                until: Utc::now(),
+            },
+            "scope".into(),
+        );
 
         let json = token.to_json();
         let token = serde_json::from_str::<TokenResponse>(&json).unwrap();
@@ -418,10 +691,10 @@ mod tests {
 
     #[test]
     fn no_refresh_encoding() {
-        let token = BearerToken(IssuedToken::without_refresh(
-            "access".into(),
-            Utc::now(),
-        ), "scope".into());
+        let token = BearerToken(
+            IssuedToken::without_refresh("access".into(), Utc::now()),
+            "scope".into(),
+        );
 
         let json = token.to_json();
         let token = serde_json::from_str::<TokenResponse>(&json).unwrap();

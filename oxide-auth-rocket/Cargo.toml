@@ -14,7 +14,7 @@ edition = "2018"
 
 [dependencies]
 rocket = "0.4.2"
-oxide-auth = { version = "0.5.0-preview.0", path = "../oxide-auth" }
+oxide-auth = { version = "0.5.0-preview.1", path = "../oxide-auth" }
 serde_urlencoded = "0.5.1"
 
 [dev-dependencies]

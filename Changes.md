@@ -2,6 +2,15 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.5.0-preview.1 (2019-Sep-02)
+
+Refactoring release
+
+All `code_grant` functions and their flows have been converted into Mealy state
+machines which borrow neither the request nor endpoint. This makes it possible
+to pause them at any point and continue at the pace of an outer executor
+without blocking, enabling embedding into `async`. See `oxide-auth-async`.
+
 # v0.5.0-preview.0 (2019-Dec-??)
 
 Refactoring and Tech Debt release

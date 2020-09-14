@@ -1,15 +1,16 @@
 use code_grant::authorization::{
-    authorization_code,
-    Error as AuthorizationError,
-    Extension,
-    Endpoint as AuthorizationEndpoint,
-    Request as AuthorizationRequest,
-    Pending};
+    authorization_code, Error as AuthorizationError, Extension, Endpoint as AuthorizationEndpoint,
+    Request as AuthorizationRequest, Pending,
+};
 
 use super::*;
 
 /// All relevant methods for handling authorization code requests.
-pub struct AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+pub struct AuthorizationFlow<E, R>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     endpoint: WrappedAuthorization<E, R>,
 }
 
@@ -30,7 +31,11 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
     error: Option<R::Error>,
 }
 
-struct AuthorizationPending<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
+struct AuthorizationPending<'a, E: 'a, R: 'a>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     endpoint: &'a mut WrappedAuthorization<E, R>,
     pending: Pending,
     request: R,
@@ -40,7 +45,11 @@ struct AuthorizationPending<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebReques
 ///
 /// Note that this borrows from the `AuthorizationFlow` used to create it. You can `finish` the
 /// authorization flow for this request to produce a response or an error.
-struct AuthorizationPartial<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
+struct AuthorizationPartial<'a, E: 'a, R: 'a>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     inner: AuthorizationPartialInner<'a, E, R>,
 
     /// TODO: offer this in the public api instead of dropping the request.
@@ -48,7 +57,11 @@ struct AuthorizationPartial<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebReques
 }
 
 /// Result type from processing an authentication request.
-enum AuthorizationPartialInner<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebRequest {
+enum AuthorizationPartialInner<'a, E: 'a, R: 'a>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     /// No error happened during processing and the resource owner can decide over the grant.
     Pending {
         /// A utility struct with which the request can be decided.
@@ -77,7 +90,11 @@ enum AuthorizationPartialInner<'a, E: 'a, R: 'a> where E: Endpoint<R>, R: WebReq
     },
 }
 
-impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
+impl<E, R> AuthorizationFlow<E, R>
+where
+    E: Endpoint<R>,
+    R: WebRequest,
+{
     /// Check that the endpoint supports the necessary operations for handling requests.
     ///
     /// Binds the endpoint to a particular type of request that it supports, for many
@@ -116,27 +133,19 @@ impl<E, R> AuthorizationFlow<E, R> where E: Endpoint<R>, R: WebRequest {
     /// When the registrar or the authorizer returned by the endpoint is suddenly `None` when
     /// previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
-        let negotiated = authorization_code(
-            &mut self.endpoint,
-            &WrappedRequest::new(&mut request));
+        let negotiated = authorization_code(&mut self.endpoint, &WrappedRequest::new(&mut request));
 
         let inner = match negotiated {
             Err(err) => match authorization_error(&mut self.endpoint.inner, &mut request, err) {
-                Ok(response) => AuthorizationPartialInner::Failed {
-                    request,
-                    response,
-                },
-                Err(error) => AuthorizationPartialInner::Error {
-                    request,
-                    error,
-                },
+                Ok(response) => AuthorizationPartialInner::Failed { request, response },
+                Err(error) => AuthorizationPartialInner::Error { request, error },
             },
             Ok(negotiated) => AuthorizationPartialInner::Pending {
                 pending: AuthorizationPending {
                     endpoint: &mut self.endpoint,
                     pending: negotiated,
                     request,
-                }
+                },
             },
         };
 
@@ -156,7 +165,7 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
     /// owner solicitor of the endpoint to determine owner consent.
     pub fn finish(self) -> Result<R::Response, E::Error> {
         let (_request, result) = match self.inner {
-            AuthorizationPartialInner::Pending { pending, } => pending.finish(),
+            AuthorizationPartialInner::Pending { pending } => pending.finish(),
             AuthorizationPartialInner::Failed { request, response } => (request, Ok(response)),
             AuthorizationPartialInner::Error { request, error } => (request, Err(error)),
         };
@@ -166,22 +175,23 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPartial<'a, E, R> {
 }
 
 fn authorization_error<E: Endpoint<R>, R: WebRequest>(
-    endpoint: &mut E,
-    request: &mut R,
-    error: AuthorizationError
-)
-    -> Result<R::Response, E::Error> 
-{
+    endpoint: &mut E, request: &mut R, error: AuthorizationError,
+) -> Result<R::Response, E::Error> {
     match error {
         AuthorizationError::Ignore => Err(endpoint.error(OAuthError::DenySilently)),
         AuthorizationError::Redirect(mut target) => {
-            let mut response = endpoint.response(request, InnerTemplate::Redirect {
-                authorization_error: Some(target.description()),
-            }.into())?;
-            response.redirect(target.into())
+            let mut response = endpoint.response(
+                request,
+                InnerTemplate::Redirect {
+                    authorization_error: Some(target.description()),
+                }
+                .into(),
+            )?;
+            response
+                .redirect(target.into())
                 .map_err(|err| endpoint.web_error(err))?;
             Ok(response)
-        },
+        }
         AuthorizationError::PrimitiveError => Err(endpoint.error(OAuthError::PrimitiveError)),
     }
 }
@@ -189,9 +199,10 @@ fn authorization_error<E: Endpoint<R>, R: WebRequest>(
 impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
     /// Resolve the pending status using the endpoint to query owner consent.
     fn finish(mut self) -> (R, Result<R::Response, E::Error>) {
-        let checked = self.endpoint
+        let checked = self
+            .endpoint
             .owner_solicitor()
-            .check_consent(&mut self.request, self.pending.pre_grant());
+            .check_consent(&mut self.request, self.pending.as_solicitation());
 
         match checked {
             OwnerConsent::Denied => self.deny(),
@@ -227,16 +238,19 @@ impl<'a, E: Endpoint<R>, R: WebRequest> AuthorizationPending<'a, E, R> {
         (self.request, result)
     }
 
-    fn convert_result(result: Result<Url, AuthorizationError>, endpoint: &mut E, request: &mut R) 
-        -> Result<R::Response, E::Error>
-    {
+    fn convert_result(
+        result: Result<Url, AuthorizationError>, endpoint: &mut E, request: &mut R,
+    ) -> Result<R::Response, E::Error> {
         match result {
             Ok(url) => {
-                let mut response = endpoint.response(request, InnerTemplate::Redirect {
-                    authorization_error: None,
-                }.into())?;
-                response.redirect(url)
-                    .map_err(|err| endpoint.web_error(err))?;
+                let mut response = endpoint.response(
+                    request,
+                    InnerTemplate::Redirect {
+                        authorization_error: None,
+                    }
+                    .into(),
+                )?;
+                response.redirect(url).map_err(|err| endpoint.web_error(err))?;
                 Ok(response)
             }
             Err(err) => authorization_error(endpoint, request, err),
@@ -260,7 +274,8 @@ impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorizati
     }
 
     fn extension(&mut self) -> &mut dyn Extension {
-        self.inner.extension()
+        self.inner
+            .extension()
             .and_then(super::Extension::authorization)
             .unwrap_or(&mut self.extension_fallback)
     }
@@ -268,8 +283,7 @@ impl<E: Endpoint<R>, R: WebRequest> AuthorizationEndpoint for WrappedAuthorizati
 
 impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
     pub fn new(request: &'a mut R) -> Self {
-        Self::new_or_fail(request)
-            .unwrap_or_else(Self::from_err)
+        Self::new_or_fail(request).unwrap_or_else(Self::from_err)
     }
 
     fn new_or_fail(request: &'a mut R) -> Result<Self, R::Error> {
@@ -318,4 +332,3 @@ impl<'a, R: WebRequest + 'a> AuthorizationRequest for WrappedRequest<'a, R> {
         self.query.unique_value(key)
     }
 }
-

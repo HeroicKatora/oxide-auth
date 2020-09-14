@@ -113,7 +113,7 @@ pub enum ResponseStatus {
 ///
 /// Each variant contains some form of context information about the response. This can be used either
 /// purely informational or in some cases provides additional customization points. The addition of
-/// fields to some variant context can occur in any major release until `1.0`. It is discouraged to 
+/// fields to some variant context can occur in any major release until `1.0`. It is discouraged to
 /// exhaustively match the fields directly. Since some context could not permit cloning, the enum will
 /// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
 /// think the pros or cons should be evaluated differently.
@@ -168,6 +168,68 @@ enum InnerTemplate<'a> {
     Ok,
 }
 
+/// A pending solicitation to a resource owner.
+///
+/// This encapsulates the information available to an [`OwnerSolicitor`] when querying consent
+/// information.
+///
+/// [`OwnerSolicitor`]: trait.OwnerSolicitor.html
+pub struct Solicitation<'flow> {
+    pub(crate) grant: Cow<'flow, PreGrant>,
+    pub(crate) state: Option<Cow<'flow, str>>,
+}
+
+impl<'flow> Solicitation<'flow> {
+    /// Clone the solicitation into an owned structure.
+    ///
+    /// This mainly helps with sending it across threads.
+    pub fn into_owned(self) -> Solicitation<'static> {
+        Solicitation {
+            grant: Cow::Owned(self.grant.into_owned()),
+            state: self.state.map(|state| Cow::Owned(state.into_owned())),
+        }
+    }
+
+    /// Return the pre-grant associated with the request.
+    ///
+    /// The information in the `PreGrant` is the authoritative information on the client and scopes
+    /// associated with the request. It has already been validated against those settings and
+    /// restrictions that were applied when registering the client.
+    pub fn pre_grant(&self) -> &PreGrant {
+        self.grant.as_ref()
+    }
+
+    /// The state provided by the client request.
+    ///
+    /// This will need to be provided to the response back to the client so it must be preserved
+    /// across a redirect or a consent screen presented by the user agent.
+    pub fn state(&self) -> Option<&str> {
+        match self.state {
+            None => None,
+            Some(ref state) => Some(&state),
+        }
+    }
+
+    /// Create a new solicitation request from a pre grant.
+    ///
+    /// You usually wouldn't need to call this manually as it is called by the endpoint's flow and
+    /// then handed with all available information to the solicitor.
+    pub fn new(grant: &'flow PreGrant) -> Self {
+        Solicitation {
+            grant: Cow::Borrowed(grant),
+            state: None,
+        }
+    }
+
+    /// Add a client state to the solicitation.
+    pub fn with_state(self, state: &'flow str) -> Self {
+        Solicitation {
+            state: Some(Cow::Borrowed(state)),
+            ..self
+        }
+    }
+}
+
 /// Checks consent with the owner of a resource, identified in a request.
 ///
 /// See [`frontends::simple`] for an implementation that permits arbitrary functions.
@@ -176,7 +238,7 @@ enum InnerTemplate<'a> {
 pub trait OwnerSolicitor<Request: WebRequest> {
     /// Ensure that a user (resource owner) is currently authenticated (for example via a session
     /// cookie) and determine if he has agreed to the presented grants.
-    fn check_consent(&mut self, &mut Request, pre_grant: &PreGrant) -> OwnerConsent<Request::Response>;
+    fn check_consent(&mut self, _: &mut Request, _: Solicitation) -> OwnerConsent<Request::Response>;
 }
 
 /// Determine the scopes applying to a request of a resource.
@@ -230,7 +292,7 @@ pub trait WebRequest {
     type Error;
 
     /// The corresponding type of Responses returned from this module.
-    type Response: WebResponse<Error=Self::Error>;
+    type Response: WebResponse<Error = Self::Error>;
 
     /// Retrieve a parsed version of the url query.
     ///
@@ -321,7 +383,7 @@ pub trait Endpoint<Request: WebRequest> {
     /// Returning `None` will implicate failing any flow that requires a registrar but does not
     /// have any effect on flows that do not require one.
     fn registrar(&self) -> Option<&dyn Registrar>;
-    
+
     /// An authorizer if this endpoint can access one.
     ///
     /// Returning `None` will implicate failing any flow that requires an authorizer but does not
@@ -350,8 +412,9 @@ pub trait Endpoint<Request: WebRequest> {
     ///
     /// The endpoint can rely on this being called at most once for each flow, if it wants
     /// to preallocate the response or return a handle on an existing prototype.
-    fn response(&mut self, request: &mut Request, kind: Template) 
-        -> Result<Request::Response, Self::Error>;
+    fn response(
+        &mut self, request: &mut Request, kind: Template,
+    ) -> Result<Request::Response, Self::Error>;
 
     /// Wrap an error.
     fn error(&mut self, err: OAuthError) -> Self::Error;
@@ -368,12 +431,38 @@ pub trait Endpoint<Request: WebRequest> {
 }
 
 impl<'a> Template<'a> {
+    /// Create an OK template
+    pub fn new_ok() -> Self {
+        InnerTemplate::Ok.into()
+    }
+
+    /// Create a bad request template
+    pub fn new_bad(access_token_error: Option<&'a mut AccessTokenError>) -> Self {
+        InnerTemplate::BadRequest { access_token_error }.into()
+    }
+
+    /// Create an unauthorized template
+    pub fn new_unauthorized(
+        error: Option<ResourceError>, access_token_error: Option<&'a mut AccessTokenError>,
+    ) -> Self {
+        InnerTemplate::Unauthorized {
+            error,
+            access_token_error,
+        }
+        .into()
+    }
+
+    /// Create a redirect template
+    pub fn new_redirect(authorization_error: Option<&'a mut AuthorizationError>) -> Self {
+        InnerTemplate::Redirect { authorization_error }.into()
+    }
+
     /// The corresponding status code.
     pub fn status(&self) -> ResponseStatus {
         match self.inner {
             InnerTemplate::Unauthorized { .. } => ResponseStatus::Unauthorized,
-            InnerTemplate::Redirect {.. } => ResponseStatus::Redirect,
-            InnerTemplate::BadRequest {.. } => ResponseStatus::BadRequest,
+            InnerTemplate::Redirect { .. } => ResponseStatus::Redirect,
+            InnerTemplate::BadRequest { .. } => ResponseStatus::BadRequest,
             InnerTemplate::Ok => ResponseStatus::Ok,
         }
     }
@@ -396,7 +485,9 @@ impl<'a> Template<'a> {
     /// ```
     pub fn authorization_error(&mut self) -> Option<&mut AuthorizationError> {
         match &mut self.inner {
-            InnerTemplate::Redirect { authorization_error, .. } => reborrow(authorization_error),
+            InnerTemplate::Redirect {
+                authorization_error, ..
+            } => reborrow(authorization_error),
             _ => None,
         }
     }
@@ -419,8 +510,12 @@ impl<'a> Template<'a> {
     /// ```
     pub fn access_token_error(&mut self) -> Option<&mut AccessTokenError> {
         match &mut self.inner {
-            InnerTemplate::Unauthorized { access_token_error, .. } => reborrow(access_token_error),
-            InnerTemplate::BadRequest { access_token_error, .. } => reborrow(access_token_error),
+            InnerTemplate::Unauthorized {
+                access_token_error, ..
+            } => reborrow(access_token_error),
+            InnerTemplate::BadRequest {
+                access_token_error, ..
+            } => reborrow(access_token_error),
             _ => None,
         }
     }
@@ -460,7 +555,7 @@ impl<'a, R: WebRequest, E: Endpoint<R>> Endpoint<R> for &'a mut E {
     fn registrar(&self) -> Option<&dyn Registrar> {
         (**self).registrar()
     }
-    
+
     fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
         (**self).authorizer_mut()
     }
@@ -500,7 +595,7 @@ impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
     fn registrar(&self) -> Option<&dyn Registrar> {
         (**self).registrar()
     }
-    
+
     fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
         (**self).authorizer_mut()
     }
@@ -534,17 +629,21 @@ impl<'a, R: WebRequest, E: Endpoint<R> + 'a> Endpoint<R> for Box<E> {
     }
 }
 
-impl Extension for () { }
+impl Extension for () {}
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for &'a mut S {
-    fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
-        (**self).check_consent(request, pre)
+    fn check_consent(
+        &mut self, request: &mut W, solicitation: Solicitation,
+    ) -> OwnerConsent<W::Response> {
+        (**self).check_consent(request, solicitation)
     }
 }
 
 impl<'a, W: WebRequest, S: OwnerSolicitor<W> + 'a + ?Sized> OwnerSolicitor<W> for Box<S> {
-    fn check_consent(&mut self, request: &mut W, pre: &PreGrant) -> OwnerConsent<W::Response> {
-        (**self).check_consent(request, pre)
+    fn check_consent(
+        &mut self, request: &mut W, solicitation: Solicitation,
+    ) -> OwnerConsent<W::Response> {
+        (**self).check_consent(request, solicitation)
     }
 }
 
@@ -583,4 +682,3 @@ impl<'a> From<InnerTemplate<'a>> for Template<'a> {
         Template { inner }
     }
 }
-
