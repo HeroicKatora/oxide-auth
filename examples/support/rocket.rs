@@ -28,6 +28,7 @@ impl Fairing for ClientFairing {
             token_url: "http://localhost:8000/token".into(),
             refresh_url: "http://localhost:8000/refresh".into(),
             redirect_uri: "http://localhost:8000/clientside/endpoint".into(),
+            client_secret: None
         };
         Ok(rocket
             .manage(Client::new(config))
