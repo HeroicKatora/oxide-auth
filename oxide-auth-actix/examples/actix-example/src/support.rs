@@ -6,10 +6,15 @@ use std::collections::HashMap;
 
 pub use self::generic::{consent_page_html, open_in_browser, Client, ClientConfig, ClientError};
 
-use actix_web::App;
-use actix_web::*;
+use actix_web::{
+    App, dev, web, HttpServer, HttpResponse, Responder,
+    middleware::{
+        Logger,
+        normalize::{NormalizePath, TrailingSlash},
+    },
+};
 
-pub fn dummy_client() {
+pub fn dummy_client() -> dev::Server {
     HttpServer::new(move || {
         let config = ClientConfig {
             client_id: "LocalClient".into(),
@@ -21,18 +26,20 @@ pub fn dummy_client() {
 
         App::new()
             .data(Client::new(config))
+            .wrap(Logger::default())
+            .wrap(NormalizePath::new(TrailingSlash::Trim))
             .route("/endpoint", web::get().to(endpoint_impl))
             .route("/refresh", web::post().to(refresh))
             .route("/", web::get().to(get_with_token))
     })
     .bind("localhost:8021")
     .expect("Failed to start dummy client")
-    .run();
+    .run()
 }
 
-fn endpoint_impl(
+async fn endpoint_impl(
     (query, state): (web::Query<HashMap<String, String>>, web::Data<Client>),
-) -> HttpResponse {
+) -> impl Responder {
     if let Some(cause) = query.get("error") {
         return HttpResponse::BadRequest()
             .body(format!("Error during owner authorization: {:?}", cause));
@@ -49,14 +56,14 @@ fn endpoint_impl(
     }
 }
 
-fn refresh(state: web::Data<Client>) -> HttpResponse {
+async fn refresh(state: web::Data<Client>) -> impl Responder {
     match state.refresh() {
         Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }
 
-fn get_with_token(state: web::Data<Client>) -> HttpResponse {
+async fn get_with_token(state: web::Data<Client>) -> impl Responder {
     let protected_page = match state.retrieve_protected_page() {
         Ok(page) => page,
         Err(err) => return HttpResponse::InternalServerError().body(format!("{}", err)),

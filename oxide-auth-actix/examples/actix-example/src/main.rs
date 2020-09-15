@@ -1,8 +1,13 @@
 mod support;
 
 use actix::{Actor, Addr, Context, Handler};
-use actix_rt;
-use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
+use actix_web::{
+    middleware::{
+        Logger,
+        normalize::{NormalizePath, TrailingSlash},
+    },
+    web, App, HttpRequest, HttpServer, rt,
+};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
@@ -85,25 +90,25 @@ async fn start_browser() -> () {
     let _ = thread::spawn(support::open_in_browser);
 }
 
-/// Example of a main function of an actix-web server supporting oauth.
-pub fn main() {
+// Example of a main function of an actix-web server supporting oauth.
+#[actix_web::main]
+pub async fn main() -> std::io::Result<()> {
     std::env::set_var(
         "RUST_LOG",
         "actix_example=info,actix_web=info,actix_http=info,actix_service=info",
     );
     env_logger::init();
 
-    let mut sys = actix_rt::System::new("HttpServerClient");
-
     // Start, then open in browser, don't care about this finishing.
-    let _ = sys.block_on(start_browser());
+    rt::spawn(start_browser());
 
     let state = State::preconfigured().start();
 
     // Create the main server instance
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .data(state.clone())
+            .wrap(NormalizePath::new(TrailingSlash::Trim))
             .wrap(Logger::default())
             .service(
                 web::resource("/authorize")
@@ -118,10 +123,9 @@ pub fn main() {
     .expect("Failed to bind to socket")
     .run();
 
-    support::dummy_client();
+    let client = support::dummy_client();
 
-    // Run the rest of the system.
-    let _ = sys.run();
+    futures::try_join!(server, client).map(|_| ())
 }
 
 impl State {
