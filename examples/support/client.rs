@@ -223,7 +223,6 @@ impl Client {
 fn parse_token_response(mut response: Response) -> Result<TokenMap, serde_json::Error> {
     let mut token = String::new();
     response.read_to_string(&mut token).unwrap();
-    println!("parse_token_response token: {}", token);
     serde_json::from_str(&token)
 }
 

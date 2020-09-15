@@ -229,8 +229,6 @@ mod tests {
         let public_client =
             Client::public(public_id, client_url.parse().unwrap(), "default".parse().unwrap());
 
-        println!("test register_client");
-
         oauth_service.register_client(public_client);
         oauth_service
             .check(public_id, None)
