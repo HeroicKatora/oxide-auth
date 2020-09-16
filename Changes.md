@@ -2,43 +2,38 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
-# v0.5.0-rc.0 (2019-Sep-13)
+# v0.5.0 (2019-Sep-??)
 
-Cleanup release
+Refactoring release
 
-Updates
+Moves all web server specific modules to separate crates
+- `actix` is in `oxide-auth-actix`
+  - Was updated to `actix-web = 3.0`
+- `iron` is in `oxide-auth-iron`
+- `rocket` is in `oxide-auth-rocket`
+- `rouille` is in `oxide-auth-rouille`
+
+All `code_grant` functions and their flows have been converted into Mealy state
+machines which borrow neither the request nor endpoint. This makes it possible
+to pause them at any point and continue at the pace of an outer executor
+without blocking, enabling embedding into `async`. See `oxide-auth-async`. At
+the same time the amount of breaking changes is kept minimal.
+
+Main Dependency Updates
+- The `ring` library is no longer used in the main crate. This would previously
+  prevent linking against crates with different version requirements due to an
+  involved native interface.
+- The crates from `RustCrypto` are used instead.
+- The default password policy is now provided by `rust-argon2`.
 - The public `url` dependency has been bumped to `2.0`.
 
-Interface refactors
+Changed Interfaces
 - Encapsulated the `OwnerSolicitor`'s consent check argument as `Solicitation`.
   This new type also contains a method to the state of the client and can be
   extended without breaking the SemVer interface.
 - The `Client` constructors now take a `RegisteredUrl` instead of an `Url`.
   This enum has one additional variant, `ExactUrl`, that requires uses to match
   the URI precisely with the registered character sequence, not semantically.
-
-Interface improvements
-- The `AssertionKind` is now non-exhaustive using the core attribute.
-
-# v0.5.0-preview.1 (2019-Sep-02)
-
-Refactoring release
-
-All `code_grant` functions and their flows have been converted into Mealy state
-machines which borrow neither the request nor endpoint. This makes it possible
-to pause them at any point and continue at the pace of an outer executor
-without blocking, enabling embedding into `async`. See `oxide-auth-async`.
-
-# v0.5.0-preview.0 (2019-Dec-??)
-
-Refactoring and Tech Debt release
-
-Moves all web server specific modules to separate crates
-- `actix` is in `oxide-auth-actix`
-  - Was updated to `actix-web = 1.0`
-- `iron` is in `oxide-auth-iron`
-- `rocket` is in `oxide-auth-rocket`
-- `rouille` is in `oxide-auth-rouille`
 
 Addressed the following deprecations
 - The `ephemeral` constructor of `Assertion` is no longer accompanied by a
@@ -55,6 +50,7 @@ Interface improvements
 - The version requirement for `ring` has been relaxed to `>=0.13,<0.15`.
 - Added `iter` methods for `AuthorizationError` and `AccessTokenError`.
 - Add extension `Value` reference accessors `public_value` and `private_value`.
+- The `AssertionKind` is now non-exhaustive using the core attribute.
 
 Interface ergonomic adjustments
 - The `BearerToken` and `ErrorDescription` conversion with `to_json` now takes
