@@ -3,10 +3,9 @@ name = "oxide-auth-db"
 version = "0.1.0"
 authors = ["liujing <liujingb@mail.taiji.com.cn>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
-description = "A OAuth2 server library for redis registrar featuring a set of configurable and pluggable backends."
+description = "An implement of DB registrar with configurable databases."
 readme = "../Readme.md"
 keywords = ["oauth", "server", "oauth2", "redis"]
-categories = ["web-programming::http-server", "authentication"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 
