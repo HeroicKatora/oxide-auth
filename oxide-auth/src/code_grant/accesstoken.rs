@@ -664,6 +664,7 @@ impl BearerToken {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitives::issuer::TokenType;
 
     #[test]
     fn bearer_token_encoding() {
@@ -672,6 +673,7 @@ mod tests {
                 token: "access".into(),
                 refresh: Some("refresh".into()),
                 until: Utc::now(),
+                token_type: TokenType::Bearer,
             },
             "scope".into(),
         );

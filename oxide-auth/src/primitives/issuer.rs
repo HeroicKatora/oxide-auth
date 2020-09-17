@@ -47,6 +47,17 @@ pub struct IssuedToken {
     /// Technically, a time to live is expected in the response but this will be transformed later.
     /// In a direct backend access situation, this enables high precision timestamps.
     pub until: Time,
+
+    /// The type of the token.
+    pub token_type: TokenType,
+}
+
+/// The type of token, describing proper usage.
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub enum TokenType {
+    /// A bearer token used on its own in an Authorization header.
+    Bearer,
 }
 
 /// Refresh token information returned to a client.
@@ -65,6 +76,9 @@ pub struct RefreshedToken {
     /// Technically, a time to live is expected in the response but this will be transformed later.
     /// In a direct backend access situation, this enables high precision timestamps.
     pub until: Time,
+
+    /// The type of the new access token.
+    pub token_type: TokenType,
 }
 
 /// Keeps track of access and refresh tokens by a hash-map.
@@ -199,6 +213,7 @@ impl IssuedToken {
             token,
             refresh: None,
             until,
+            token_type: TokenType::Bearer,
         }
     }
 
@@ -222,6 +237,14 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         let (access, refresh) = {
             let access = self.generator.tag(self.usage, &grant)?;
             let refresh = self.generator.tag(self.usage.wrapping_add(1), &grant)?;
+            debug_assert!(
+                access.len() > 0,
+                "An empty access token was generated, this is horribly insecure."
+            );
+            debug_assert!(
+                refresh.len() > 0,
+                "An empty refresh token was generated, this is horribly insecure."
+            );
             (access, refresh)
         };
 
@@ -238,6 +261,7 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
             token: access,
             refresh: Some(refresh),
             until,
+            token_type: TokenType::Bearer,
         })
     }
 
@@ -278,6 +302,7 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
             token: new_access,
             refresh: None,
             until,
+            token_type: TokenType::Bearer,
         })
     }
 
@@ -373,6 +398,7 @@ impl TokenSigner {
             token,
             refresh: Some(refresh),
             until: grant.until,
+            token_type: TokenType::Bearer,
         })
     }
 

@@ -1,4 +1,4 @@
-use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken, TokenMap};
+use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken, TokenMap, TokenType};
 use oxide_auth::primitives::generator::RandomGenerator;
 use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{
@@ -163,6 +163,7 @@ impl RefreshTokenSetup {
             token: body.access_token.expect("Expected a token"),
             refresh: body.refresh_token,
             until: Utc::now() + Duration::seconds(duration),
+            token_type: TokenType::Bearer,
         }
     }
 

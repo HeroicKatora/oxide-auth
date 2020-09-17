@@ -1,4 +1,4 @@
-use primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap};
+use primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap, TokenType};
 use primitives::generator::RandomGenerator;
 use primitives::grant::{Grant, Extensions};
 use primitives::registrar::{Client, ClientMap, RegisteredUrl};
@@ -115,6 +115,7 @@ impl RefreshTokenSetup {
             token: body.access_token.expect("Expected a token"),
             refresh: body.refresh_token,
             until: Utc::now() + Duration::seconds(duration),
+            token_type: TokenType::Bearer,
         }
     }
 
