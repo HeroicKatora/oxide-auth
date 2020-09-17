@@ -645,7 +645,6 @@ impl ErrorDescription {
 impl BearerToken {
     /// Convert the token into a json string, viable for being sent over a network with
     /// `application/json` encoding.
-    // FIXME: rename to `into_json` or have `&self` argument.
     pub fn to_json(&self) -> String {
         let remaining = self.0.until.signed_duration_since(Utc::now());
         let token_response = TokenResponse {
