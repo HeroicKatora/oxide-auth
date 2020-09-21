@@ -27,9 +27,6 @@ rand = "0.7.3"
 rust-argon2 = "0.8.2"
 rmp-serde = "0.14"
 url = "1.7"
-# log
-log = "0.4.8"
-log4rs = "0.10.0"
 
 [dev-dependencies]
 reqwest = "^0.9"
