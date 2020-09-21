@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 oxide-auth = { version = "0.5.0-preview.0", path = "../../../oxide-auth" }
 oxide-auth-actix = { version = "0.0.1", path = "./../../../oxide-auth-actix" }
-oxide-auth-db = { version = "0.1.0", path = "./../../" }
+oxide-auth-db = { version = "0.1.0", path = "./../../"}
 actix = "0.9"
 actix-rt = "1.0"
 actix-web = "2.0"
@@ -20,4 +20,6 @@ reqwest = "=0.9.5"
 serde = "1.0"
 serde_json = "1.0"
 url = "1.7"
+anyhow = "1.0"
+r2d2_redis = {version = "0.13"}
 

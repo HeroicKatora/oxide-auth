@@ -92,25 +92,25 @@ pub fn main() {
         "RUST_LOG",
         "actix_example=info,actix_web=info,actix_http=info,actix_service=info",
     );
-    std::env::set_var(
-        "REDIS_URL",
-        "redis://localhost/3",
-    );
-    std::env::set_var(
-        "MAX_POOL_SIZE",
-        "32",
-    );
+    std::env::set_var("REDIS_URL", "redis://localhost/3");
+    std::env::set_var("MAX_POOL_SIZE", "32");
+
+    std::env::set_var("CLIENT_PREFIX", "client:");
+
     env_logger::init();
 
-    let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");
+    let redis_url = env::var("REDIS_URL").expect("REDIS_URL should be set");
     let max_pool_size = env::var("MAX_POOL_SIZE").unwrap_or("32".parse().unwrap());
+    let client_prefix = env::var("CLIENT_PREFIX").unwrap_or("client:".parse().unwrap());
 
     let mut sys = actix_rt::System::new("HttpServerClient");
 
     // Start, then open in browser, don't care about this finishing.
     let _ = sys.block_on(start_browser());
 
-    let oauth_db_service = DBRegistrar::from_url(redis_url.to_owned(), max_pool_size.parse().unwrap());
+    let oauth_db_service =
+        DBRegistrar::new(redis_url, max_pool_size.parse::<u32>().unwrap(), client_prefix)
+            .expect("Invalid URL to build DBRegistrar");
 
     let state = State::preconf_db_registrar(oauth_db_service).start();
 
@@ -135,13 +135,10 @@ pub fn main() {
     support::dummy_client();
     // Run the rest of the system.
     let _ = sys.run();
-
 }
 
 impl State {
-
-    pub fn preconf_db_registrar(db_service: DBRegistrar) -> Self{
-
+    pub fn preconf_db_registrar(db_service: DBRegistrar) -> Self {
         State {
             endpoint: Generic {
                 // A redis db registrar, user can use regist() function to pre regist some clients.
@@ -166,7 +163,6 @@ impl State {
             },
         }
     }
-
 
     pub fn with_solicitor<'a, S>(
         &'a mut self, solicitor: S,

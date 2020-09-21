@@ -7,6 +7,7 @@ use oxide_auth::primitives::registrar::{
 };
 use oxide_auth::primitives::prelude::{ClientUrl, PreGrant, Scope};
 use crate::db_service::DataSource;
+use r2d2_redis::redis::RedisError;
 
 /// A database client service which implemented Registrar.
 /// db: repository service to query stored clients or regist new client.
@@ -34,11 +35,12 @@ static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| Argon2::default());
 
 impl DBRegistrar {
     /// Create an DB connection recording to features.
-    pub fn from_url(url: String, max_pool_size: u32) -> Self {
-        DBRegistrar {
-            repo: DataSource::from_url(url, max_pool_size),
+    pub fn new(url: String, max_pool_size: u32, client_prefix: String) -> Result<Self, RedisError> {
+        let repo = DataSource::new(url, max_pool_size, client_prefix)?;
+        Ok(DBRegistrar {
+            repo,
             password_policy: None,
-        }
+        })
     }
 
     /// Insert or update the client record.
@@ -110,8 +112,7 @@ impl Registrar for DBRegistrar {
         let client = self
             .repo
             .find_client_by_id(&bound.client_id)
-            .map_err(|_e| RegistrarError::Unspecified)
-            .unwrap();
+            .map_err(|_e| RegistrarError::Unspecified)?;
         Ok(PreGrant {
             client_id: bound.client_id.into_owned(),
             redirect_uri: bound.redirect_uri.into_owned(),
@@ -136,14 +137,15 @@ impl Registrar for DBRegistrar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxide_auth::primitives::registrar::ExactUrl;
+    use oxide_auth::primitives::registrar::{ExactUrl, RegisteredUrl};
+    use std::str::FromStr;
 
     #[test]
     fn public_client() {
         let policy = Argon2::default();
         let client = Client::public(
             "ClientId",
-            "https://example.com".parse().unwrap(),
+            RegisteredUrl::Exact(ExactUrl::from_str("https://example.com").unwrap()),
             "default".parse().unwrap(),
         )
         .encode(&policy);
@@ -161,7 +163,7 @@ mod tests {
         let pass = b"AB3fAj6GJpdxmEVeNCyPoA==";
         let client = Client::confidential(
             "ClientId",
-            "https://example.com".parse().unwrap(),
+            RegisteredUrl::Exact(ExactUrl::from_str("https://example.com").unwrap()),
             "default".parse().unwrap(),
             pass,
         )
@@ -177,39 +179,48 @@ mod tests {
     fn with_additional_redirect_uris() {
         let client_id = "ClientId";
         let redirect_uri =
-            RegisteredUrl::from(ExactUrl::new("https://example.com/foo".parse().unwrap()));
-        let additional_redirect_uris: Vec<RegisteredUrl> = vec![RegisteredUrl::from(ExactUrl::new(
-            "https://example.com/bar".parse().unwrap(),
-        ))];
+            RegisteredUrl::from(ExactUrl::new("https://example.com/foo".parse().unwrap()).unwrap());
+        let additional_redirect_uris: Vec<RegisteredUrl> = vec![RegisteredUrl::from(
+            ExactUrl::new("https://example.com/bar".parse().unwrap()).unwrap(),
+        )];
         let default_scope = "default-scope".parse().unwrap();
         let client = Client::public(client_id, redirect_uri, default_scope)
             .with_additional_redirect_uris(additional_redirect_uris);
-        let mut client_map = DBRegistrar::from_url("redis://localhost/3".parse().unwrap(), 32);
-        client_map.register_client(client);
+        let mut db_registrar = DBRegistrar::new(
+            "redis://localhost/3".parse().unwrap(),
+            32,
+            "client:".parse().unwrap(),
+        )
+        .unwrap();
+        db_registrar.register_client(client);
 
         assert_eq!(
-            client_map
+            db_registrar
                 .bound_redirect(ClientUrl {
                     client_id: Cow::from(client_id),
                     redirect_uri: Some(Cow::Borrowed(&"https://example.com/foo".parse().unwrap()))
                 })
                 .unwrap()
                 .redirect_uri,
-            Cow::Owned("https://example.com/foo".parse().unwrap())
+            Cow::Owned::<RegisteredUrl>(RegisteredUrl::from(
+                ExactUrl::new("https://example.com/foo".parse().unwrap()).unwrap()
+            ))
         );
 
         assert_eq!(
-            client_map
+            db_registrar
                 .bound_redirect(ClientUrl {
                     client_id: Cow::from(client_id),
                     redirect_uri: Some(Cow::Borrowed(&"https://example.com/bar".parse().unwrap()))
                 })
                 .unwrap()
                 .redirect_uri,
-            Cow::Owned("https://example.com/bar".parse().unwrap())
+            Cow::Owned::<RegisteredUrl>(RegisteredUrl::from(
+                ExactUrl::new("https://example.com/bar".parse().unwrap()).unwrap()
+            ))
         );
 
-        assert!(client_map
+        assert!(db_registrar
             .bound_redirect(ClientUrl {
                 client_id: Cow::from(client_id),
                 redirect_uri: Some(Cow::Borrowed(&"https://example.com/baz".parse().unwrap()))
@@ -219,15 +230,23 @@ mod tests {
 
     #[test]
     fn client_service() {
-        let mut oauth_service = DBRegistrar::from_url("redis://localhost/3".parse().unwrap(), 32);
+        let mut oauth_service = DBRegistrar::new(
+            "redis://localhost/3".parse().unwrap(),
+            32,
+            "client:".parse().unwrap(),
+        )
+        .unwrap();
         let public_id = "PrivateClientId";
         let client_url = "https://example.com";
 
         let private_id = "PublicClientId";
         let private_passphrase = b"WOJJCcS8WyS2aGmJK6ZADg==";
 
-        let public_client =
-            Client::public(public_id, client_url.parse().unwrap(), "default".parse().unwrap());
+        let public_client = Client::public(
+            public_id,
+            RegisteredUrl::Exact(ExactUrl::new(client_url.parse().unwrap()).unwrap()),
+            "default".parse().unwrap(),
+        );
 
         oauth_service.register_client(public_client);
         oauth_service
@@ -240,7 +259,7 @@ mod tests {
 
         let private_client = Client::confidential(
             private_id,
-            client_url.parse().unwrap(),
+            RegisteredUrl::Exact(ExactUrl::new(client_url.parse().unwrap()).unwrap()),
             "default".parse().unwrap(),
             private_passphrase,
         );
