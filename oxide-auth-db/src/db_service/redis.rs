@@ -116,8 +116,8 @@ impl RedisDataSource {
     pub fn get_url(&self) -> String {
         self.url.clone()
     }
-    pub fn get_pool(self) -> Pool<RedisConnectionManager> {
-        self.pool
+    pub fn get_pool(&self) -> Pool<RedisConnectionManager> {
+        self.pool.clone()
     }
 }
 
