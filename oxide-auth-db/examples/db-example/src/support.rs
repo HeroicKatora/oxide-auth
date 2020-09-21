@@ -6,19 +6,14 @@ use std::collections::HashMap;
 
 pub use self::generic::{consent_page_html, open_in_browser, Client, ClientConfig, ClientError};
 
-use actix_web::{
-    App, dev, web, HttpServer, HttpResponse, Responder,
-    middleware::{
-        Logger,
-        normalize::{NormalizePath, TrailingSlash},
-    },
-};
+use actix_web::App;
+use actix_web::*;
 
-pub fn dummy_client() -> dev::Server {
+pub fn dummy_client() {
     HttpServer::new(move || {
         let config = ClientConfig {
             client_id: "LocalClient".into(),
-            client_secret: None,
+            client_secret: Option::from("test".to_string()),
             protected_url: "http://localhost:8020/".into(),
             token_url: "http://localhost:8020/token".into(),
             refresh_url: "http://localhost:8020/refresh".into(),
@@ -27,20 +22,18 @@ pub fn dummy_client() -> dev::Server {
 
         App::new()
             .data(Client::new(config))
-            .wrap(Logger::default())
-            .wrap(NormalizePath::new(TrailingSlash::Trim))
             .route("/endpoint", web::get().to(endpoint_impl))
             .route("/refresh", web::post().to(refresh))
             .route("/", web::get().to(get_with_token))
     })
     .bind("localhost:8021")
     .expect("Failed to start dummy client")
-    .run()
+    .run();
 }
 
-async fn endpoint_impl(
+fn endpoint_impl(
     (query, state): (web::Query<HashMap<String, String>>, web::Data<Client>),
-) -> impl Responder {
+) -> HttpResponse {
     if let Some(cause) = query.get("error") {
         return HttpResponse::BadRequest()
             .body(format!("Error during owner authorization: {:?}", cause));
@@ -57,14 +50,14 @@ async fn endpoint_impl(
     }
 }
 
-async fn refresh(state: web::Data<Client>) -> impl Responder {
+fn refresh(state: web::Data<Client>) -> HttpResponse {
     match state.refresh() {
         Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }
 
-async fn get_with_token(state: web::Data<Client>) -> impl Responder {
+fn get_with_token(state: web::Data<Client>) -> HttpResponse {
     let protected_page = match state.retrieve_protected_page() {
         Ok(page) => page,
         Err(err) => return HttpResponse::InternalServerError().body(format!("{}", err)),

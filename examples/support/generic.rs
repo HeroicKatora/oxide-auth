@@ -11,6 +11,7 @@
 #![allow(unused)]
 
 /// Simplistic reqwest client.
+#[path="./client.rs"]
 mod client;
 
 use oxide_auth::endpoint::Solicitation;

@@ -9,6 +9,7 @@ use std::io::Read;
 use std::sync::{Arc, RwLock};
 
 use self::reqwest::{header, Response};
+use oxide_auth::endpoint::UniqueValue;
 
 /// Send+Sync client implementation.
 pub struct Client {
@@ -31,6 +32,9 @@ pub struct Config {
 
     /// The redirect_uri to use.
     pub redirect_uri: String,
+
+    /// The client_secret to use.
+    pub client_secret: Option<String>,
 }
 
 pub enum Error {
@@ -98,12 +102,23 @@ impl Client {
 
         let mut params = HashMap::new();
         params.insert("grant_type", "authorization_code");
-        params.insert("client_id", &self.config.client_id);
         params.insert("code", code);
         params.insert("redirect_uri", &self.config.redirect_uri);
-        let access_token_request = client
-            .post(&self.config.token_url)
-            .form(&params).build().unwrap();
+        let access_token_request =  match &self.config.client_secret{
+            Some(client_secret) => client
+                .post(&self.config.token_url)
+                .form(&params)
+                .basic_auth(&self.config.client_id, client_secret.get_unique())
+                .build().unwrap(),
+            None =>{
+                params.insert("client_id", &self.config.client_id);
+                client
+                .post(&self.config.token_url)
+                .form(&params)
+                .build().unwrap()
+            }
+
+        };
 
         let token_response = client
             .execute(access_token_request)
@@ -159,14 +174,26 @@ impl Client {
             None => return Err(Error::NoToken),
         };
 
+
         let mut params = HashMap::new();
         params.insert("grant_type", "refresh_token");
-        params.insert("client_id", &self.config.client_id);
         params.insert("refresh_token", &refresh);
-        let access_token_request = client
-            .post(&self.config.refresh_url)
-            .form(&params).build().unwrap();
 
+        let access_token_request = match &self.config.client_secret {
+            Some(client_secret) => client
+                .post(&self.config.refresh_url)
+                .form(&params)
+                .basic_auth(&self.config.client_id, client_secret.get_unique())
+                .build().unwrap(),
+            None => {
+                params.insert("client_id", &self.config.client_id);
+                client
+                    .post(&self.config.refresh_url)
+                    .form(&params)
+                    .build().unwrap()
+            }
+
+        };
         let token_response = client
             .execute(access_token_request)
             .map_err(|_| Error::RefreshFailed)?;

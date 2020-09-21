@@ -21,6 +21,7 @@ pub fn dummy_client()
         token_url: "http://localhost:8020/token".into(),
         refresh_url: "http://localhost:8020/refresh".into(),
         redirect_uri: "http://localhost:8021/endpoint".into(),
+        client_secret: None
     });
 
     move |request| {
