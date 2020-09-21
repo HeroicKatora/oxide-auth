@@ -79,8 +79,6 @@ extern crate serde_json;
 extern crate sha2;
 extern crate subtle;
 extern crate url;
-#[macro_use]
-extern crate log;
 
 pub mod code_grant;
 pub mod endpoint;
