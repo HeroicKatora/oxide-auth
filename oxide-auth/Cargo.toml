@@ -26,7 +26,7 @@ subtle = "2.2.2"
 rand = "0.7.3"
 rust-argon2 = "0.8.2"
 rmp-serde = "0.14"
-url = "1.7"
+url = "2"
 
 [dev-dependencies]
 reqwest = "0.10.8"

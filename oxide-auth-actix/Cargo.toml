@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth-actix"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 description = "A OAuth2 server library for actix featuring a set of configurable and pluggable backends."
@@ -17,8 +17,8 @@ actix = { version = "0.10", default-features = false }
 actix-web = { version = "3.0", default-features = false }
 futures = "0.3"
 oxide-auth = { version = "0.5.0", path = "../oxide-auth" }
-serde_urlencoded = "0.5.1"
-url = "1.7"
+serde_urlencoded = "0.7"
+url = "2"
 
 [dev-dependencies]
 base64 = "0.11"
