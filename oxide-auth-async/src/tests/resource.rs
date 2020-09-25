@@ -3,8 +3,6 @@ use oxide_auth::primitives::generator::RandomGenerator;
 use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{frontends::simple::endpoint::Error, primitives::scope::Scope, endpoint::WebRequest};
 
-//use frontends::simple::endpoint::resource_flow;
-
 use chrono::{Utc, Duration};
 
 use super::CraftedRequest;
@@ -29,7 +27,7 @@ impl<'a> Endpoint<CraftedRequest> for ResourceEndpoint<'a> {
         Some(self.issuer)
     }
     fn response(
-        &mut self, _request: &mut CraftedRequest, _kind: oxide_auth::endpoint::Template,
+        &mut self, _: &mut CraftedRequest, _: oxide_auth::endpoint::Template,
     ) -> Result<<CraftedRequest as WebRequest>::Response, Self::Error> {
         Ok(Default::default())
     }

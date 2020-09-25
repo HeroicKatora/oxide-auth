@@ -48,7 +48,7 @@ impl<'a> Endpoint<CraftedRequest> for AuthorizationEndpoint<'a> {
         None
     }
     fn response(
-        &mut self, _request: &mut CraftedRequest, _kind: oxide_auth::endpoint::Template,
+        &mut self, _: &mut CraftedRequest, _: oxide_auth::endpoint::Template,
     ) -> Result<<CraftedRequest as WebRequest>::Response, Self::Error> {
         Ok(Default::default())
     }

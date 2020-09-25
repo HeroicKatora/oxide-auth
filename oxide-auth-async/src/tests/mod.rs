@@ -3,8 +3,7 @@ use std::collections::HashMap;
 
 use oxide_auth::{
     primitives::generator::TagGrant,
-    primitives::registrar::PreGrant,
-    endpoint::{WebRequest, OAuthError, WebResponse, OwnerConsent, QueryParameter, Solicitation},
+    endpoint::{WebRequest, WebResponse, OwnerConsent, QueryParameter, Solicitation},
     primitives::grant::Grant,
 };
 use url::Url;
@@ -75,7 +74,6 @@ enum Body {
 #[derive(Debug)]
 enum CraftedError {
     Crafted,
-    Err(OAuthError),
 }
 
 impl WebRequest for CraftedRequest {

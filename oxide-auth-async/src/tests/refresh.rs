@@ -46,7 +46,7 @@ impl<'a> Endpoint<CraftedRequest> for RefreshTokenEndpoint<'a> {
         Some(self.issuer)
     }
     fn response(
-        &mut self, request: &mut CraftedRequest, kind: oxide_auth::endpoint::Template,
+        &mut self, _: &mut CraftedRequest, _: oxide_auth::endpoint::Template,
     ) -> Result<<CraftedRequest as WebRequest>::Response, Self::Error> {
         Ok(Default::default())
     }
@@ -69,6 +69,8 @@ impl<'a> Endpoint<CraftedRequest> for RefreshTokenEndpoint<'a> {
 struct RefreshTokenSetup {
     registrar: ClientMap,
     issuer: TokenMap<RandomGenerator>,
+    /// The original issued token. Unused atm.
+    #[allow(unused)]
     issued: IssuedToken,
     refresh_token: String,
     basic_authorization: String,
