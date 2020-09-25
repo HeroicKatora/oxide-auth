@@ -194,7 +194,7 @@ impl OAuthRequest {
         let mut all_auth = req.headers().get_all(header::AUTHORIZATION);
         let optional = all_auth.next();
 
-        let auth = if let Some(_) = all_auth.next() {
+        let auth = if all_auth.next().is_some() {
             return Err(WebError::Authorization);
         } else {
             optional.and_then(|hv| hv.to_str().ok().map(str::to_owned))
@@ -205,7 +205,7 @@ impl OAuthRequest {
 
     /// Fetch the authorization header from the request
     pub fn authorization_header(&self) -> Option<&str> {
-        self.auth.as_ref().map(|s| s.as_str())
+        self.auth.as_deref()
     }
 
     /// Fetch the query for this request
@@ -230,7 +230,7 @@ impl OAuthResource {
         let mut all_auth = req.headers().get_all(header::AUTHORIZATION);
         let optional = all_auth.next();
 
-        let auth = if let Some(_) = all_auth.next() {
+        let auth = if all_auth.next().is_some() {
             return Err(WebError::Authorization);
         } else {
             optional.and_then(|hv| hv.to_str().ok().map(str::to_owned))
@@ -299,7 +299,7 @@ impl WebRequest for OAuthRequest {
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
-        Ok(self.auth.as_ref().map(String::as_str).map(Cow::Borrowed))
+        Ok(self.auth.as_deref().map(Cow::Borrowed))
     }
 }
 

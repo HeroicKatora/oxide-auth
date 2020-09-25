@@ -1,34 +1,30 @@
 mod support;
 
 use actix::{Actor, Addr, Context, Handler};
-use actix_web::{
-    middleware::{
-        Logger,
-        normalize::{NormalizePath, TrailingSlash},
-    },
-    web, App, HttpRequest, HttpServer, rt,
-};
+use actix_rt;
+use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
-    primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
+    primitives::prelude::{AuthMap, RandomGenerator, Scope, TokenMap},
 };
 use oxide_auth_actix::{
     Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResource, OAuthResponse, Refresh,
     Resource, Token, WebError,
 };
-use std::thread;
+use std::{thread, env};
+use oxide_auth_db::primitives::db_registrar::DBRegistrar;
 
 static DENY_TEXT: &str = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
-<a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient\">
+<a href=\"http://localhost:8020/authorize?response_type=code&client_id=LocalClient&client_secret=test\">
 here</a> to begin the authorization process.
 </html>
 ";
 
 struct State {
     endpoint: Generic<
-        ClientMap,
+        DBRegistrar,
         AuthMap<RandomGenerator>,
         TokenMap<RandomGenerator>,
         Vacant,
@@ -90,25 +86,38 @@ async fn start_browser() -> () {
     let _ = thread::spawn(support::open_in_browser);
 }
 
-// Example of a main function of an actix-web server supporting oauth.
-#[actix_web::main]
-pub async fn main() -> std::io::Result<()> {
+/// Example of a main function of an actix-web server supporting oauth.
+pub fn main() {
     std::env::set_var(
         "RUST_LOG",
         "actix_example=info,actix_web=info,actix_http=info,actix_service=info",
     );
+    std::env::set_var("REDIS_URL", "redis://localhost/3");
+    std::env::set_var("MAX_POOL_SIZE", "32");
+
+    std::env::set_var("CLIENT_PREFIX", "client:");
+
     env_logger::init();
 
-    // Start, then open in browser, don't care about this finishing.
-    rt::spawn(start_browser());
+    let redis_url = env::var("REDIS_URL").expect("REDIS_URL should be set");
+    let max_pool_size = env::var("MAX_POOL_SIZE").unwrap_or("32".parse().unwrap());
+    let client_prefix = env::var("CLIENT_PREFIX").unwrap_or("client:".parse().unwrap());
 
-    let state = State::preconfigured().start();
+    let mut sys = actix_rt::System::new("HttpServerClient");
+
+    // Start, then open in browser, don't care about this finishing.
+    let _ = sys.block_on(start_browser());
+
+    let oauth_db_service =
+        DBRegistrar::new(redis_url, max_pool_size.parse::<u32>().unwrap(), client_prefix)
+            .expect("Invalid URL to build DBRegistrar");
+
+    let state = State::preconf_db_registrar(oauth_db_service).start();
 
     // Create the main server instance
-    let server = HttpServer::new(move || {
+    HttpServer::new(move || {
         App::new()
             .data(state.clone())
-            .wrap(NormalizePath::new(TrailingSlash::Trim))
             .wrap(Logger::default())
             .service(
                 web::resource("/authorize")
@@ -123,30 +132,22 @@ pub async fn main() -> std::io::Result<()> {
     .expect("Failed to bind to socket")
     .run();
 
-    let client = support::dummy_client();
-
-    futures::try_join!(server, client).map(|_| ())
+    support::dummy_client();
+    // Run the rest of the system.
+    let _ = sys.run();
 }
 
 impl State {
-    pub fn preconfigured() -> Self {
+    pub fn preconf_db_registrar(db_service: DBRegistrar) -> Self {
         State {
             endpoint: Generic {
-                // A registrar with one pre-registered client
-                registrar: vec![Client::public(
-                    "LocalClient",
-                    "http://localhost:8021/endpoint"
-                        .parse::<url::Url>()
-                        .unwrap()
-                        .into(),
-                    "default-scope".parse().unwrap(),
-                )]
-                .into_iter()
-                .collect(),
+                // A redis db registrar, user can use regist() function to pre regist some clients.
+                registrar: db_service,
+
                 // Authorization tokens are 16 byte random keys to a memory hash map.
                 authorizer: AuthMap::new(RandomGenerator::new(16)),
                 // Bearer tokens are also random generated but 256-bit tokens, since they live longer
-                // and this example is somewhat paranoid.
+                // and this examples is somewhat paranoid.
                 //
                 // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can
                 // be read and parsed by anyone, but not maliciously created. However, they can not be
