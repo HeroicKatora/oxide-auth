@@ -12,11 +12,13 @@ use self::reqwest::{header, Response};
 use oxide_auth::endpoint::UniqueValue;
 
 /// Send+Sync client implementation.
+#[derive(Clone)]
 pub struct Client {
     config: Config,
     state: Arc<RwLock<State>>,
 }
 
+#[derive(Clone)]
 pub struct Config {
     /// The protected page.
     pub protected_url: String,

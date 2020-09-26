@@ -15,18 +15,18 @@ use actix_web::{
 };
 
 pub fn dummy_client() -> dev::Server {
-    HttpServer::new(move || {
-        let config = ClientConfig {
-            client_id: "LocalClient".into(),
-            client_secret: None,
-            protected_url: "http://localhost:8020/".into(),
-            token_url: "http://localhost:8020/token".into(),
-            refresh_url: "http://localhost:8020/refresh".into(),
-            redirect_uri: "http://localhost:8021/endpoint".into(),
-        };
+    let client = Client::new(ClientConfig {
+        client_id: "LocalClient".into(),
+        client_secret: None,
+        protected_url: "http://localhost:8020/".into(),
+        token_url: "http://localhost:8020/token".into(),
+        refresh_url: "http://localhost:8020/refresh".into(),
+        redirect_uri: "http://localhost:8021/endpoint".into(),
+    });
 
+    HttpServer::new(move || {
         App::new()
-            .data(Client::new(config))
+            .data(client.clone())
             .wrap(Logger::default())
             .wrap(NormalizePath::new(TrailingSlash::Trim))
             .route("/endpoint", web::get().to(endpoint_impl))
