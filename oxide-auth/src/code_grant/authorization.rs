@@ -5,10 +5,10 @@ use std::result::Result as StdResult;
 use url::Url;
 use chrono::{Duration, Utc};
 
-use code_grant::error::{AuthorizationError, AuthorizationErrorType};
-use primitives::authorizer::Authorizer;
-use primitives::registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant};
-use primitives::grant::{Extensions, Grant};
+use crate::code_grant::error::{AuthorizationError, AuthorizationErrorType};
+use crate::primitives::authorizer::Authorizer;
+use crate::primitives::registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant};
+use crate::primitives::grant::{Extensions, Grant};
 use crate::{endpoint::Scope, endpoint::Solicitation, primitives::registrar::BoundClient};
 
 /// Interface required from a request to determine the handling in the backend.

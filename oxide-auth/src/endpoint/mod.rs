@@ -41,21 +41,21 @@ mod tests;
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-pub use primitives::authorizer::Authorizer;
-pub use primitives::issuer::Issuer;
-pub use primitives::registrar::Registrar;
-pub use primitives::scope::Scope;
+pub use crate::primitives::authorizer::Authorizer;
+pub use crate::primitives::issuer::Issuer;
+pub use crate::primitives::registrar::Registrar;
+pub use crate::primitives::scope::Scope;
 
-use code_grant::resource::{Error as ResourceError};
-use code_grant::error::{AuthorizationError, AccessTokenError};
+use crate::code_grant::resource::{Error as ResourceError};
+use crate::code_grant::error::{AuthorizationError, AccessTokenError};
 
 use url::Url;
 
 // Re-export the extension traits under prefixed names.
-pub use code_grant::authorization::Extension as AuthorizationExtension;
-pub use code_grant::accesstoken::Extension as AccessTokenExtension;
+pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
+pub use crate::code_grant::accesstoken::Extension as AccessTokenExtension;
 
-pub use primitives::registrar::PreGrant;
+pub use crate::primitives::registrar::PreGrant;
 pub use self::authorization::*;
 pub use self::accesstoken::*;
 pub use self::error::OAuthError;

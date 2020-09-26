@@ -1,7 +1,7 @@
 use super::{AuthorizationAddon, AuthorizationRequest, AccessTokenAddon, AccessTokenRequest};
 use super::{AddonResult, Value};
 
-pub use code_grant::extensions::Pkce;
+pub use crate::code_grant::extensions::Pkce;
 
 impl AuthorizationAddon for Pkce {
     fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult {

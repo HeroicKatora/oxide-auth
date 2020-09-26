@@ -1,8 +1,8 @@
 //! Basic extension systems.
 //!
 //! Note that extensions will probably return in `v0.4` but not its preview versions.
-pub use code_grant::authorization::Request as AuthorizationRequest;
-pub use code_grant::accesstoken::Request as AccessTokenRequest;
+pub use crate::code_grant::authorization::Request as AuthorizationRequest;
+pub use crate::code_grant::accesstoken::Request as AccessTokenRequest;
 
 mod extended;
 mod pkce;
@@ -15,7 +15,7 @@ use std::sync::Arc;
 pub use self::extended::Extended;
 pub use self::pkce::Pkce;
 pub use self::list::AddonList;
-use primitives::grant::{GrantExtension, Value};
+use crate::primitives::grant::{GrantExtension, Value};
 
 /// Result of extension processing.
 #[must_use = "This type is similar to std::result::Result and should not be ignored."]

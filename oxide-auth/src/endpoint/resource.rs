@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
-use code_grant::resource::{
+use crate::code_grant::resource::{
     protect, Error as ResourceError, Endpoint as ResourceEndpoint, Request as ResourceRequest,
 };
-use primitives::grant::Grant;
+use crate::primitives::grant::Grant;
 
 use super::*;
 

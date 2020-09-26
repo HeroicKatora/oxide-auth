@@ -2,10 +2,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::{AuthorizationAddon, AccessTokenAddon, AddonResult};
-use code_grant::accesstoken::{Extension as AccessTokenExtension, Request};
-use code_grant::authorization::{Extension as AuthorizationExtension, Request as AuthRequest};
-use endpoint::Extension;
-use primitives::grant::{Extensions, GrantExtension};
+use crate::code_grant::accesstoken::{Extension as AccessTokenExtension, Request};
+use crate::code_grant::authorization::{Extension as AuthorizationExtension, Request as AuthRequest};
+use crate::endpoint::Extension;
+use crate::primitives::grant::{Extensions, GrantExtension};
 
 /// A simple list of loosly related authorization and access addons.
 ///

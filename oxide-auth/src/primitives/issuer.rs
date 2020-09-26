@@ -27,10 +27,10 @@ pub trait Issuer {
     fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()>;
 
     /// Get the values corresponding to a bearer token
-    fn recover_token<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
+    fn recover_token<'a>(&'a self, _: &'a str) -> Result<Option<Grant>, ()>;
 
     /// Get the values corresponding to a refresh token
-    fn recover_refresh<'a>(&'a self, &'a str) -> Result<Option<Grant>, ()>;
+    fn recover_refresh<'a>(&'a self, _: &'a str) -> Result<Option<Grant>, ()>;
 }
 
 /// Token parameters returned to a client.
@@ -553,8 +553,8 @@ impl<'a> Issuer for &'a TokenSigner {
 /// Tests for issuer implementations, including those provided here.
 pub mod tests {
     use super::*;
-    use primitives::grant::Extensions;
-    use primitives::generator::RandomGenerator;
+    use crate::primitives::grant::Extensions;
+    use crate::primitives::generator::RandomGenerator;
     use chrono::{Duration, Utc};
 
     fn grant_template() -> Grant {

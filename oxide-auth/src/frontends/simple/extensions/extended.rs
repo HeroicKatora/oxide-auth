@@ -1,7 +1,7 @@
-use endpoint::{Endpoint, Extension, OAuthError, OwnerSolicitor, Scopes, Template, WebRequest};
-use primitives::authorizer::Authorizer;
-use primitives::issuer::Issuer;
-use primitives::registrar::Registrar;
+use crate::endpoint::{Endpoint, Extension, OAuthError, OwnerSolicitor, Scopes, Template, WebRequest};
+use crate::primitives::authorizer::Authorizer;
+use crate::primitives::issuer::Issuer;
+use crate::primitives::registrar::Registrar;
 
 use super::AddonList;
 

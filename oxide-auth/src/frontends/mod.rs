@@ -179,6 +179,6 @@ pub mod simple;
 pub mod dev {
     pub use std::borrow::Cow;
     pub use url::Url;
-    pub use endpoint::{Endpoint, WebRequest, WebResponse};
-    pub use endpoint::{OAuthError, OwnerSolicitor, NormalizedParameter, QueryParameter};
+    pub use crate::endpoint::{Endpoint, WebRequest, WebResponse};
+    pub use crate::endpoint::{OAuthError, OwnerSolicitor, NormalizedParameter, QueryParameter};
 }

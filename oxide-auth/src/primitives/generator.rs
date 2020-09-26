@@ -21,6 +21,7 @@ use std::sync::Arc;
 use base64::{encode, decode};
 use hmac::{crypto_mac::Output, Mac, Hmac, NewMac};
 use rand::{rngs::OsRng, RngCore, thread_rng};
+use serde::{Deserialize, Serialize};
 use rmp_serde;
 
 /// Generic token for a specific grant.
@@ -281,7 +282,7 @@ impl TagGrant for Arc<Assertion> {
 }
 
 mod scope_serde {
-    use primitives::scope::Scope;
+    use crate::primitives::scope::Scope;
 
     use serde::ser::{Serializer};
     use serde::de::{Deserialize, Deserializer, Error};

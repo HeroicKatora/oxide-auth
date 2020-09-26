@@ -1,12 +1,12 @@
-use primitives::authorizer::AuthMap;
-use primitives::issuer::TokenMap;
-use primitives::generator::RandomGenerator;
-use primitives::registrar::{Client, ClientMap, RegisteredUrl};
+use crate::primitives::authorizer::AuthMap;
+use crate::primitives::issuer::TokenMap;
+use crate::primitives::generator::RandomGenerator;
+use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
-use code_grant::accesstoken::TokenResponse;
-use endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
-use frontends::simple::extensions::{AddonList, Extended, Pkce};
-use frontends::simple::endpoint::{Generic, Error, Vacant};
+use crate::code_grant::accesstoken::TokenResponse;
+use crate::endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
+use crate::frontends::simple::extensions::{AddonList, Extended, Pkce};
+use crate::frontends::simple::endpoint::{Generic, Error, Vacant};
 
 use super::{Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::defaults::*;

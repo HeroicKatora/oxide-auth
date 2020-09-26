@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use primitives::authorizer::AuthMap;
-use primitives::registrar::{Client, ClientMap, RegisteredUrl};
+use crate::primitives::authorizer::AuthMap;
+use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
-use endpoint::{OwnerSolicitor};
+use crate::endpoint::{OwnerSolicitor};
 
-use frontends::simple::endpoint::authorization_flow;
+use crate::frontends::simple::endpoint::authorization_flow;
 
 use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::{Allow, Deny};

@@ -1,6 +1,6 @@
-use endpoint::*;
-use primitives::generator::TagGrant;
-use primitives::grant::Grant;
+use crate::endpoint::*;
+use crate::primitives::generator::TagGrant;
+use crate::primitives::grant::Grant;
 
 use std::borrow::Cow;
 use std::collections::HashMap;

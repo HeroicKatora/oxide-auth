@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::str::from_utf8;
 
-use code_grant::refresh::{refresh, Error, Endpoint as RefreshEndpoint, Request};
-use primitives::{registrar::Registrar, issuer::Issuer};
+use crate::code_grant::refresh::{refresh, Error, Endpoint as RefreshEndpoint, Request};
+use crate::primitives::{registrar::Registrar, issuer::Issuer};
 use super::{Endpoint, InnerTemplate, OAuthError, QueryParameter, WebRequest, WebResponse};
 
 /// Takes requests from clients to refresh their access tokens.

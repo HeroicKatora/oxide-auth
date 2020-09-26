@@ -4,13 +4,13 @@ use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
 
-use code_grant::{
+use crate::code_grant::{
     accesstoken::TokenResponse,
     error::{AccessTokenError, AccessTokenErrorType},
 };
-use primitives::grant::Grant;
-use primitives::issuer::{RefreshedToken, Issuer};
-use primitives::registrar::{Registrar, RegistrarError};
+use crate::primitives::grant::Grant;
+use crate::primitives::issuer::{RefreshedToken, Issuer};
+use crate::primitives::registrar::{Registrar, RegistrarError};
 
 /// Required content of a refresh request.
 ///

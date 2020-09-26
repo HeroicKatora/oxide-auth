@@ -1,7 +1,7 @@
-use primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap, TokenType};
-use primitives::generator::RandomGenerator;
-use primitives::grant::{Grant, Extensions};
-use primitives::registrar::{Client, ClientMap, RegisteredUrl};
+use crate::primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap, TokenType};
+use crate::primitives::generator::RandomGenerator;
+use crate::primitives::grant::{Grant, Extensions};
+use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use std::collections::HashMap;
 
@@ -11,8 +11,8 @@ use serde_json;
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
 use super::defaults::*;
-use code_grant::accesstoken::TokenResponse;
-use frontends::simple::endpoint::{refresh_flow, resource_flow};
+use crate::code_grant::accesstoken::TokenResponse;
+use crate::frontends::simple::endpoint::{refresh_flow, resource_flow};
 
 struct RefreshTokenSetup {
     registrar: ClientMap,

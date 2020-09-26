@@ -65,21 +65,6 @@
 //! [`Scopes`]: endpoint/trait.Scopes.html
 #![warn(missing_docs)]
 
-extern crate argon2;
-extern crate base64;
-extern crate chrono;
-extern crate hmac;
-extern crate rand;
-extern crate once_cell;
-extern crate rmp_serde;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-extern crate sha2;
-extern crate subtle;
-extern crate url;
-
 pub mod code_grant;
 pub mod endpoint;
 pub mod frontends;

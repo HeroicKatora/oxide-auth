@@ -1,9 +1,9 @@
-use primitives::issuer::TokenMap;
-use primitives::generator::RandomGenerator;
-use primitives::grant::{Grant, Extensions};
-use primitives::scope::Scope;
+use crate::primitives::issuer::TokenMap;
+use crate::primitives::generator::RandomGenerator;
+use crate::primitives::grant::{Grant, Extensions};
+use crate::primitives::scope::Scope;
 
-use frontends::simple::endpoint::resource_flow;
+use crate::frontends::simple::endpoint::resource_flow;
 
 use chrono::{Utc, Duration};
 
@@ -20,7 +20,7 @@ struct ResourceSetup {
 
 impl ResourceSetup {
     fn new() -> ResourceSetup {
-        use primitives::issuer::Issuer;
+        use crate::primitives::issuer::Issuer;
 
         // Ensure that valid tokens are 16 bytes long, so we can craft an invalid one
         let mut issuer = TokenMap::new(RandomGenerator::new(16));

@@ -1,9 +1,9 @@
-use primitives::authorizer::{AuthMap, Authorizer};
-use primitives::issuer::TokenMap;
-use primitives::grant::{Grant, Extensions};
-use primitives::registrar::{Client, ClientMap, RegisteredUrl};
+use crate::primitives::authorizer::{AuthMap, Authorizer};
+use crate::primitives::issuer::TokenMap;
+use crate::primitives::grant::{Grant, Extensions};
+use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
-use frontends::simple::endpoint::access_token_flow;
+use crate::frontends::simple::endpoint::access_token_flow;
 
 use std::collections::HashMap;
 
@@ -188,7 +188,7 @@ fn access_valid_private() {
 // apply and would be counter intuitive as such information is not preserved in `url`.
 #[test]
 fn access_equivalent_url() {
-    use primitives::authorizer::Authorizer;
+    use crate::primitives::authorizer::Authorizer;
 
     const CLIENT_ID: &str = "ConfusingClient";
     const REDIRECT_URL: &str = "https://client.example";

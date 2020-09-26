@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use primitives::grant::{GrantExtension, Value};
+use crate::primitives::grant::{GrantExtension, Value};
 
 use base64;
 use sha2::{Digest, Sha256};

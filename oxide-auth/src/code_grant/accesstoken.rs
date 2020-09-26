@@ -4,13 +4,14 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use serde_json;
 
-use code_grant::error::{AccessTokenError, AccessTokenErrorType};
-use primitives::authorizer::Authorizer;
-use primitives::issuer::{IssuedToken, Issuer};
-use primitives::grant::{Extensions, Grant};
-use primitives::registrar::{Registrar, RegistrarError};
+use crate::code_grant::error::{AccessTokenError, AccessTokenErrorType};
+use crate::primitives::authorizer::Authorizer;
+use crate::primitives::issuer::{IssuedToken, Issuer};
+use crate::primitives::grant::{Extensions, Grant};
+use crate::primitives::registrar::{Registrar, RegistrarError};
 
 /// Token Response
 #[derive(Deserialize, Serialize)]

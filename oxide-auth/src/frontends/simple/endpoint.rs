@@ -7,15 +7,15 @@
 //! [`Generic`]: ./struct.Generic.html
 //! [`Endpoint`]: ../../endpoint/trait.Endpoint.html
 
-use primitives::authorizer::Authorizer;
-use primitives::issuer::Issuer;
-use primitives::registrar::Registrar;
-use primitives::scope::Scope;
+use crate::primitives::authorizer::Authorizer;
+use crate::primitives::issuer::Issuer;
+use crate::primitives::registrar::Registrar;
+use crate::primitives::scope::Scope;
 
-use endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow, RefreshFlow};
-use endpoint::{Endpoint, Extension, OAuthError, PreGrant, Template, Scopes};
-use endpoint::{OwnerConsent, OwnerSolicitor, Solicitation};
-use endpoint::WebRequest;
+use crate::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow, RefreshFlow};
+use crate::endpoint::{Endpoint, Extension, OAuthError, PreGrant, Template, Scopes};
+use crate::endpoint::{OwnerConsent, OwnerSolicitor, Solicitation};
+use crate::endpoint::WebRequest;
 
 use std::marker::PhantomData;
 

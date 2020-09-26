@@ -1,7 +1,7 @@
 use std::str::from_utf8;
 use std::marker::PhantomData;
 
-use code_grant::accesstoken::{
+use crate::code_grant::accesstoken::{
     access_token, Error as TokenError, Extension, Endpoint as TokenEndpoint, Request as TokenRequest,
 };
 

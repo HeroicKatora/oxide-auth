@@ -4,9 +4,9 @@ use std::borrow::Cow;
 
 use chrono::Utc;
 
-use primitives::issuer::Issuer;
-use primitives::grant::Grant;
-use primitives::scope::Scope;
+use crate::primitives::issuer::Issuer;
+use crate::primitives::grant::Grant;
+use crate::primitives::scope::Scope;
 
 /// Gives additional information about the reason for an access failure.
 ///

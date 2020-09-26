@@ -1,4 +1,4 @@
-use code_grant::authorization::{
+use crate::code_grant::authorization::{
     authorization_code, Error as AuthorizationError, Extension, Endpoint as AuthorizationEndpoint,
     Request as AuthorizationRequest, Pending,
 };
