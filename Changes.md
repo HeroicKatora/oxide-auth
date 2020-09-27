@@ -2,7 +2,65 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
-# v0.4.5 (2019-???-??)
+# v0.5.0 (2019-Sep-27)
+
+Refactoring release
+
+Moves all web server specific modules to separate crates
+- `actix` is in `oxide-auth-actix`
+  - Was updated to `actix-web = 3.0`
+- `iron` is in `oxide-auth-iron`
+- `rocket` is in `oxide-auth-rocket`
+- `rouille` is in `oxide-auth-rouille`
+
+All `code_grant` functions and their flows have been converted into Mealy state
+machines which borrow neither the request nor endpoint. This makes it possible
+to pause them at any point and continue at the pace of an outer executor
+without blocking, enabling embedding into `async`. See `oxide-auth-async`. At
+the same time the amount of breaking changes is kept minimal.
+
+Main Dependency Updates
+- The `ring` library is no longer used in the main crate. This would previously
+  prevent linking against crates with different version requirements due to an
+  involved native interface.
+- The crates from `RustCrypto` are used instead.
+- The default password policy is now provided by `rust-argon2`.
+- The public `url` dependency has been bumped to `2.0`.
+
+Changed Interfaces
+- Encapsulated the `OwnerSolicitor`'s consent check argument as `Solicitation`.
+  This new type also contains a method to the state of the client and can be
+  extended without breaking the SemVer interface.
+- The `Client` constructors now take a `RegisteredUrl` instead of an `Url`.
+  This enum has one additional variant, `ExactUrl`, that requires uses to match
+  the URI precisely with the registered character sequence, not semantically.
+
+Addressed the following deprecations
+- The `ephemeral` constructor of `Assertion` is no longer accompanied by a
+  wrongly spelled variant
+- The type issue with `PublicExtensions` was resolved, `is_private` removed.
+- The refresh attribute of `IssuedToken` is now an `Option`.
+
+Interface improvements
+- The error type `ring::Unspecified` was replaced by `RegistrarError`.
+- Replaced the public constructor from `ring::hmac::SigningKey` with an opaque
+  interface. Together with the above, this removes `ring` from the public
+  interface of the crate, preparing the replacement with different crypto
+  libraries.
+- The version requirement for `ring` has been relaxed to `>=0.13,<0.15`.
+- Added `iter` methods for `AuthorizationError` and `AccessTokenError`.
+- Add extension `Value` reference accessors `public_value` and `private_value`.
+- The `AssertionKind` is now non-exhaustive using the core attribute.
+
+Interface ergonomic adjustments
+- The `BearerToken` and `ErrorDescription` conversion with `to_json` now takes
+  `&self` by reference instead of by-value.
+- Implemented `IntoIter` for `&AuthorizationError` and `&AccessTokenError`.
+- The `description` method of `Copy` error kinds now takes `self` by value.
+- Renamed extension `Value` variant owning accessors to include `into_`.
+- Renamed statically checked `Generic` endpoint flow constructors.
+
+# v0.4.5 (2019-Aug-20)
 
 Feature release
 

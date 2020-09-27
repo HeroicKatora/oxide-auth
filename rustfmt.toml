@@ -1,0 +1,4 @@
+reorder_imports = false
+fn_args_layout = "Compressed"
+reorder_modules = false
+max_width = 105

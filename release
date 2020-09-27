@@ -1,6 +1,6 @@
 #!/bin/bash
 determine_new_version() {
-	grep "version = " Cargo.toml | sed -Ee 's/version = "(.*)"/\1/' | head -1
+	grep "version = " "$1" | sed -Ee 's/version = "(.*)"/\1/' | head -1
 }
 
 check_notexists_version() {
@@ -26,13 +26,17 @@ check_release_changes() {
 
 check_target_features() {
 	if [[ -z $CIRRUS_CI ]]; then
-		cargo build --no-default-features --features="actix-frontend" --example actix &&
-		cargo +nightly build --no-default-features --features="rocket-frontend" --example rocket &&
-		cargo build --no-default-features --features="iron-frontend" --example iron &&
-		cargo build --no-default-features --features="rouille-frontend" --example rouille
+		cargo test -p oxide-auth-actix &&
+		cargo +nightly test -p oxide-auth-rocket &&
+		cargo test -p oxide-auth-iron &&
+		cargo test -p oxide-auth-rouille
 	else
 		echo "Executing on CI, skipping feature checks"
 	fi
+}
+
+check_packaging() {
+	pushd $1 && cargo package && popd
 }
 
 make_git_tag() {
@@ -44,18 +48,15 @@ make_git_tag() {
 	sed -e '1,/'"$new_version"'/d;/\#/,$d;/./,$!d' Changes.md | git tag -s $is_force -F - -e "v$new_version"
 }
 
-new_version="$(determine_new_version)"
-
-# check it is a sane version number
-[[ -z $(grep -vE '[0-9a-zA-Z.-]*' <<< "$new_version" ) ]] || { echo "Fail: Check version number: ${new_version}"; exit 1; }
-
 is_force=""
 do_tag=""
+do_version_check="yes"
 
 for param in $@
 do
 	case "$param" in
 		-f) is_force="-f";;
+		--no-version-check) do_version_check="";;
 		--tag) do_tag="yes";;
 		--help) ;&
 		-h) { cat << EOF
@@ -88,7 +89,12 @@ else
 	{ echo "Checking contributors needs GNU parallel, please make sure manually." 1>&2; }
 fi
 
-check_notexists_version || { echo "Version $new_version appears already published"; exit 1; }
+new_version="$(determine_new_version "oxide-auth/Cargo.toml")"
+
+# check it is a sane version number
+[[ -z $(grep -vE '[0-9a-zA-Z.-]*' <<< "$new_version" ) ]] || { echo "Fail: Check version number: ${new_version}"; exit 1; }
+
+[[ -z $version_check ]] || check_notexists_version || { echo "Version $new_version appears already published"; exit 1; }
 
 # Check there are no more [WIP] markers in Migrate and Readme
 count_wip_marker || { echo "Fail: Work in progress in documentation"; exit 1; }
@@ -97,7 +103,7 @@ count_wip_marker || { echo "Fail: Work in progress in documentation"; exit 1; }
 check_release_changes && { echo "Fail: No changelog regarding this release"; exit 1; }
 
 # Packaging works. Note: does not publish the version.
-cargo package || { echo "Fail: cargo could not package successfully"; exit 1; }
+check_packaging oxide-auth || { echo "Fail: cargo could not package successfully"; exit 1; }
 
 check_target_features || { echo "Fail: one or more required target-feature combinations doesnt compile its example properly"; exit 1; }
 
