@@ -21,7 +21,7 @@ authorization token. A client is also activated which can be used to access the
 resource. The example assumes the user to be the validated resource owner, who
 can deny or allow the request by the client.
 
-## Integration into Front-Ends
+## Integration
 
 Some popular server libraries have ready-made integration. These still require
 some dependency on the base crate but generally wrap the interface into a user
@@ -32,7 +32,7 @@ are also implemented.
 | What | Crate | Notes | Docs |
 |-|-|-|-|
 | `actix` | `oxide-auth-actix` | - | [![actix docs](https://docs.rs/oxide-auth-actix/badge.svg)](https://docs.rs/oxide-auth-actix) |
-| `async` wrappers | `oxide-auth-async` | - | [![actix docs](https://docs.rs/oxide-auth-actix/badge.svg)](https://docs.rs/oxide-auth-actix) |
+| `async` wrappers | `oxide-auth-async` | - | [![async docs](https://docs.rs/oxide-auth-async/badge.svg)](https://docs.rs/oxide-auth-async) |
 | `redis` | `oxide-auth-db` | - | [![redis docs](https://docs.rs/oxide-auth-db/badge.svg)](https://docs.rs/oxide-auth-db) |
 | `rocket` | `oxide-auth-rocket` | nightly | [![rocket docs](https://docs.rs/oxide-auth-rocket/badge.svg)](https://docs.rs/oxide-auth-rocket) |
 | `rouille` | `oxide-auth-rouille` | - | [![rouille docs](https://docs.rs/oxide-auth-rouille/badge.svg)](https://docs.rs/oxide-auth-rouille) |
@@ -42,7 +42,8 @@ are also implemented.
 
 [![Crates.io Status](https://img.shields.io/crates/v/oxide-auth.svg)](https://crates.io/crates/oxide-auth)
 [![Docs.rs Status](https://docs.rs/oxide-auth/badge.svg)](https://docs.rs/oxide-auth/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/HeroicKatora/oxide-auth/dev-v0.4.0/docs/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/HeroicKatora/oxide-auth/dev-v0.4.0/docs/LICENSE-MIT)
+[![License](https://img.shields.io/badge/license-Apache-blue.svg)](https://raw.githubusercontent.com/HeroicKatora/oxide-auth/dev-v0.4.0/docs/LICENSE-APACHE)
 [![CI Status](https://api.cirrus-ci.com/github/HeroicKatora/oxide-auth.svg)](https://cirrus-ci.com/github/HeroicKatora/oxide-auth)
 
 A more or less comprehensive list of changes is contained in the

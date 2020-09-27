@@ -5,8 +5,8 @@ authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 edition = "2018"
 
-description = "A OAuth2 server library, for actix, gotham or other libraries, featuring a set of configurable and pluggable backends."
-
+description = "Combines oxide-auth with a rouille web server"
+readme = "Readme.md"
 keywords = ["oauth", "server", "oauth2"]
 categories = ["web-programming::http-server", "authentication"]
 license = "MIT OR Apache-2.0"

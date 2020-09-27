@@ -13,7 +13,7 @@ traits, the frontend is as easily pluggable as the backend. You can provide
 your own request, response and error types as well as choose any custom method
 of authenticating clients and users by implement the appropriate traits.
 
-## Integration into Front-Ends
+## Integration
 
 Some popular server libraries have ready-made integration. These still require
 some dependency on the base crate but generally wrap the interface into a user
@@ -24,7 +24,7 @@ are also implemented.
 | What | Crate | Notes | Docs |
 |-|-|-|-|
 | `actix` | `oxide-auth-actix` | - | [![actix docs](https://docs.rs/oxide-auth-actix/badge.svg)](https://docs.rs/oxide-auth-actix) |
-| `async` wrappers | `oxide-auth-async` | - | [![actix docs](https://docs.rs/oxide-auth-actix/badge.svg)](https://docs.rs/oxide-auth-actix) |
+| `async` wrappers | `oxide-auth-async` | - | [![async docs](https://docs.rs/oxide-auth-async/badge.svg)](https://docs.rs/oxide-auth-async) |
 | `redis` | `oxide-auth-db` | - | [![redis docs](https://docs.rs/oxide-auth-db/badge.svg)](https://docs.rs/oxide-auth-db) |
 | `rocket` | `oxide-auth-rocket` | nightly | [![rocket docs](https://docs.rs/oxide-auth-rocket/badge.svg)](https://docs.rs/oxide-auth-rocket) |
 | `rouille` | `oxide-auth-rouille` | - | [![rouille docs](https://docs.rs/oxide-auth-rouille/badge.svg)](https://docs.rs/oxide-auth-rouille) |

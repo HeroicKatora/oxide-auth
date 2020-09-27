@@ -5,9 +5,10 @@ authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
 description = "Combines oxide-auth with async and futures"
-
+readme = "Readme.md"
+keywords = ["oauth", "server", "oauth2"]
+categories = ["web-programming::http-server", "authentication"]
 license = "MIT OR Apache-2.0"
-
 edition = "2018"
 
 [dependencies]
