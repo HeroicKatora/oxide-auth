@@ -6,7 +6,8 @@
 
 use actix::{MailboxError, Message};
 use actix_web::{
-    dev::{HttpResponseBuilder, Payload},
+    HttpResponseBuilder,
+    dev::{Payload},
     http::{
         header::{self, HeaderMap, InvalidHeaderValue},
         StatusCode,
@@ -373,19 +374,16 @@ impl FromRequest for OAuthResource {
 }
 
 impl Responder for OAuthResponse {
-    type Error = WebError;
-    type Future = Ready<Result<HttpResponse, Self::Error>>;
-
-    fn respond_to(self, _: &HttpRequest) -> Self::Future {
+    fn respond_to(self, _: &HttpRequest) -> HttpResponse {
         let mut builder = HttpResponseBuilder::new(self.status);
         for (k, v) in self.headers.into_iter() {
-            builder.header(k, v.to_owned());
+            builder.insert_header((k, v.to_owned()));
         }
 
         if let Some(body) = self.body {
-            future::ok(builder.body(body))
+            builder.body(body)
         } else {
-            future::ok(builder.finish())
+            builder.finish()
         }
     }
 }
