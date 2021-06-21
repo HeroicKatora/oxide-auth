@@ -4,7 +4,7 @@ use actix::{Actor, Addr, Context, Handler};
 use actix_web::{
     middleware::{
         Logger,
-        normalize::{NormalizePath, TrailingSlash},
+        NormalizePath, TrailingSlash,
     },
     web, App, HttpRequest, HttpServer, rt,
 };

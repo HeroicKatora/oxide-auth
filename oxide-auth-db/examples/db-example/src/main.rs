@@ -103,7 +103,7 @@ pub fn main() {
     let max_pool_size = env::var("MAX_POOL_SIZE").unwrap_or("32".parse().unwrap());
     let client_prefix = env::var("CLIENT_PREFIX").unwrap_or("client:".parse().unwrap());
 
-    let mut sys = actix_rt::System::new("HttpServerClient");
+    let sys = actix_rt::System::new();
 
     // Start, then open in browser, don't care about this finishing.
     let _ = sys.block_on(start_browser());

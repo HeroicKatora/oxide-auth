@@ -10,7 +10,7 @@ use actix_web::{
     App, dev, web, HttpServer, HttpResponse, Responder,
     middleware::{
         Logger,
-        normalize::{NormalizePath, TrailingSlash},
+        NormalizePath, TrailingSlash,
     },
 };
 
@@ -52,14 +52,14 @@ async fn endpoint_impl(
     };
 
     match state.authorize(&code) {
-        Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
+        Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }
 
 async fn refresh(state: web::Data<Client>) -> impl Responder {
     match state.refresh() {
-        Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
+        Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }

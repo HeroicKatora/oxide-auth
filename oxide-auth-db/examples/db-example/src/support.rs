@@ -45,14 +45,14 @@ fn endpoint_impl(
     };
 
     match state.authorize(&code) {
-        Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
+        Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }
 
 fn refresh(state: web::Data<Client>) -> HttpResponse {
     match state.refresh() {
-        Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
+        Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }
