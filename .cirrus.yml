@@ -13,6 +13,7 @@ stable_task:
       - CRATE: oxide-auth-iron
       - CRATE: oxide-auth-rouille
       - CRATE: oxide-auth-db
+        OXIDE_AUTH_SKIP_REDIS: yes
       - CRATE: db-example
   build_script: cargo build -p "$CRATE" --examples
   test_script: cargo test -p "$CRATE"
@@ -34,6 +35,7 @@ nightly_task:
       - CRATE: oxide-auth-rouille
       - CRATE: oxide-auth-rocket
       - CRATE: oxide-auth-db
+        OXIDE_AUTH_SKIP_REDIS: yes
       - CRATE: db-example
   build_script: cargo build -p "$CRATE" --examples
   test_script: cargo test -p "$CRATE"

@@ -177,6 +177,10 @@ mod tests {
 
     #[test]
     fn with_additional_redirect_uris() {
+        if crate::requires_redis_and_should_skip() {
+            return;
+        }
+
         let client_id = "ClientId";
         let redirect_uri =
             RegisteredUrl::from(ExactUrl::new("https://example.com/foo".parse().unwrap()).unwrap());
@@ -230,6 +234,10 @@ mod tests {
 
     #[test]
     fn client_service() {
+        if crate::requires_redis_and_should_skip() {
+            return;
+        }
+
         let mut oauth_service = DBRegistrar::new(
             "redis://localhost/3".parse().unwrap(),
             32,
