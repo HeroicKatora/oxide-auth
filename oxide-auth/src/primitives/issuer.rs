@@ -635,6 +635,23 @@ pub mod tests {
     }
 
     #[test]
+    fn random_refresh_rotation() {
+        let mut token_map = TokenMap::new(RandomGenerator::new(16));
+        let issued = token_map.issue(grant_template());
+
+        let token = issued.expect("Issuing with refresh token failed");
+        let refresh = token.refresh.expect("No refresh token returned");
+
+        let refreshed_token = token_map
+            .refresh(&refresh, grant_template())
+            .expect("Failed to refresh access token");
+
+        let new_refresh = refreshed_token.refresh.expect("No new refresh token returned");
+
+        assert!(refresh != new_refresh);
+    }
+
+    #[test]
     #[should_panic]
     fn bad_generator() {
         struct BadGenerator;
