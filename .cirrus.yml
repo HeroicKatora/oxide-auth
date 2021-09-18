@@ -1,12 +1,6 @@
 stable_task:
   container:
     image: rust:latest
-  additional_containers:
-    - name: redis
-      image: redis:latest
-      port: 6379
-      cpu: 1.0
-      memory: 128Mi
   cargo_cache:
     folder: $CARGO_HOME/registry
     fingerprint_script: cargo update && cat Cargo.lock
@@ -27,12 +21,6 @@ stable_task:
 nightly_task:
   container:
     image: rustlang/rust:nightly
-  additional_containers:
-    - name: redis
-      image: redis:latest
-      port: 6379
-      cpu: 1.0
-      memory: 128Mi
   cargo_cache:
     folder: $CARGO_HOME/registry
     fingerprint_script: cargo update && cat Cargo.lock

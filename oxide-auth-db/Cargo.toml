@@ -16,7 +16,6 @@ rand = "0.7.3"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-serde_urlencoded = "0.7.0"
 rust-argon2 = "0.8.2"
 r2d2 = {version ="0.8", optional = true }
 r2d2_redis = {version = "0.13", optional = true }
