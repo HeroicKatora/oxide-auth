@@ -12,6 +12,8 @@ stable_task:
       - CRATE: actix-example
       - CRATE: oxide-auth-iron
       - CRATE: oxide-auth-rouille
+      - CRATE: oxide-auth-db
+      - CRATE: db-example
   build_script: cargo build -p "$CRATE" --examples
   test_script: cargo test -p "$CRATE"
   before_cache_script: rm -rf $CARGO_HOME/registry/index
@@ -31,6 +33,8 @@ nightly_task:
       - CRATE: oxide-auth-iron
       - CRATE: oxide-auth-rouille
       - CRATE: oxide-auth-rocket
+      - CRATE: oxide-auth-db
+      - CRATE: db-example
   build_script: cargo build -p "$CRATE" --examples
   test_script: cargo test -p "$CRATE"
   before_cache_script: rm -rf $CARGO_HOME/registry/index
