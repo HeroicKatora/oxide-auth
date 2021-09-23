@@ -287,9 +287,14 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         self.set_duration(&mut grant);
         let until = grant.until;
 
-        let next_usage = self.usage.wrapping_add(1);
-        let new_access = self.generator.tag(self.usage, &grant)?;
-        let new_key: Arc<str> = Arc::from(new_access.clone());
+        let tag = self.usage;
+        let new_access = self.generator.tag(tag, &grant)?;
+
+        let tag = tag.wrapping_add(1);
+        let new_refresh = self.generator.tag(tag, &grant)?;
+
+        let new_access_key: Arc<str> = Arc::from(new_access.clone());
+        let new_refresh_key: Arc<str> = Arc::from(new_refresh.clone());
 
         if let Some(atoken) = self.access.remove(&token.access) {
             assert!(Arc::ptr_eq(&token, &atoken));
@@ -300,17 +305,18 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
             let mut_token = Arc::get_mut(&mut token)
                 .unwrap_or_else(|| unreachable!("Grant data was only shared with access and refresh"));
             // Remove the old access token, insert the new.
-            mut_token.access = new_key.clone();
+            mut_token.access = new_access_key.clone();
+            mut_token.refresh = Some(new_refresh_key.clone());
             mut_token.grant = grant;
         }
 
-        self.access.insert(new_key, token.clone());
-        self.refresh.insert(refresh_key, token);
+        self.access.insert(new_access_key, token.clone());
+        self.refresh.insert(new_refresh_key, token);
 
-        self.usage = next_usage;
+        self.usage = tag.wrapping_add(1);
         Ok(RefreshedToken {
             token: new_access,
-            refresh: None,
+            refresh: Some(new_refresh),
             until,
             token_type: TokenType::Bearer,
         })
@@ -627,6 +633,23 @@ pub mod tests {
 
         let token = issued.expect("Issuing without refresh token failed");
         assert!(token.refreshable());
+    }
+
+    #[test]
+    fn random_refresh_rotation() {
+        let mut token_map = TokenMap::new(RandomGenerator::new(16));
+        let issued = token_map.issue(grant_template());
+
+        let token = issued.expect("Issuing with refresh token failed");
+        let refresh = token.refresh.expect("No refresh token returned");
+
+        let refreshed_token = token_map
+            .refresh(&refresh, grant_template())
+            .expect("Failed to refresh access token");
+
+        let new_refresh = refreshed_token.refresh.expect("No new refresh token returned");
+
+        assert!(refresh != new_refresh);
     }
 
     #[test]
