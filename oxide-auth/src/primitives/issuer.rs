@@ -287,10 +287,11 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         self.set_duration(&mut grant);
         let until = grant.until;
 
-        let next_usage = self.usage.wrapping_add(2);
+        let tag = self.usage;
+        let new_access = self.generator.tag(tag, &grant)?;
 
-        let new_access = self.generator.tag(self.usage, &grant)?;
-        let new_refresh = self.generator.tag(self.usage.wrapping_add(1), &grant)?;
+        let tag = tag.wrapping_add(1);
+        let new_refresh = self.generator.tag(tag, &grant)?;
 
         let new_access_key: Arc<str> = Arc::from(new_access.clone());
         let new_refresh_key: Arc<str> = Arc::from(new_refresh.clone());
@@ -312,7 +313,7 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         self.access.insert(new_access_key, token.clone());
         self.refresh.insert(new_refresh_key, token);
 
-        self.usage = next_usage;
+        self.usage = tag.wrapping_add(1);
         Ok(RefreshedToken {
             token: new_access,
             refresh: Some(new_refresh),
