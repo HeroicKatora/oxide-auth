@@ -21,7 +21,7 @@ count_wip_marker() {
 }
 
 check_release_changes() {
-	[[ -z $(grep "# v$new_version" Changes.md) ]]
+	[[ -z $(grep "# v$new_version" $1) ]]
 }
 
 check_target_features() {
@@ -100,7 +100,7 @@ new_version="$(determine_new_version "oxide-auth/Cargo.toml")"
 count_wip_marker || { echo "Fail: Work in progress in documentation"; exit 1; }
 
 # Find a matching header in the changelog
-check_release_changes && { echo "Fail: No changelog regarding this release"; exit 1; }
+check_release_changes "oxide-auth/Changes.md" && { echo "Fail: No changelog regarding this release"; exit 1; }
 
 # Packaging works. Note: does not publish the version.
 check_packaging oxide-auth || { echo "Fail: cargo could not package successfully"; exit 1; }
