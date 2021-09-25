@@ -141,7 +141,7 @@ impl Assertion {
     pub fn new(kind: AssertionKind, key: &[u8]) -> Self {
         match kind {
             AssertionKind::HmacSha256 => Assertion {
-                hasher: Hmac::<sha2::Sha256>::new_varkey(key).unwrap(),
+                hasher: Hmac::<sha2::Sha256>::new_from_slice(key).unwrap(),
             },
         }
     }
@@ -152,7 +152,7 @@ impl Assertion {
         let mut rand_bytes: [u8; 32] = [0; 32];
         thread_rng().fill_bytes(&mut rand_bytes);
         Assertion {
-            hasher: Hmac::<sha2::Sha256>::new_varkey(&rand_bytes).unwrap(),
+            hasher: Hmac::<sha2::Sha256>::new_from_slice(&rand_bytes).unwrap(),
         }
     }
 
