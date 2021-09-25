@@ -2,6 +2,14 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.5.1
+
+Maintenance release
+- Updates a few internal dependencies: `hmac`, `rand`, `rust-argon2`.
+- The `TokenMap` now invalidates and regenerates the refresh token on every
+  call to `Issuer::refresh` (#127). This follows the RFC recommendations:
+  <https://datatracker.ietf.org/doc/html/rfc6819#section-5.2.2.3>
+
 # v0.5.0 (2020-Sep-27)
 
 Refactoring release
