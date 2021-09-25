@@ -153,7 +153,7 @@ impl<'r> WebResponse for OAuthResponse<'r> {
 
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.0.set_status(Status::Found);
-        self.0.set_header(header::Location(url.into_string()));
+        self.0.set_header(header::Location(url.into()));
         Ok(())
     }
 

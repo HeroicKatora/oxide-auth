@@ -313,8 +313,9 @@ impl WebResponse for OAuthResponse {
 
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.status = StatusCode::FOUND;
+        let location = String::from(url);
         self.headers
-            .insert(header::LOCATION, TryFrom::try_from(url.into_string())?);
+            .insert(header::LOCATION, TryFrom::try_from(location)?);
         Ok(())
     }
 

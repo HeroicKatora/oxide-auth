@@ -146,7 +146,7 @@ impl WebResponse for OAuthResponse {
 
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.set_status(Status::Found);
-        self.set_header(headers::Location(url.into_string()));
+        self.set_header(headers::Location(url.into()));
         Ok(())
     }
 
