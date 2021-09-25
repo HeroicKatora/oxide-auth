@@ -45,7 +45,7 @@ make_git_tag() {
 	#   Delete lines starting from the next header
 	#   Delete all empty lines at the start
 	# Use as the initial message for a signed tag, but open edit anyways
-	sed -e '1,/'"$new_version"'/d;/\#/,$d;/./,$!d' Changes.md | git tag -s $is_force -F - -e "v$new_version"
+	sed -e '1,/'"$new_version"'/d;/\#/,$d;/./,$!d' oxide-auth/Changes.md | git tag -s $is_force -F - -e "v$new_version"
 }
 
 is_force=""
@@ -77,17 +77,6 @@ done
 
 # Check that the working dir is clean. May comment this out if it produces problems.
 git_considered_clean || { echo "Fail: Working directory is not clean"; exit 1; }
-
-# Check that for every author, we have at least name or mail recorded in Contributors.txt
-# For each commit author, checks that either his/her name or respective mail
-# address appears in the contributors file. Note that a .mailcap file could be
-# introduced to canonicalize these names in the output of git-shortlog already.
-# Since this needs GNU parallel, the check is optional.
-if which parallel 2>/dev/null; then
-	{ (git shortlog -se | parallel -C '\t|<' grep -Fq -e '{2}' -e '\<{3}' Contributors.txt) || { echo "Fail: contributor not listed"; exit 1; }; }
-else
-	{ echo "Checking contributors needs GNU parallel, please make sure manually." 1>&2; }
-fi
 
 new_version="$(determine_new_version "oxide-auth/Cargo.toml")"
 
