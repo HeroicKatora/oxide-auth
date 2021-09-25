@@ -105,7 +105,7 @@ impl WebResponse for Response {
             .retain(|header| !header.0.eq_ignore_ascii_case("Location"));
         self.inner
             .headers
-            .push(("Location".into(), url.into_string().into()));
+            .push(("Location".into(), String::from(url).into()));
         Ok(())
     }
 

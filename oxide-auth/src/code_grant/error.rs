@@ -90,7 +90,7 @@ impl AuthorizationError {
 
     /// A uri identifying a resource explaining the error in detail.
     pub fn explain_uri(&mut self, uri: Url) {
-        self.uri = Some(uri.into_string().into())
+        self.uri = Some(String::from(uri).into())
     }
 
     /// Iterate over the key value pairs that describe this error.
@@ -192,7 +192,7 @@ impl AccessTokenError {
 
     /// A uri identifying a resource explaining the error in detail.
     pub fn explain_uri(&mut self, uri: Url) {
-        self.uri = Some(uri.into_string().into())
+        self.uri = Some(String::from(uri).into())
     }
 
     /// Iterate over the key value pairs that describe this error.

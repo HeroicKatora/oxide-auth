@@ -110,7 +110,7 @@ impl RedisDataSource {
     pub fn new_with_url(
         url: Url, max_pool_size: u32, client_prefix: String,
     ) -> Result<Self, RedisError> {
-        RedisDataSource::new(url.into_string(), max_pool_size, client_prefix)
+        RedisDataSource::new(url.into(), max_pool_size, client_prefix)
     }
 
     pub fn get_url(&self) -> String {
