@@ -64,10 +64,11 @@ pub enum RegisteredUrl {
     /// An URL that needs to match the redirect URL semantically.
     Semantic(Url),
     /// Same as [`Exact`] variant, except where the redirect URL has the host
-    /// `localhost`, where it ignores the port. This matches the [IETF recomendations].
+    /// `localhost`, where it compares semantically ignoring the port. This matches the
+    /// [IETF recommendations].
     ///
     /// [`Exact`]: Self::Exact
-    /// [IETF recomendations]: https://tools.ietf.org/html/draft-ietf-oauth-security-topics-16#section-2.1
+    /// [IETF recommendations]: https://tools.ietf.org/html/draft-ietf-oauth-security-topics-16#section-2.1
     IgnorePortOnLocalhost(IgnoreLocalPortUrl),
 }
 
@@ -125,14 +126,7 @@ pub struct IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal);
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum IgnoreLocalPortUrlInternal {
     Exact(String),
-    Local(IgnorePort),
-}
-
-#[derive(Clone, Debug, Eq)]
-struct IgnorePort {
-    url: String,
-    port_pos: usize,
-    port_len: u8,
+    Local(Url),
 }
 
 /// A pair of `client_id` and an optional `redirect_uri`.
@@ -337,7 +331,7 @@ impl cmp::PartialEq<ExactUrl> for RegisteredUrl {
         match self {
             RegisteredUrl::Exact(url) => url == exact,
             RegisteredUrl::Semantic(url) => *url == exact.to_url(),
-            RegisteredUrl::IgnorePortOnLocalhost(url) => url == &IgnoreLocalPortUrl::from(exact.clone()),
+            RegisteredUrl::IgnorePortOnLocalhost(url) => url == &IgnoreLocalPortUrl::from(exact),
         }
     }
 }
@@ -345,7 +339,7 @@ impl cmp::PartialEq<ExactUrl> for RegisteredUrl {
 impl cmp::PartialEq<IgnoreLocalPortUrl> for RegisteredUrl {
     fn eq(&self, ign_lport: &IgnoreLocalPortUrl) -> bool {
         match self {
-            RegisteredUrl::Exact(url) => ign_lport == &IgnoreLocalPortUrl::from(url.clone()),
+            RegisteredUrl::Exact(url) => ign_lport == &IgnoreLocalPortUrl::from(url),
             RegisteredUrl::Semantic(url) => ign_lport == &IgnoreLocalPortUrl::from(url.clone()),
             RegisteredUrl::IgnorePortOnLocalhost(url) => ign_lport == url,
         }
@@ -397,14 +391,18 @@ impl core::str::FromStr for ExactUrl {
 }
 
 impl IgnoreLocalPortUrl {
-    /// Try to create a url that ignores port where host is localhost from a string
-    pub fn new(url: String) -> Result<Self, ParseUrlError> {
-        let parsed: Url = url.parse()?;
+    /// Try to create a url that ignores port where host is localhost
+    pub fn new<'a, S: Into<Cow<'a, str>>>(url: S) -> Result<Self, ParseUrlError> {
+        let url: Cow<'a, str> = url.into();
+        let mut parsed: Url = url.parse()?;
         match parsed.host_str() {
-            Some("localhost") => Ok(IgnoreLocalPortUrl(
-                IgnorePort::with_parsed_url(url, parsed).into(),
-            )),
-            _ => Ok(IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Exact(url))),
+            Some("localhost") => {
+                let _ = parsed.set_port(None);
+                Ok(IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Local(parsed)))
+            }
+            _ => Ok(IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Exact(
+                url.into_owned(),
+            ))),
         }
     }
 
@@ -412,7 +410,7 @@ impl IgnoreLocalPortUrl {
     pub fn as_str(&self) -> &str {
         match &self.0 {
             IgnoreLocalPortUrlInternal::Exact(url) => url.as_str(),
-            IgnoreLocalPortUrlInternal::Local(url) => url.url.as_str(),
+            IgnoreLocalPortUrlInternal::Local(url) => url.as_str(),
         }
     }
 
@@ -420,17 +418,9 @@ impl IgnoreLocalPortUrl {
     pub fn to_url(&self) -> Url {
         // TODO: maybe we should store the parsing result?
         match &self.0 {
-            IgnoreLocalPortUrlInternal::Exact(url) => url.parse(),
-            IgnoreLocalPortUrlInternal::Local(url) => url.url.parse(),
+            IgnoreLocalPortUrlInternal::Exact(url) => url.parse().expect("was validated"),
+            IgnoreLocalPortUrlInternal::Local(url) => url.clone(),
         }
-        .expect("was validated")
-    }
-}
-
-impl From<IgnorePort> for IgnoreLocalPortUrlInternal {
-    #[inline]
-    fn from(ignore_port_url: IgnorePort) -> Self {
-        IgnoreLocalPortUrlInternal::Local(ignore_port_url)
     }
 }
 
@@ -441,13 +431,24 @@ impl From<ExactUrl> for IgnoreLocalPortUrl {
     }
 }
 
+impl<'e> From<&'e ExactUrl> for IgnoreLocalPortUrl {
+    #[inline]
+    fn from(exact_url: &'e ExactUrl) -> Self {
+        IgnoreLocalPortUrl::new(exact_url.as_str()).expect("was validated")
+    }
+}
+
 impl From<Url> for IgnoreLocalPortUrl {
-    fn from(url: Url) -> Self {
-        let parsed = url;
-        let url = parsed.as_str().to_owned();
-        match &parsed.host_str() {
-            Some("localhost") => IgnoreLocalPortUrl(IgnorePort::with_parsed_url(url, parsed).into()),
-            _ => IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Exact(url)),
+    fn from(mut url: Url) -> Self {
+        if url.host_str() == Some("localhost") {
+            // Ignore the case where we cannot set the port.
+            // > URL cannot be a base
+            // > it does not have a host
+            // > it has the file scheme
+            let _ = url.set_port(None);
+            IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Local(url))
+        } else {
+            IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Exact(url.into()))
         }
     }
 }
@@ -456,66 +457,7 @@ impl core::str::FromStr for IgnoreLocalPortUrl {
     type Err = ParseUrlError;
     #[inline]
     fn from_str(st: &str) -> Result<Self, Self::Err> {
-        IgnoreLocalPortUrl::new(st.to_string())
-    }
-}
-
-impl IgnorePort {
-    #[cfg(test)]
-    #[inline]
-    fn new(url: String) -> Result<Self, ParseUrlError> {
-        let parsed: Url = url.parse()?;
-        Ok(Self::with_parsed_url(url, parsed))
-    }
-
-    fn with_parsed_url(url: String, parsed: Url) -> Self {
-        let port_pos = parsed.scheme().len()
-            + 1
-            + match parsed.username().len() {
-                0 => 0,
-                len => len + 1,
-            }
-            + match parsed.password() {
-                Some(p) => p.len() + 1,
-                None => 0,
-            }
-            + match parsed.host_str() {
-                Some(h) => h.len() + 2,
-                None => 0,
-            };
-
-        let port_len = match parsed.port() {
-            None => 0,
-            // SAFITY: Since `url` is a valid URL, it's always an ASCII sequence,
-            // so it's safe to get an uncheck range.
-            Some(_) => match unsafe { url.get_unchecked(port_pos + 1..) }
-                .char_indices()
-                .find(|(_, c)| !c.is_numeric())
-                .map(|(i, _)| i)
-            {
-                Some(index) => index + 1,
-                None => url.len() - port_pos,
-            },
-        };
-
-        IgnorePort {
-            url: url,
-            port_pos: port_pos,
-            port_len: port_len as u8,
-        }
-    }
-}
-
-impl PartialEq for IgnorePort {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        unsafe {
-            self.url.get_unchecked(0..self.port_pos) == other.url.get_unchecked(0..other.port_pos)
-                && self.url.get_unchecked(self.port_pos + self.port_len as usize..)
-                    == other
-                        .url
-                        .get_unchecked(other.port_pos + other.port_len as usize..)
-        }
+        IgnoreLocalPortUrl::new(st)
     }
 }
 
@@ -998,46 +940,9 @@ mod tests {
     }
 
     #[test]
-    fn ignore_port_url_new() {
-        let ok_cases = &[
-            ("abc://foo:123", 9, 4u8),
-            ("abc://foo", 9, 0),
-            ("abc://foo/bar", 9, 0),
-            ("abc:///bar", 4, 0),
-            ("https://localhost/cb", 17, 0),
-            ("https://localhost:8000/cb", 17, 5),
-            ("unix:/run/foo.socket", 5, 0),
-            // localhost interpreted as the scheme
-            ("localhost:8080", 10, 0),
-            ("localhost::8080", 10, 0),
-            // not a port
-            ("abc:foo:123/bar", 4, 0),
-            ("abc:/:123/bar", 4, 0),
-        ];
-
-        for &(url, expec_port_pos, expec_port_len) in ok_cases {
-            let expec_url = url;
-            let IgnorePort {
-                url,
-                port_pos,
-                port_len,
-            } = IgnorePort::new(url.into()).unwrap();
-            assert_eq!(expec_url, url);
-            assert_eq!(expec_port_pos, port_pos);
-            assert_eq!(expec_port_len, port_len);
-        }
-
-        let fail_cases = &["abc://:123/bar", "//localhost"];
-
-        for &url in fail_cases {
-            assert!(IgnorePort::new(url.into()).is_err());
-        }
-    }
-
-    #[test]
-    fn ignore_port_url_eq() {
-        let url = IgnorePort::new("https://localhost/cb".into()).unwrap();
-        let url2 = IgnorePort::new("https://localhost:8000/cb".into()).unwrap();
+    fn ignore_local_port_url_eq_local() {
+        let url = IgnoreLocalPortUrl::new("https://localhost/cb").unwrap();
+        let url2 = IgnoreLocalPortUrl::new("https://localhost:8000/cb").unwrap();
 
         let aliases = [
             "https://localhost/cb",
@@ -1051,18 +956,50 @@ mod tests {
 
         let others = [
             "http://localhost/cb",
+            "https://localhost/cb/",
             "https://127.0.0.1/cb",
             "http://127.0.0.1/cb",
         ];
 
-        for alias in aliases.iter().map(|&a| IgnorePort::new(a.into()).unwrap()) {
+        for alias in aliases.iter().map(|&a| IgnoreLocalPortUrl::new(a).unwrap()) {
             assert_eq!(url, alias);
             assert_eq!(url2, alias);
         }
 
-        for other in others.iter().map(|&o| IgnorePort::new(o.into()).unwrap()) {
+        for other in others.iter().map(|&o| IgnoreLocalPortUrl::new(o).unwrap()) {
             assert_ne!(url, other);
             assert_ne!(url2, other);
+        }
+    }
+
+    #[test]
+    fn ignore_local_port_url_eq_not_local() {
+        let url1 = IgnoreLocalPortUrl::new("https://example.com/cb").unwrap();
+        let url2 = IgnoreLocalPortUrl::new("http://example.com/cb/").unwrap();
+
+        let not_url1 = ["https://example.com/cb/", "https://example.com:443/cb"];
+
+        let not_url2 = ["https://example.com/cb", "https://example.com:80/cb/"];
+
+        assert_eq!(
+            url1,
+            IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Exact(
+                "https://example.com/cb".to_string()
+            ))
+        );
+        assert_eq!(
+            url2,
+            IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Exact(
+                "http://example.com/cb/".to_string()
+            ))
+        );
+
+        for different_url in not_url1.iter().map(|&a| IgnoreLocalPortUrl::new(a).unwrap()) {
+            assert_ne!(url1, different_url);
+        }
+
+        for different_url in not_url2.iter().map(|&a| IgnoreLocalPortUrl::new(a).unwrap()) {
+            assert_ne!(url2, different_url);
         }
     }
 
@@ -1072,6 +1009,7 @@ mod tests {
             "https://localhost/callback",
             "https://localhost:8080/callback",
             "http://localhost:8080/callback",
+            "https://localhost:8080",
         ];
 
         let exacts = &[
@@ -1082,11 +1020,12 @@ mod tests {
         ];
 
         for &local in locals {
+            let mut parsed: Url = local.parse().unwrap();
+            let _ = parsed.set_port(None);
+
             assert_eq!(
                 local.parse(),
-                Ok(IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Local(
-                    IgnorePort::new(local.into()).unwrap()
-                )))
+                Ok(IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal::Local(parsed)))
             );
         }
 
