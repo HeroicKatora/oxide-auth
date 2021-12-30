@@ -42,8 +42,8 @@ enum Kind {
     OAuth(OAuthError),
 }
 
-impl<'r> Responder<'r> for OAuthFailure {
-    fn respond_to(self, _: &Request) -> Result<'r> {
+impl<'r> Responder<'r, 'static> for OAuthFailure {
+    fn respond_to(self, _: &Request) -> Result<'static> {
         match self.inner {
             Web(_) | OAuth(DenySilently) | OAuth(BadRequest) => Err(Status::BadRequest),
             OAuth(PrimitiveError) => Err(Status::InternalServerError),
