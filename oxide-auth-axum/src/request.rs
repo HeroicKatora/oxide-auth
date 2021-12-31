@@ -50,11 +50,10 @@ impl OAuthRequest {
     }
 }
 
-impl OAuthResource {
-    /// Turn this OAuthResource into an OAuthRequest for processing
-    pub fn into_request(self) -> OAuthRequest {
+impl From<OAuthResource> for OAuthRequest {
+    fn from(r: OAuthResource) -> OAuthRequest {
         OAuthRequest {
-            auth: self.auth,
+            auth: r.auth,
             ..Default::default()
         }
     }
