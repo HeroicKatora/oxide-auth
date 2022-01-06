@@ -4,6 +4,7 @@ members = [
 	"oxide-auth-async",
 	"oxide-auth-actix",
 	"oxide-auth-actix/examples/actix-example",
+	"oxide-auth-axum",
 	"oxide-auth-iron",
 	"oxide-auth-rocket",
 	"oxide-auth-rouille",
