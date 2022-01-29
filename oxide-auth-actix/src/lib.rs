@@ -4,28 +4,54 @@
 //! `AsActor<_>` to create an actor implementing endpoint functionality via messages.
 #![warn(missing_docs)]
 
-use actix::{MailboxError, Message};
+use actix::{ 
+    MailboxError, 
+    Message 
+};
 use actix_web::{
-    dev::{HttpResponseBuilder, Payload},
+    body::BoxBody,
+    dev::Payload,
     http::{
-        header::{self, HeaderMap, InvalidHeaderValue},
+        header::{ self, HeaderMap, InvalidHeaderValue },
         StatusCode,
     },
     web::Form,
     web::Query,
-    FromRequest, HttpRequest, HttpResponse, Responder, ResponseError,
+    FromRequest,
+    HttpRequest, 
+    HttpResponse, 
+    HttpResponseBuilder, 
+    Responder, 
+    ResponseError
 };
-use futures::future::{self, FutureExt, LocalBoxFuture, Ready};
+use futures::future::{ 
+    self, 
+    FutureExt, 
+    LocalBoxFuture, 
+    Ready 
+};
 use oxide_auth::{
-    endpoint::{Endpoint, NormalizedParameter, OAuthError, QueryParameter, WebRequest, WebResponse},
+    endpoint::{ 
+        Endpoint, 
+        NormalizedParameter, 
+        OAuthError, 
+        QueryParameter, 
+        WebRequest, 
+        WebResponse
+    },
     frontends::simple::endpoint::Error,
 };
-use std::{borrow::Cow, error, fmt, convert::TryFrom};
+use std::{ 
+    borrow::Cow, 
+    convert::TryFrom, 
+    error, 
+    fmt 
+};
 use url::Url;
 
 mod operations;
 
-pub use operations::{Authorize, Refresh, Resource, Token};
+pub use operations::{ Authorize, Refresh, Resource, Token };
 
 /// Describes an operation that can be performed in the presence of an `Endpoint`
 ///
@@ -356,7 +382,6 @@ where
 impl FromRequest for OAuthRequest {
     type Error = WebError;
     type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
-    type Config = ();
 
     fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
         Self::new(req.clone(), payload.take()).boxed_local()
@@ -366,7 +391,6 @@ impl FromRequest for OAuthRequest {
 impl FromRequest for OAuthResource {
     type Error = WebError;
     type Future = Ready<Result<Self, Self::Error>>;
-    type Config = ();
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         future::ready(Self::new(req))
@@ -374,19 +398,18 @@ impl FromRequest for OAuthResource {
 }
 
 impl Responder for OAuthResponse {
-    type Error = WebError;
-    type Future = Ready<Result<HttpResponse, Self::Error>>;
+    type Body = BoxBody;
 
-    fn respond_to(self, _: &HttpRequest) -> Self::Future {
+    fn respond_to(self, _: &HttpRequest) -> HttpResponse {
         let mut builder = HttpResponseBuilder::new(self.status);
         for (k, v) in self.headers.into_iter() {
-            builder.header(k, v.to_owned());
+            builder.insert_header((k, v.to_owned()));
         }
 
         if let Some(body) = self.body {
-            future::ok(builder.body(body))
+            builder.body(body)
         } else {
-            future::ok(builder.finish())
+            builder.finish()
         }
     }
 }
