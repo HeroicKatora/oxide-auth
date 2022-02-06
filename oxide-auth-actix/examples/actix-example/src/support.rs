@@ -10,7 +10,7 @@ use actix_web::{
     App, dev, web, HttpServer, HttpResponse, Responder,
     middleware::{
         Logger,
-        normalize::{NormalizePath, TrailingSlash},
+        NormalizePath, TrailingSlash,
     },
 };
 
