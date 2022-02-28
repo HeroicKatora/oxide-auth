@@ -4,54 +4,29 @@
 //! `AsActor<_>` to create an actor implementing endpoint functionality via messages.
 #![warn(missing_docs)]
 
-use actix::{ 
-    MailboxError, 
-    Message 
-};
+use actix::{MailboxError, Message};
 use actix_web::{
     body::BoxBody,
     dev::Payload,
     http::{
-        header::{ self, HeaderMap, InvalidHeaderValue },
+        header::{self, HeaderMap, InvalidHeaderValue},
         StatusCode,
     },
     web::Form,
     web::Query,
-    FromRequest,
-    HttpRequest, 
-    HttpResponse, 
-    HttpResponseBuilder, 
-    Responder, 
-    ResponseError
+    FromRequest, HttpRequest, HttpResponse, HttpResponseBuilder, Responder, ResponseError,
 };
-use futures::future::{ 
-    self, 
-    FutureExt, 
-    LocalBoxFuture, 
-    Ready 
-};
+use futures::future::{self, FutureExt, LocalBoxFuture, Ready};
 use oxide_auth::{
-    endpoint::{ 
-        Endpoint, 
-        NormalizedParameter, 
-        OAuthError, 
-        QueryParameter, 
-        WebRequest, 
-        WebResponse
-    },
+    endpoint::{Endpoint, NormalizedParameter, OAuthError, QueryParameter, WebRequest, WebResponse},
     frontends::simple::endpoint::Error,
 };
-use std::{ 
-    borrow::Cow, 
-    convert::TryFrom, 
-    error, 
-    fmt 
-};
+use std::{borrow::Cow, convert::TryFrom, error, fmt};
 use url::Url;
 
 mod operations;
 
-pub use operations::{ Authorize, Refresh, Resource, Token };
+pub use operations::{Authorize, Refresh, Resource, Token};
 
 /// Describes an operation that can be performed in the presence of an `Endpoint`
 ///

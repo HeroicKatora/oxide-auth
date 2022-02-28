@@ -2,11 +2,9 @@ mod support;
 
 use actix::{Actor, Addr, Context, Handler};
 use actix_web::{
-    middleware::{
-        Logger,
-        NormalizePath, TrailingSlash,
-    },
-    web::{self, Data}, App, HttpRequest, HttpServer, rt,
+    middleware::{Logger, NormalizePath, TrailingSlash},
+    web::{self, Data},
+    App, HttpRequest, HttpServer, rt,
 };
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation},

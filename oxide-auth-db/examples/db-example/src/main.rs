@@ -1,7 +1,11 @@
 mod support;
 
 use actix::{Actor, Addr, Context, Handler};
-use actix_web::{middleware::Logger, web::{self, Data}, App, HttpRequest, HttpServer, rt};
+use actix_web::{
+    middleware::Logger,
+    web::{self, Data},
+    App, HttpRequest, HttpServer, rt,
+};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
