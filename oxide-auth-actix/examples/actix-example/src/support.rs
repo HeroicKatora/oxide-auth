@@ -7,10 +7,10 @@ use std::collections::HashMap;
 pub use self::generic::{consent_page_html, open_in_browser, Client, ClientConfig, ClientError};
 
 use actix_web::{
-    App, dev, web, HttpServer, HttpResponse, Responder,
+    App, dev, web::{self, Data}, HttpServer, HttpResponse, Responder,
     middleware::{
         Logger,
-        normalize::{NormalizePath, TrailingSlash},
+        NormalizePath, TrailingSlash,
     },
 };
 
@@ -26,7 +26,7 @@ pub fn dummy_client() -> dev::Server {
 
     HttpServer::new(move || {
         App::new()
-            .data(client.clone())
+            .app_data(Data::new(client.clone()))
             .wrap(Logger::default())
             .wrap(NormalizePath::new(TrailingSlash::Trim))
             .route("/endpoint", web::get().to(endpoint_impl))
@@ -52,14 +52,14 @@ async fn endpoint_impl(
     };
 
     match state.authorize(&code) {
-        Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
+        Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }
 
 async fn refresh(state: web::Data<Client>) -> impl Responder {
     match state.refresh() {
-        Ok(()) => HttpResponse::Found().header("Location", "/").finish(),
+        Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }

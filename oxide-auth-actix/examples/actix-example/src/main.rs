@@ -4,9 +4,9 @@ use actix::{Actor, Addr, Context, Handler};
 use actix_web::{
     middleware::{
         Logger,
-        normalize::{NormalizePath, TrailingSlash},
+        NormalizePath, TrailingSlash,
     },
-    web, App, HttpRequest, HttpServer, rt,
+    web::{self, Data}, App, HttpRequest, HttpServer, rt,
 };
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation},
@@ -107,7 +107,7 @@ pub async fn main() -> std::io::Result<()> {
     // Create the main server instance
     let server = HttpServer::new(move || {
         App::new()
-            .data(state.clone())
+            .app_data(Data::new(state.clone()))
             .wrap(NormalizePath::new(TrailingSlash::Trim))
             .wrap(Logger::default())
             .service(
