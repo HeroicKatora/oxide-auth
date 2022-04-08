@@ -2,6 +2,7 @@
 use std::{cmp, fmt, str};
 
 use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
 
 /// Scope of a given grant or resource, a set of scope-tokens separated by spaces.
 ///
@@ -43,7 +44,7 @@ use std::collections::HashSet;
 ///
 /// In particular, the characters '\x22' (`"`) and '\x5c' (`\`)  are not allowed.
 ///
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Scope {
     tokens: HashSet<String>,
 }

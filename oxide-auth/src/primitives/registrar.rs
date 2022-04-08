@@ -16,6 +16,7 @@ use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use argon2::{self, Config};
 use once_cell::sync::Lazy;
 use rand::{RngCore, thread_rng};
+use serde::{Deserialize, Serialize};
 use url::{Url, ParseError as ParseUrlError};
 
 /// Registrars provie a way to interact with clients.
@@ -52,7 +53,7 @@ pub trait Registrar {
 /// 1. By supplying a string to match _exactly_
 /// 2. By an URL which needs to match semantically.
 #[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RegisteredUrl {
     /// An exact URL that must be match literally when the client uses it.
     ///
@@ -91,7 +92,7 @@ pub enum RegisteredUrl {
 /// possible if clients are allowed to provide any semantically matching URL as there are
 /// infinitely many with different hashes. (Note: a hashed form of URL storage is not currently
 /// supported).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExactUrl(String);
 
 /// A redirect URL that ignores port where host is `localhost`.
@@ -120,10 +121,10 @@ pub struct ExactUrl(String);
 /// considered.
 ///
 /// [`ExactUrl`]: ExactUrl
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum IgnoreLocalPortUrlInternal {
     Exact(String),
     Local(Url),
@@ -214,7 +215,7 @@ pub struct Client {
 ///
 /// This provides a standard encoding for `Registrars` who wish to store their clients and makes it
 /// possible to test password policies.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EncodedClient {
     /// The id of this client. If this is was registered at a `Registrar`, this should be a key
     /// to the instance.
@@ -243,7 +244,7 @@ pub struct RegisteredClient<'a> {
 }
 
 /// Enumeration of the two defined client types.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum ClientType {
     /// A public client with no authentication information.
     Public,
