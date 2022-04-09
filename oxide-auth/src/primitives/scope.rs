@@ -44,9 +44,28 @@ use serde::{Deserialize, Serialize};
 ///
 /// In particular, the characters '\x22' (`"`) and '\x5c' (`\`)  are not allowed.
 ///
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Scope {
     tokens: HashSet<String>,
+}
+
+impl Serialize for Scope {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Scope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        core::str::FromStr::from_str(&string).map_err(serde::de::Error::custom)
+    }
 }
 
 impl Scope {

@@ -92,8 +92,18 @@ pub enum RegisteredUrl {
 /// possible if clients are allowed to provide any semantically matching URL as there are
 /// infinitely many with different hashes. (Note: a hashed form of URL storage is not currently
 /// supported).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ExactUrl(String);
+
+impl<'de> Deserialize<'de> for ExactUrl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        core::str::FromStr::from_str(&string).map_err(serde::de::Error::custom)
+    }
+}
 
 /// A redirect URL that ignores port where host is `localhost`.
 ///
@@ -121,13 +131,23 @@ pub struct ExactUrl(String);
 /// considered.
 ///
 /// [`ExactUrl`]: ExactUrl
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum IgnoreLocalPortUrlInternal {
     Exact(String),
     Local(Url),
+}
+
+impl<'de> Deserialize<'de> for IgnoreLocalPortUrl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        Self::new(&string).map_err(serde::de::Error::custom)
+    }
 }
 
 /// A pair of `client_id` and an optional `redirect_uri`.
