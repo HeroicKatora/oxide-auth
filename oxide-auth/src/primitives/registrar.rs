@@ -100,7 +100,7 @@ impl<'de> Deserialize<'de> for ExactUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        let string = String::deserialize(deserializer)?;
+        let string: &str = Deserialize::deserialize(deserializer)?;
         core::str::FromStr::from_str(&string).map_err(serde::de::Error::custom)
     }
 }
@@ -145,8 +145,8 @@ impl<'de> Deserialize<'de> for IgnoreLocalPortUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        let string = String::deserialize(deserializer)?;
-        Self::new(&string).map_err(serde::de::Error::custom)
+        let string: &str = Deserialize::deserialize(deserializer)?;
+        Self::new(string).map_err(serde::de::Error::custom)
     }
 }
 

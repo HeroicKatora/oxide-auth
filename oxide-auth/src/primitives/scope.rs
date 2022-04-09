@@ -63,8 +63,8 @@ impl<'de> Deserialize<'de> for Scope {
     where
         D: serde::Deserializer<'de>,
     {
-        let string = String::deserialize(deserializer)?;
-        core::str::FromStr::from_str(&string).map_err(serde::de::Error::custom)
+        let string: &str = Deserialize::deserialize(deserializer)?;
+        core::str::FromStr::from_str(string).map_err(serde::de::Error::custom)
     }
 }
 
