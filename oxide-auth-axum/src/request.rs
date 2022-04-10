@@ -102,7 +102,7 @@ where
             .ok()
             .map(|b: Form<NormalizedParameter>| b.0);
 
-        let mut all_auth = req.headers().unwrap().get_all(header::AUTHORIZATION).iter();
+        let mut all_auth = req.headers().get_all(header::AUTHORIZATION).iter();
         let optional = all_auth.next();
 
         let auth = if all_auth.next().is_some() {
@@ -125,7 +125,7 @@ where
     type Rejection = WebError;
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let mut all_auth = req.headers().unwrap().get_all(header::AUTHORIZATION).iter();
+        let mut all_auth = req.headers().get_all(header::AUTHORIZATION).iter();
         let optional = all_auth.next();
 
         let auth = if all_auth.next().is_some() {
