@@ -2,6 +2,7 @@
 use std::{cmp, fmt, str};
 
 use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
 
 /// Scope of a given grant or resource, a set of scope-tokens separated by spaces.
 ///
@@ -46,6 +47,25 @@ use std::collections::HashSet;
 #[derive(Clone, PartialEq, Eq)]
 pub struct Scope {
     tokens: HashSet<String>,
+}
+
+impl Serialize for Scope {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Scope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let string: &str = Deserialize::deserialize(deserializer)?;
+        core::str::FromStr::from_str(string).map_err(serde::de::Error::custom)
+    }
 }
 
 impl Scope {
@@ -204,5 +224,21 @@ mod tests {
         assert!(all.contains(&"cap1"));
         assert!(all.contains(&"cap2"));
         assert!(all.contains(&"cap3"));
+    }
+
+    #[test]
+    fn deserialize_invalid_scope() {
+        let scope = "\x22";
+        let serialized = rmp_serde::to_vec(&scope).unwrap();
+        let deserialized = rmp_serde::from_slice::<Scope>(&serialized);
+        assert!(deserialized.is_err());
+    }
+
+    #[test]
+    fn roundtrip_serialization_scope() {
+        let scope = "cap1 cap2 cap3".parse::<Scope>().unwrap();
+        let serialized = rmp_serde::to_vec(&scope).unwrap();
+        let deserialized = rmp_serde::from_slice::<Scope>(&serialized).unwrap();
+        assert_eq!(scope, deserialized);
     }
 }
