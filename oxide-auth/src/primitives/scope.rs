@@ -225,4 +225,20 @@ mod tests {
         assert!(all.contains(&"cap2"));
         assert!(all.contains(&"cap3"));
     }
+
+    #[test]
+    fn deserialize_invalid_scope() {
+        let scope = "\x22";
+        let serialized = rmp_serde::to_vec(&scope).unwrap();
+        let deserialized = rmp_serde::from_slice::<Scope>(&serialized);
+        assert!(deserialized.is_err());
+    }
+
+    #[test]
+    fn roundtrip_serialization_scope() {
+        let scope = "cap1 cap2 cap3".parse::<Scope>().unwrap();
+        let serialized = rmp_serde::to_vec(&scope).unwrap();
+        let deserialized = rmp_serde::from_slice::<Scope>(&serialized).unwrap();
+        assert_eq!(scope, deserialized);
+    }
 }

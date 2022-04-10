@@ -131,13 +131,22 @@ impl<'de> Deserialize<'de> for ExactUrl {
 /// considered.
 ///
 /// [`ExactUrl`]: ExactUrl
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IgnoreLocalPortUrl(IgnoreLocalPortUrlInternal);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum IgnoreLocalPortUrlInternal {
     Exact(String),
     Local(Url),
+}
+
+impl Serialize for IgnoreLocalPortUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
 }
 
 impl<'de> Deserialize<'de> for IgnoreLocalPortUrl {
@@ -1058,5 +1067,31 @@ mod tests {
                 )))
             );
         }
+    }
+
+    #[test]
+    fn roundtrip_serialization_ignore_local_port_url() {
+        let url = "https://localhost/callback"
+            .parse::<IgnoreLocalPortUrl>()
+            .unwrap();
+        let serialized = rmp_serde::to_vec(&url).unwrap();
+        let deserialized = rmp_serde::from_slice::<IgnoreLocalPortUrl>(&serialized).unwrap();
+        assert_eq!(url, deserialized);
+    }
+
+    #[test]
+    fn deserialize_invalid_exact_url() {
+        let url = "/callback";
+        let serialized = rmp_serde::to_vec(&url).unwrap();
+        let deserialized = rmp_serde::from_slice::<ExactUrl>(&serialized);
+        assert!(deserialized.is_err());
+    }
+
+    #[test]
+    fn roundtrip_serialization_exact_url() {
+        let url = "https://example.com/callback".parse::<ExactUrl>().unwrap();
+        let serialized = rmp_serde::to_vec(&url).unwrap();
+        let deserialized = rmp_serde::from_slice::<ExactUrl>(&serialized).unwrap();
+        assert_eq!(url, deserialized);
     }
 }
