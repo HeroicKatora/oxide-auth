@@ -1,8 +1,12 @@
 use std::borrow::Cow;
-use poem::{FromRequest, Request, RequestBody};
-use poem::error::BadRequest;
-use poem::http::HeaderValue;
-use poem::web::{Form, Query};
+use poem::{
+    FromRequest,
+    Request,
+    RequestBody,
+    error::BadRequest,
+    http::HeaderValue,
+    web::{Form, Query}
+};
 use serde_urlencoded::de::Error;
 use oxide_auth::endpoint::{NormalizedParameter, QueryParameter, WebRequest};
 use crate::error::OxidePoemError;
