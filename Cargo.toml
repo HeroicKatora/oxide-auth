@@ -6,6 +6,7 @@ members = [
 	"oxide-auth-actix/examples/actix-example",
 	"oxide-auth-axum",
 	"oxide-auth-iron",
+	"oxide-auth-poem",
 	"oxide-auth-rocket",
 	"oxide-auth-rouille",
 	"oxide-auth-db",
