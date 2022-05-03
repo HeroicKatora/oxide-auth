@@ -1,7 +1,12 @@
-use poem::http::{header, HeaderMap, HeaderValue, StatusCode};
-use poem::{IntoResponse, Response, ResponseBuilder};
-use oxide_auth::endpoint::WebResponse;
-use oxide_auth::frontends::dev::Url;
+use poem::{
+    http::{
+        Extensions,
+        header::{InvalidHeaderValue, CONTENT_TYPE, LOCATION, WWW_AUTHENTICATE},
+        HeaderMap, HeaderValue, StatusCode, Version,
+    },
+    Body, IntoResponse, Response, ResponseParts,
+};
+use oxide_auth::{endpoint::WebResponse, frontends::dev::Url};
 use crate::error::OxidePoemError;
 
 #[derive(Default, Clone, Debug)]
@@ -14,9 +19,14 @@ pub struct OAuthResponse {
 
 impl OAuthResponse {
     /// Set the `ContentType` header on a response
-    pub fn content_type(mut self, content_type: &str) -> Result<Self, WebError> {
-        self.headers
-            .insert(header::CONTENT_TYPE, content_type.try_into()?);
+    pub fn content_type(mut self, content_type: &str) -> Result<Self, OxidePoemError> {
+        // the explicit typedef is probably unnecessary but my IDE is giving me errors otherwise so /shrug/
+        self.headers.insert(
+            CONTENT_TYPE,
+            content_type
+                .parse()
+                .map_err(|err: InvalidHeaderValue| OxidePoemError::Header(err.to_string()))?,
+        );
         Ok(self)
     }
 
@@ -37,7 +47,11 @@ impl WebResponse for OAuthResponse {
 
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.status = StatusCode::FOUND;
-        self.headers.insert(header::LOCATION, url.as_ref().try_into()?);
+        self.headers.insert(
+            LOCATION,
+            HeaderValue::from_str(url.as_str())
+                .map_err(|header_err| OxidePoemError::Header(header_err.to_string()))?, // This is an `Infallible` type!
+        );
         Ok(())
     }
 
@@ -48,38 +62,43 @@ impl WebResponse for OAuthResponse {
 
     fn unauthorized(&mut self, header_value: &str) -> Result<(), Self::Error> {
         self.status = StatusCode::UNAUTHORIZED;
-        self.headers.insert(header::WWW_AUTHENTICATE, header_value.try_into()?);
+        self.headers.insert(
+            WWW_AUTHENTICATE,
+            header_value
+                .parse()
+                .map_err(|err: InvalidHeaderValue| OxidePoemError::Header(err.to_string()))?,
+        );
         Ok(())
     }
 
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
         self.body = Some(text.to_owned());
         self.headers
-            .insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+            .insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
         Ok(())
     }
 
     fn body_json(&mut self, json: &str) -> Result<(), Self::Error> {
         self.body = Some(json.to_owned());
         self.headers
-            .insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+            .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         Ok(())
     }
 }
 
 impl IntoResponse for OAuthResponse {
-    fn into_response(mut self) -> Response {
-        let mut response = Response::builder()
-            .status(self.status)
-            .body(self.body)
-            .into_response();
-        {
-            let mut headers = response.headers_mut();
-            for (k, v) in self.headers {
-                headers.insert(k, v);
-            }
-
-        }
-        response
+    fn into_response(self) -> Response {
+        Response::from_parts(
+            ResponseParts {
+                status: self.status,
+                version: Version::default(),
+                headers: self.headers,
+                extensions: Extensions::default(),
+            },
+            match self.body {
+                Some(content) => Body::from(content),
+                None => Body::empty(),
+            },
+        )
     }
 }

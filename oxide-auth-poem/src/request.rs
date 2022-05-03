@@ -1,15 +1,11 @@
 use std::borrow::Cow;
 use poem::{
-    FromRequest,
-    Request,
-    RequestBody,
+    FromRequest, Request, RequestBody,
     error::BadRequest,
-    http::HeaderValue,
-    web::{Form, Query}
+    web::{Form},
 };
-use serde_urlencoded::de::Error;
 use oxide_auth::endpoint::{NormalizedParameter, QueryParameter, WebRequest};
-use crate::error::OxidePoemError;
+use crate::{error::OxidePoemError, response::OAuthResponse};
 
 #[derive(Clone, Debug, Default)]
 /// Type implementing `WebRequest` as well as `Request` for use in route handlers
@@ -46,7 +42,7 @@ impl OAuthRequest {
 
 impl WebRequest for OAuthRequest {
     type Error = OxidePoemError;
-    type Response = ();
+    type Response = OAuthResponse;
 
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         self.query
