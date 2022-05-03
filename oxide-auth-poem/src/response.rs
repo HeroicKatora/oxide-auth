@@ -19,6 +19,8 @@ pub struct OAuthResponse {
 
 impl OAuthResponse {
     /// Set the `ContentType` header on a response
+    /// # Errors
+    /// In case the `content_type` cannot be parsed, this will return an [`OxidePoemError::Header(_)`]
     pub fn content_type(mut self, content_type: &str) -> Result<Self, OxidePoemError> {
         // the explicit typedef is probably unnecessary but my IDE is giving me errors otherwise so /shrug/
         self.headers.insert(
@@ -31,6 +33,7 @@ impl OAuthResponse {
     }
 
     /// Set the body for the response
+    #[must_use]
     pub fn body(mut self, body: &str) -> Self {
         self.body = Some(body.to_owned());
         self

@@ -20,11 +20,13 @@ pub struct OAuthRequest {
 
 impl OAuthRequest {
     /// Fetch the authorization header from the request
+    #[must_use]
     pub fn authorization_header(&self) -> Option<&str> {
         self.auth.as_deref()
     }
 
     /// Fetch the query for this request
+    #[must_use]
     pub fn query(&self) -> Option<&NormalizedParameter> {
         self.query.as_ref()
     }
@@ -35,6 +37,7 @@ impl OAuthRequest {
     }
 
     /// Fetch the body of the request
+    #[must_use]
     pub fn body(&self) -> Option<&NormalizedParameter> {
         self.body.as_ref()
     }
