@@ -15,6 +15,6 @@ Licensed under either of
 * Apache License, Version 2.0 ([LICENSE-APACHE] or http://www.apache.org/licenses/LICENSE-2.0)
   at your option.
 
-[`iron`]: https://crates.io/crates/poem
+[`poem`]: https://crates.io/crates/poem
 [LICENSE-MIT]: docs/LICENSE-MIT
 [LICENSE-APACHE]: docs/LICENSE-APACHE
