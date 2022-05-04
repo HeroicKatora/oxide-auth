@@ -73,7 +73,7 @@ pub trait Request {
     /// RECOMMENDED and need not be supported. The parameters MUST NOT appear in the request URI
     /// itself.
     ///
-    /// Under these considerations, support must be explicitely enabled.
+    /// Under these considerations, support must be explicitly enabled.
     fn allow_credentials_in_body(&self) -> bool {
         false
     }
@@ -143,7 +143,7 @@ enum Credentials<'a> {
 /// parameters for the first step will be extracted from it. It will pose some requests in the form
 /// of [`Output`] which should be satisfied with the next [`Input`] data. This will eventually
 /// produce a [`BearerToken`] or an [`Error`]. Note that the executing environment will need to use
-/// a [`Registrar`], an [`Authorizer`], an optionnal [`Extension`] and an [`Issuer`] to which some
+/// a [`Registrar`], an [`Authorizer`], an optional [`Extension`] and an [`Issuer`] to which some
 /// requests should be forwarded.
 ///
 /// [`Input`]: struct.Input.html
@@ -237,14 +237,14 @@ pub enum Output<'machine> {
     },
     /// The extension (if any) should provide the extensions
     ///
-    /// Fullfilled by `Input::Extended`
+    /// Fulfilled by `Input::Extended`
     Extend {
         /// The grant extensions if any
         extensions: &'machine mut Extensions,
     },
     /// The issue should issue a new access token
     ///
-    /// Fullfilled by `Input::Issued`
+    /// Fulfilled by `Input::Issued`
     Issue {
         /// The grant to be used in the token generation
         grant: &'machine Grant,
@@ -384,7 +384,9 @@ impl AccessToken {
             Some(v) => v,
         };
 
-        if (saved_params.client_id.as_str(), &saved_params.redirect_uri) != (&client_id, &redirect_uri) {
+        if (saved_params.client_id.as_str(), &saved_params.redirect_uri)
+            != (client_id.as_str(), &redirect_uri)
+        {
             return Err(Error::invalid_with(AccessTokenErrorType::InvalidGrant));
         }
 
@@ -534,16 +536,16 @@ pub enum Error {
 }
 
 /// The endpoint should have enough control over its primitives to find
-/// out what has gone wrong, e.g. they may externall supply error
+/// out what has gone wrong, e.g. they may external supply error
 /// information.
 ///
 /// In this case, all previous results returned by the primitives are
 /// included in the return value. Through this mechanism, one can
-/// accomodate async handlers by implementing a sync-based result cache
+/// accommodate async handlers by implementing a sync-based result cache
 /// that is filled with these partial values. In case only parts of the
 /// outstanding futures, invoked during internal calls, are ready the
 /// cache can be refilled through the error eliminating polls to already
-/// sucessful futures.
+/// successful futures.
 ///
 /// Note that `token` is not included in this list, since the handler
 /// can never fail after supplying a token to the backend.
@@ -559,7 +561,7 @@ pub struct PrimitiveError {
     pub extensions: Option<Extensions>,
 }
 
-/// Simple wrapper around AccessTokenError to imbue the type with addtional json functionality. In
+/// Simple wrapper around AccessTokenError to imbue the type with additional json functionality. In
 /// addition this enforces backend specific behaviour for obtaining or handling the access error.
 #[derive(Clone)]
 pub struct ErrorDescription {

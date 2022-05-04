@@ -44,6 +44,9 @@ impl<'a> Endpoint<CraftedRequest> for AuthorizationEndpoint<'a> {
     fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
         None
     }
+    fn owner_solicitor(&mut self) -> Option<&mut (dyn OwnerSolicitor<CraftedRequest> + Send)> {
+        Some(self.solicitor)
+    }
     fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
         None
     }
@@ -57,9 +60,6 @@ impl<'a> Endpoint<CraftedRequest> for AuthorizationEndpoint<'a> {
     }
     fn web_error(&mut self, err: <CraftedRequest as WebRequest>::Error) -> Self::Error {
         Error::Web(err)
-    }
-    fn owner_solicitor(&mut self) -> Option<&mut (dyn OwnerSolicitor<CraftedRequest> + Send)> {
-        Some(self.solicitor)
     }
 }
 
@@ -89,7 +89,7 @@ impl AuthorizationSetup {
     fn test_success(&mut self, request: CraftedRequest) {
         let mut solicitor = Allow(EXAMPLE_OWNER_ID.to_string());
         let mut authorization_flow = AuthorizationFlow::prepare(AuthorizationEndpoint::new(
-            &mut self.registrar,
+            &self.registrar,
             &mut self.authorizer,
             &mut solicitor,
         ))
@@ -107,7 +107,7 @@ impl AuthorizationSetup {
     fn test_silent_error(&mut self, request: CraftedRequest) {
         let mut solicitor = Allow(EXAMPLE_OWNER_ID.to_string());
         let mut authorization_flow = AuthorizationFlow::prepare(AuthorizationEndpoint::new(
-            &mut self.registrar,
+            &self.registrar,
             &mut self.authorizer,
             &mut solicitor,
         ))

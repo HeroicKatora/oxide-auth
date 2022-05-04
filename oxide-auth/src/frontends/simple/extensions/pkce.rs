@@ -9,9 +9,9 @@ impl AuthorizationAddon for Pkce {
         let challenge = request.extension("code_challenge");
 
         let encoded = match self.challenge(method, challenge) {
-            Err(()) => return AddonResult::Err,
             Ok(None) => return AddonResult::Ok,
             Ok(Some(encoded)) => encoded,
+            Err(_) => return AddonResult::Err,
         };
 
         AddonResult::Data(encoded)

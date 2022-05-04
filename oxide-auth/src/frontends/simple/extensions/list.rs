@@ -2,7 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::{AuthorizationAddon, AccessTokenAddon, AddonResult};
-use crate::code_grant::accesstoken::{Extension as AccessTokenExtension, Request};
+use crate::code_grant::access_token::{Extension as AccessTokenExtension, Request};
 use crate::code_grant::authorization::{Extension as AuthorizationExtension, Request as AuthRequest};
 use crate::endpoint::Extension;
 use crate::primitives::grant::{Extensions, GrantExtension};

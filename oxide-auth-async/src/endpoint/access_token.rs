@@ -3,7 +3,7 @@ use std::{borrow::Cow, marker::PhantomData};
 
 use oxide_auth::{
     endpoint::{QueryParameter, WebRequest, OAuthError, WebResponse, Template, NormalizedParameter},
-    code_grant::accesstoken::{Error as TokenError, Request as TokenRequest},
+    code_grant::access_token::{Error as TokenError, Request as TokenRequest},
 };
 
 use super::Endpoint;

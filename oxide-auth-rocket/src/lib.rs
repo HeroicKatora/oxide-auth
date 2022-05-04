@@ -31,7 +31,7 @@ pub struct OAuthRequest<'r> {
 /// Response type for Rocket OAuth requests
 ///
 /// A simple wrapper type around a simple `rocket::Response<'r>` that implements `WebResponse`.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct OAuthResponse<'r>(Response<'r>);
 
 /// Request error at the http layer.
@@ -74,7 +74,7 @@ impl<'r> OAuthRequest<'r> {
         let optional = all_auth.next();
 
         // Duplicate auth header, just treat it as no authorization.
-        let auth = if let Some(_) = all_auth.next() {
+        let auth = if all_auth.next().is_some() {
             None
         } else {
             optional.map(str::to_owned)
@@ -139,7 +139,7 @@ impl<'r> WebRequest for OAuthRequest<'r> {
     }
 
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error> {
-        Ok(self.auth.as_ref().map(String::as_str).map(Cow::Borrowed))
+        Ok(self.auth.as_deref().map(Cow::Borrowed))
     }
 }
 
@@ -205,20 +205,14 @@ impl<'r> Responder<'r> for WebError {
     }
 }
 
-impl<'r> Default for OAuthResponse<'r> {
-    fn default() -> Self {
-        OAuthResponse(Default::default())
-    }
-}
-
 impl<'r> From<Response<'r>> for OAuthResponse<'r> {
     fn from(r: Response<'r>) -> Self {
         OAuthResponse::from_response(r)
     }
 }
 
-impl<'r> Into<Response<'r>> for OAuthResponse<'r> {
-    fn into(self) -> Response<'r> {
-        self.0
+impl<'r> From<OAuthResponse<'r>> for Response<'r> {
+    fn from(oauth_resp: OAuthResponse<'r>) -> Self {
+        oauth_resp.0
     }
 }

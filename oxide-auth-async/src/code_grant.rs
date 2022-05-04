@@ -131,7 +131,7 @@ pub mod resource {
 pub mod access_token {
     use async_trait::async_trait;
     use oxide_auth::{
-        code_grant::accesstoken::{
+        code_grant::access_token::{
             AccessToken, BearerToken, Error, Input, Output, PrimitiveError, Request as TokenRequest,
         },
         primitives::{

@@ -5,7 +5,7 @@ use crate::code_grant::resource::{
 };
 use crate::primitives::grant::Grant;
 
-use super::*;
+use super::{Endpoint, InnerTemplate, Issuer, OAuthError, PhantomData, Scope, WebRequest, WebResponse};
 
 /// Guards resources by requiring OAuth authorization.
 pub struct ResourceFlow<E, R>
@@ -46,8 +46,13 @@ where
     /// Binds the endpoint to a particular type of request that it supports, for many
     /// implementations this is probably single type anyways.
     ///
-    /// ## Panics
+    /// # Errors
+    /// The endpoint must return `Some(_)` for
+    /// - `issuer`
+    /// - `scopes`
+    /// otherwise this will error.
     ///
+    /// # Panics
     /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
     /// endpoint, for details see the documentation of `Endpoint` and `execute`. For
     /// consistent endpoints, the panic is instead caught as an error here.
@@ -88,14 +93,12 @@ where
 
     fn denied(&mut self, request: &mut R, error: ResourceError) -> Result<R::Response, E::Error> {
         let template = match &error {
-            ResourceError::AccessDenied { .. } => InnerTemplate::Unauthorized {
-                error: None,
-                access_token_error: None,
-            },
-            ResourceError::NoAuthentication { .. } => InnerTemplate::Unauthorized {
-                error: None,
-                access_token_error: None,
-            },
+            ResourceError::NoAuthentication { .. } | ResourceError::AccessDenied { .. } => {
+                InnerTemplate::Unauthorized {
+                    error: None,
+                    access_token_error: None,
+                }
+            }
             ResourceError::InvalidRequest { .. } => InnerTemplate::BadRequest {
                 access_token_error: None,
             },
@@ -116,8 +119,11 @@ where
 impl<R: WebRequest> WrappedRequest<R> {
     fn new(request: &mut R) -> Self {
         let token = match request.authheader() {
-            // TODO: this is unecessarily wasteful, we always clone.
-            Ok(Some(token)) => Some(token.into_owned()),
+            // TODO: this is unnecessarily wasteful, we always clone.
+            Ok(Some(token)) => Some(match token {
+                Cow::Borrowed(b) => b.to_string(),
+                Cow::Owned(o) => o,
+            }),
             Ok(None) => None,
             Err(error) => return Self::from_error(error),
         };

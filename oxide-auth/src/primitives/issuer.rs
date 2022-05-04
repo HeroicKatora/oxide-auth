@@ -18,7 +18,7 @@ use super::generator::{TagGrant, TaggedAssertion, Assertion};
 /// It's the issuers decision whether a refresh token is offered or not. In any case, it is also
 /// responsible for determining the validity and parameters of any possible token string. Some
 /// backends or frontends may decide not to propagate the refresh token (for example because
-/// they do not intend to offer a statefull refresh api).
+/// they do not intend to offer a stateful refresh api).
 pub trait Issuer {
     /// Create a token authorizing the request parameters
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()>;
@@ -213,9 +213,9 @@ impl IssuedToken {
     ///         Ok(IssuedToken::without_refresh(token, grant.until))
     ///     }
     ///     // …
+    /// # fn refresh(&mut self, _: &str, _: Grant) -> Result<RefreshedToken, ()> { Err(()) }
     /// # fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
     /// # fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> { Err(()) }
-    /// # fn refresh(&mut self, _: &str, _: Grant) -> Result<RefreshedToken, ()> { Err(()) }
     /// }
     /// ```
     pub fn without_refresh(token: String, until: Time) -> Self {
@@ -248,11 +248,11 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
             let access = self.generator.tag(self.usage, &grant)?;
             let refresh = self.generator.tag(self.usage.wrapping_add(1), &grant)?;
             debug_assert!(
-                access.len() > 0,
+                !access.is_empty(),
                 "An empty access token was generated, this is horribly insecure."
             );
             debug_assert!(
-                refresh.len() > 0,
+                !refresh.is_empty(),
                 "An empty refresh token was generated, this is horribly insecure."
             );
             (access, refresh)
@@ -296,8 +296,8 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         let new_access_key: Arc<str> = Arc::from(new_access.clone());
         let new_refresh_key: Arc<str> = Arc::from(new_refresh.clone());
 
-        if let Some(atoken) = self.access.remove(&token.access) {
-            assert!(Arc::ptr_eq(&token, &atoken));
+        if let Some(arc_token) = self.access.remove(&token.access) {
+            assert!(Arc::ptr_eq(&token, &arc_token));
         }
 
         {
@@ -388,7 +388,7 @@ impl TokenSigner {
     /// Determine whether to generate refresh tokens.
     ///
     /// By default, this option is *off*. Since the `TokenSigner` can on its own not revoke any
-    /// tokens it should be considered carefullly whether to issue very long-living and powerful
+    /// tokens it should be considered carefully whether to issue very long-living and powerful
     /// refresh tokens. On instance where this might be okay is as a component of a grander token
     /// architecture that adds a revocation mechanism.
     pub fn generate_refresh_tokens(&mut self, refresh: bool) {
@@ -584,22 +584,22 @@ pub mod tests {
     pub fn simple_test_suite(issuer: &mut dyn Issuer) {
         let request = grant_template();
 
-        let issued = issuer.issue(request.clone()).expect("Issuing failed");
+        let issued_token = issuer.issue(request.clone()).expect("Issuing failed");
         let from_token = issuer
-            .recover_token(&issued.token)
+            .recover_token(&issued_token.token)
             .expect("Issuer failed during recover")
             .expect("Issued token appears to be invalid");
 
-        assert_ne!(Some(&issued.token), issued.refresh.as_ref());
+        assert_ne!(Some(&issued_token.token), issued_token.refresh.as_ref());
         assert_eq!(from_token.client_id, "Client");
         assert_eq!(from_token.owner_id, "Owner");
         assert!(Utc::now() < from_token.until);
 
         let issued_2 = issuer.issue(request).expect("Issuing failed");
-        assert_ne!(issued.token, issued_2.token);
-        assert_ne!(Some(&issued.token), issued_2.refresh.as_ref());
-        assert_ne!(issued.refresh, issued_2.refresh);
-        assert_ne!(issued.refresh.as_ref(), Some(&issued_2.token));
+        assert_ne!(issued_token.token, issued_2.token);
+        assert_ne!(Some(&issued_token.token), issued_2.refresh.as_ref());
+        assert_ne!(issued_token.refresh, issued_2.refresh);
+        assert_ne!(issued_token.refresh.as_ref(), Some(&issued_2.token));
     }
 
     #[test]
@@ -649,7 +649,7 @@ pub mod tests {
 
         let new_refresh = refreshed_token.refresh.expect("No new refresh token returned");
 
-        assert!(refresh != new_refresh);
+        assert_ne!(refresh, new_refresh);
     }
 
     #[test]

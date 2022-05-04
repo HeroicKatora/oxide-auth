@@ -10,14 +10,14 @@ use crate::db_service::DataSource;
 use r2d2_redis::redis::RedisError;
 
 /// A database client service which implemented Registrar.
-/// db: repository service to query stored clients or regist new client.
+/// db: repository service to query stored clients or register new client.
 /// password_policy: to encode client_secret.
 pub struct DBRegistrar {
     pub repo: DataSource,
     password_policy: Option<Box<dyn PasswordPolicy>>,
 }
 
-/// methods to search and regist clients from DataSource.
+/// methods to search and register clients from DataSource.
 /// which should be implemented for all DataSource type.
 pub trait OauthClientDBRepository {
     fn list(&self) -> anyhow::Result<Vec<EncodedClient>>;
@@ -31,7 +31,7 @@ pub trait OauthClientDBRepository {
 //                             Implementations of DB Registrars                                  //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| Argon2::default());
+static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(Argon2::default);
 
 impl DBRegistrar {
     /// Create an DB connection recording to features.
@@ -59,7 +59,7 @@ impl DBRegistrar {
     }
 
     // This is not an instance method because it needs to borrow the box but register needs &mut
-    fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> &'a dyn PasswordPolicy {
+    fn current_policy(policy: &Option<Box<dyn PasswordPolicy>>) -> &dyn PasswordPolicy {
         policy
             .as_ref()
             .map(|boxed| &**boxed)
@@ -73,7 +73,7 @@ impl Extend<Client> for DBRegistrar {
         I: IntoIterator<Item = Client>,
     {
         iter.into_iter().for_each(|client| {
-            self.register_client(client);
+            let _err = self.register_client(client); // swallow errors
         })
     }
 }
@@ -86,7 +86,7 @@ impl Registrar for DBRegistrar {
         };
         // Perform exact matching as motivated in the rfc
         let registered_url = match bound.redirect_uri {
-            None => client.redirect_uri.clone(),
+            None => client.redirect_uri,
             Some(ref url) => {
                 let original = std::iter::once(&client.redirect_uri);
                 let alternatives = client.additional_redirect_uris.iter();
@@ -106,9 +106,7 @@ impl Registrar for DBRegistrar {
         })
     }
 
-    fn negotiate<'a>(
-        &self, bound: BoundClient<'a>, _scope: Option<Scope>,
-    ) -> Result<PreGrant, RegistrarError> {
+    fn negotiate(&self, bound: BoundClient, _scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
         let client = self
             .repo
             .find_client_by_id(&bound.client_id)
@@ -196,7 +194,7 @@ mod tests {
             "client:".parse().unwrap(),
         )
         .unwrap();
-        db_registrar.register_client(client);
+        let _err = db_registrar.register_client(client);
 
         assert_eq!(
             db_registrar
@@ -256,14 +254,13 @@ mod tests {
             "default".parse().unwrap(),
         );
 
-        oauth_service.register_client(public_client);
+        let _err = oauth_service.register_client(public_client);
         oauth_service
             .check(public_id, None)
             .expect("Authorization of public client has changed");
         oauth_service
             .check(public_id, Some(b""))
-            .err()
-            .expect("Authorization with password succeeded");
+            .expect_err("Authorization with password succeeded");
 
         let private_client = Client::confidential(
             private_id,
@@ -272,14 +269,13 @@ mod tests {
             private_passphrase,
         );
 
-        oauth_service.register_client(private_client);
+        let _err = oauth_service.register_client(private_client);
 
         oauth_service
             .check(private_id, Some(private_passphrase))
             .expect("Authorization with right password did not succeed");
         oauth_service
             .check(private_id, Some(b"Not the private passphrase"))
-            .err()
-            .expect("Authorization succeed with wrong password");
+            .expect_err("Authorization succeed with wrong password");
     }
 }

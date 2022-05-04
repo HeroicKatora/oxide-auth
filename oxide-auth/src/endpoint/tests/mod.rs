@@ -74,8 +74,8 @@ enum CraftedError {
 }
 
 impl WebRequest for CraftedRequest {
-    type Response = CraftedResponse;
     type Error = CraftedError;
+    type Response = CraftedResponse;
 
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         self.query

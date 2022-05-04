@@ -2,7 +2,7 @@ use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken, TokenMap, Toke
 use oxide_auth::primitives::generator::RandomGenerator;
 use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{
-    code_grant::accesstoken::TokenResponse,
+    code_grant::access_token::TokenResponse,
     endpoint::{WebRequest},
     primitives::registrar::{Client, ClientMap, RegisteredUrl},
     frontends::simple::endpoint::Error,
@@ -45,6 +45,14 @@ impl<'a> Endpoint<CraftedRequest> for RefreshTokenEndpoint<'a> {
     fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
         Some(self.issuer)
     }
+    fn owner_solicitor(
+        &mut self,
+    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
+        None
+    }
+    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
+        None
+    }
     fn response(
         &mut self, _: &mut CraftedRequest, _: oxide_auth::endpoint::Template,
     ) -> Result<<CraftedRequest as WebRequest>::Response, Self::Error> {
@@ -55,14 +63,6 @@ impl<'a> Endpoint<CraftedRequest> for RefreshTokenEndpoint<'a> {
     }
     fn web_error(&mut self, _err: <CraftedRequest as WebRequest>::Error) -> Self::Error {
         unimplemented!()
-    }
-    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
-        None
-    }
-    fn owner_solicitor(
-        &mut self,
-    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
-        None
     }
 }
 
@@ -139,7 +139,7 @@ impl RefreshTokenSetup {
         assert!(issued.refreshable());
         let refresh_token = issued.refresh.clone().unwrap();
 
-        let basic_authorization = "DO_NOT_USE".into();
+        let basic_authorization = "DO_NOT_USE".to_string();
 
         RefreshTokenSetup {
             registrar,

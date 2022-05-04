@@ -26,6 +26,14 @@ impl<'a> Endpoint<CraftedRequest> for ResourceEndpoint<'a> {
     fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
         Some(self.issuer)
     }
+    fn owner_solicitor(
+        &mut self,
+    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
+        None
+    }
+    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
+        Some(&mut self.scopes)
+    }
     fn response(
         &mut self, _: &mut CraftedRequest, _: oxide_auth::endpoint::Template,
     ) -> Result<<CraftedRequest as WebRequest>::Response, Self::Error> {
@@ -36,14 +44,6 @@ impl<'a> Endpoint<CraftedRequest> for ResourceEndpoint<'a> {
     }
     fn web_error(&mut self, _err: <CraftedRequest as WebRequest>::Error) -> Self::Error {
         unimplemented!()
-    }
-    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
-        Some(&mut self.scopes)
-    }
-    fn owner_solicitor(
-        &mut self,
-    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
-        None
     }
 }
 

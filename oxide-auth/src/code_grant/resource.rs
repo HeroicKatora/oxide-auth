@@ -26,7 +26,7 @@ pub enum ErrorCode {
     /// The request did not have enough authorization data or was otherwise malformed.
     InvalidRequest,
 
-    /// The provided authorization did not grant sufficient priviledges.
+    /// The provided authorization did not grant sufficient privileges.
     InsufficientScope,
 
     /// The token is expired, revoked, malformed or otherwise does not meet expectations.
@@ -122,6 +122,7 @@ enum ResourceState {
 
 /// An input injected by the executor into the state machine.
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum Input<'req> {
     /// Provide the queried (bearer) token.
     Recovered(Option<Grant>),
@@ -212,6 +213,12 @@ impl Resource {
 
     fn take(&mut self) -> ResourceState {
         mem::replace(&mut self.state, ResourceState::Err(Error::PrimitiveError))
+    }
+}
+
+impl Default for Resource {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

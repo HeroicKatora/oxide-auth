@@ -213,18 +213,18 @@ impl<R: WebRequest> Request for WrappedRequest<R> {
         self.body.unique_value("refresh_token")
     }
 
-    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
-        self.authorization
-            .as_ref()
-            .map(|auth| (auth.0.as_str().into(), auth.1.as_slice().into()))
-    }
-
     fn scope(&self) -> Option<Cow<str>> {
         self.body.unique_value("scope")
     }
 
     fn grant_type(&self) -> Option<Cow<str>> {
         self.body.unique_value("grant_type")
+    }
+
+    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
+        self.authorization
+            .as_ref()
+            .map(|auth| (auth.0.as_str().into(), auth.1.as_slice().into()))
     }
 
     fn extension(&self, key: &str) -> Option<Cow<str>> {

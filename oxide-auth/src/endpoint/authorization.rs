@@ -1,9 +1,15 @@
-use crate::code_grant::authorization::{
-    authorization_code, Error as AuthorizationError, Extension, Endpoint as AuthorizationEndpoint,
-    Request as AuthorizationRequest, Pending,
+use crate::{
+    code_grant::authorization::{
+        authorization_code, Error as AuthorizationError, Extension, Endpoint as AuthorizationEndpoint,
+        Request as AuthorizationRequest, Pending,
+    },
+    endpoint::NormalizedParameter
 };
 
-use super::*;
+use super::{
+    Authorizer, Cow, Endpoint, InnerTemplate, OAuthError, OwnerConsent, OwnerSolicitor, PhantomData,
+    QueryParameter, Registrar, Url, WebRequest, WebResponse,
+};
 
 /// All relevant methods for handling authorization code requests.
 pub struct AuthorizationFlow<E, R>
@@ -97,8 +103,10 @@ where
     /// Binds the endpoint to a particular type of request that it supports, for many
     /// implementations this is probably single type anyways.
     ///
-    /// ## Panics
+    /// # Errors
+    /// 
     ///
+    /// # Panics
     /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
     /// endpoint, for details see the documentation of `Endpoint`. For consistent endpoints,
     /// the panic is instead caught as an error here.
@@ -124,9 +132,11 @@ where
     ///
     /// In almost all cases this is followed by executing `finish` on the result but some users may
     /// instead want to inspect the partial result.
-    ///
-    /// ## Panics
-    ///
+    /// 
+    /// # Errors
+    /// If the authorization code negotiation fails, the authorization flow fails to complete this will error
+    /// 
+    /// # Panics
     /// When the registrar or the authorizer returned by the endpoint is suddenly `None` when
     /// previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
@@ -291,7 +301,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
     fn from_err(err: R::Error) -> Self {
         WrappedRequest {
             request: PhantomData,
-            query: Cow::Owned(Default::default()),
+            query: Cow::Owned(NormalizedParameter::default()),
             error: Some(err),
         }
     }

@@ -2,8 +2,11 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::str::from_utf8;
 
-use crate::code_grant::refresh::{refresh, Error, Endpoint as RefreshEndpoint, Request};
-use crate::primitives::{registrar::Registrar, issuer::Issuer};
+use crate::{
+    code_grant::refresh::{refresh, Error, Endpoint as RefreshEndpoint, Request},
+    endpoint::NormalizedParameter,
+    primitives::{registrar::Registrar, issuer::Issuer}
+};
 use super::{Endpoint, InnerTemplate, OAuthError, QueryParameter, WebRequest, WebResponse};
 
 /// Takes requests from clients to refresh their access tokens.
@@ -48,14 +51,16 @@ where
 {
     /// Wrap the endpoint if it supports handling refresh requests.
     ///
-    /// Also binds the endpoint to the particular `WebRequest` type through the type system. The
-    /// endpoint needs to provide (return `Some`):
+    /// Also binds the endpoint to the particular [`WebRequest`] type through the type system.
     ///
+    /// # Errors
+    /// The endpoint needs to provide (return `Some`):
     /// * a `Registrar` from `registrar`
     /// * an `Issuer` from `issuer_mut`
     ///
-    /// ## Panics
+    /// otherwise the method will error.
     ///
+    /// # Panics
     /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
     /// endpoint, for details see the documentation of `Endpoint` and `execute`. For
     /// consistent endpoints, the panic is instead caught as an error here.
@@ -78,8 +83,11 @@ where
 
     /// Use the checked endpoint to refresh a token.
     ///
-    /// ## Panics
+    /// # Errors
+    /// If the token returned by the request and handler is invalid, or setting the response body as JSON fails this
+    /// will error.
     ///
+    /// # Panics
     /// When the registrar, authorizer, or issuer returned by the endpoint is suddenly
     /// `None` when previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
@@ -167,13 +175,14 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
     fn from_err(err: InitError<R::Error>) -> Self {
         WrappedRequest {
             request: PhantomData,
-            body: Cow::Owned(Default::default()),
+            body: Cow::Owned(NormalizedParameter::default()),
             authorization: None,
             error: Some(err),
         }
     }
 
-    fn parse_header(header: Cow<str>) -> Result<Authorization, InitError<R::Error>> {
+    fn parse_header(header: impl AsRef<str>) -> Result<Authorization, InitError<R::Error>> {
+        let header = header.as_ref();
         let authorization = {
             if !header.starts_with("Basic ") {
                 return Err(InitError::Malformed);
@@ -225,18 +234,18 @@ impl<'a, R: WebRequest> Request for WrappedRequest<'a, R> {
         self.body.unique_value("refresh_token")
     }
 
-    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
-        self.authorization
-            .as_ref()
-            .map(|auth| (auth.0.as_str().into(), auth.1.as_slice().into()))
-    }
-
     fn scope(&self) -> Option<Cow<str>> {
         self.body.unique_value("scope")
     }
 
     fn grant_type(&self) -> Option<Cow<str>> {
         self.body.unique_value("grant_type")
+    }
+
+    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
+        self.authorization
+            .as_ref()
+            .map(|auth| (auth.0.as_str().into(), auth.1.as_slice().into()))
     }
 
     fn extension(&self, key: &str) -> Option<Cow<str>> {

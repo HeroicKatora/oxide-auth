@@ -11,7 +11,7 @@ use serde_json;
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
 use super::defaults::*;
-use crate::code_grant::accesstoken::TokenResponse;
+use crate::code_grant::access_token::TokenResponse;
 use crate::frontends::simple::endpoint::{refresh_flow, resource_flow};
 
 struct RefreshTokenSetup {
@@ -89,7 +89,7 @@ impl RefreshTokenSetup {
         assert!(issued.refreshable());
         let refresh_token = issued.refresh.clone().unwrap();
 
-        let basic_authorization = "DO_NOT_USE".into();
+        let basic_authorization = "DO_NOT_USE".to_string();
 
         RefreshTokenSetup {
             registrar,

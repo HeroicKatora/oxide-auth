@@ -80,7 +80,7 @@ impl OAuthResponse {
         OAuthResponse(Response::new())
     }
 
-    /// Createa a new OAuthResponse from an existing `iron::Response`
+    /// Create a new OAuthResponse from an existing `iron::Response`
     pub fn from_response(response: Response) -> Self {
         OAuthResponse(response)
     }
@@ -109,10 +109,16 @@ impl OAuthResponse {
     }
 }
 
+impl Default for OAuthResponse {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Requests are handed as mutable reference to the underlying object.
 impl<'a, 'b, 'c: 'b> WebRequest for OAuthRequest<'a, 'b, 'c> {
-    type Response = OAuthResponse;
     type Error = Error;
+    type Response = OAuthResponse;
 
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         serde_urlencoded::from_str(self.query_string())
@@ -181,9 +187,9 @@ impl<'a, 'b, 'c: 'b> From<&'a mut Request<'b, 'c>> for OAuthRequest<'a, 'b, 'c> 
     }
 }
 
-impl<'a, 'b, 'c: 'b> Into<&'a mut Request<'b, 'c>> for OAuthRequest<'a, 'b, 'c> {
-    fn into(self) -> &'a mut Request<'b, 'c> {
-        self.0
+impl<'a, 'b, 'c: 'b> From<OAuthRequest<'a, 'b, 'c>> for &'a mut Request<'b, 'c> {
+    fn from(oauth_req: OAuthRequest<'a, 'b, 'c>) -> Self {
+        oauth_req.0
     }
 }
 
@@ -193,15 +199,16 @@ impl From<Response> for OAuthResponse {
     }
 }
 
-impl Into<Response> for OAuthResponse {
-    fn into(self) -> Response {
-        self.0
+impl From<OAuthResponse> for Response {
+    fn from(oauth_resp: OAuthResponse) -> Self {
+        oauth_resp.0
     }
 }
 
 impl<'a, 'b, 'c: 'b> From<SimpleError<OAuthRequest<'a, 'b, 'c>>> for OAuthError {
     fn from(error: SimpleError<OAuthRequest<'a, 'b, 'c>>) -> Self {
         let as_oauth = match error {
+            // if you see an IDE error here its not you or this code, its your IDE.
             SimpleError::Web(Error::BadRequest) => EndpointError::BadRequest,
             SimpleError::OAuth(oauth) => oauth,
         };
@@ -222,8 +229,8 @@ impl From<IronError> for OAuthError {
     }
 }
 
-impl Into<IronError> for OAuthError {
-    fn into(self) -> IronError {
-        self.0
+impl From<OAuthError> for IronError {
+    fn from(oauth_err: OAuthError) -> Self {
+        oauth_err.0
     }
 }

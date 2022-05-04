@@ -2,7 +2,7 @@
 //!
 //! Note that extensions will probably return in `v0.4` but not its preview versions.
 pub use crate::code_grant::authorization::Request as AuthorizationRequest;
-pub use crate::code_grant::accesstoken::Request as AccessTokenRequest;
+pub use crate::code_grant::access_token::Request as AccessTokenRequest;
 
 mod extended;
 mod pkce;

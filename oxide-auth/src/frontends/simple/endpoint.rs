@@ -36,7 +36,7 @@ pub enum Error<W: WebRequest> {
 
 /// A rather basic [`Endpoint`] implementation.
 ///
-/// Substitue all parts that are not provided with the marker struct [`Vacant`]. This will at least
+/// Substitute all parts that are not provided with the marker struct [`Vacant`]. This will at least
 /// ensure that no security properties are violated. Some flows may be unavailable when some
 /// primitives are missing. See [`AuthorizationFlow`], [`AccessTokenFlow`], [`ResourceFlow`] for
 /// more details.
@@ -60,7 +60,7 @@ pub enum Error<W: WebRequest> {
 /// ## Example
 ///
 /// Here is an example where a `Generic` is used to set up an endpoint that is filled with the
-/// minimal members to be useable for an [`AccessTokenFlow`].
+/// minimal members to be usable for an [`AccessTokenFlow`].
 ///
 /// ```
 /// # extern crate oxide_auth;
@@ -96,16 +96,16 @@ pub enum Error<W: WebRequest> {
 /// [`ResourceFlow`]: ../../../endpoint/struct.ResourceFlow.html
 /// [`ResourceFlow`]: ../../../endpoint/trait.Scopes.html
 pub struct Generic<R, A, I, S = Vacant, C = Vacant, L = Vacant> {
-    /// The registrar implementation, or `Vacant` if it is not necesary.
+    /// The registrar implementation, or `Vacant` if it is not necessary.
     pub registrar: R,
 
-    /// The authorizer implementation, or `Vacant` if it is not necesary.
+    /// The authorizer implementation, or `Vacant` if it is not necessary.
     pub authorizer: A,
 
-    /// The issuer implementation, or `Vacant` if it is not necesary.
+    /// The issuer implementation, or `Vacant` if it is not necessary.
     pub issuer: I,
 
-    /// A solicitor implementation fit for the request types, or `Vacant` if it is not necesary.
+    /// A solicitor implementation fit for the request types, or `Vacant` if it is not necessary.
     pub solicitor: S,
 
     /// Determine scopes for the request types, or `Vacant` if this does not protect resources.
@@ -151,7 +151,7 @@ impl<E, Error> ErrorInto<E, Error> {
 ///
 /// ## Scopes
 ///
-/// Returns an empty list of scopes, effictively denying all requests since at least one scope
+/// Returns an empty list of scopes, effectively denying all requests since at least one scope
 /// needs to be fulfilled by token to gain access.
 ///
 /// See [OwnerSolicitor](#OwnerSolicitor) for discussion on why this differs from the other
@@ -487,7 +487,7 @@ impl<W: WebRequest> Error<W> {
     /// Convert into a single error type.
     ///
     /// Note that the additional information whether the error occurred in the web components or
-    /// during the flow needs to be implicitely contained in the types. Otherwise, this information
+    /// during the flow needs to be implicitly contained in the types. Otherwise, this information
     /// is lost and you should use or provide a `From<Error<W>>` implementation instead. This
     /// method is still useful for frontends providing a standard error type that interacts with
     /// their web server library.

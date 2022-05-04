@@ -72,20 +72,20 @@ impl Scope {
     fn invalid_scope_char(ch: char) -> bool {
         match ch {
             '\x21' => false,
-            ch if ch >= '\x23' && ch <= '\x5b' => false,
-            ch if ch >= '\x5d' && ch <= '\x7e' => false,
-            ' ' => false, // Space seperator is a valid char
+            ch if ('\x23'..='\x5b').contains(&ch) => false,
+            ch if ('\x5d'..='\x7e').contains(&ch) => false,
+            ' ' => false, // Space separator is a valid char
             _ => true,
         }
     }
 
     /// Determines if this scope has enough privileges to access some resource requiring the scope
     /// on the right side. This operation is equivalent to comparison via `>=`.
-    pub fn priviledged_to(&self, rhs: &Scope) -> bool {
+    pub fn privileged_to(&self, rhs: &Scope) -> bool {
         rhs <= self
     }
 
-    /// Determines if a resouce protected by this scope should allow access to a token with the
+    /// Determines if a resource protected by this scope should allow access to a token with the
     /// grant on the right side. This operation is equivalent to comparison via `<=`.
     pub fn allow_access(&self, rhs: &Scope) -> bool {
         self <= rhs
@@ -202,16 +202,16 @@ mod tests {
 
         assert_eq!(scope_base.partial_cmp(&scope_base), Some(cmp::Ordering::Equal));
 
-        assert!(scope_base.priviledged_to(&scope_less));
-        assert!(scope_base.priviledged_to(&scope_base));
+        assert!(scope_base.privileged_to(&scope_less));
+        assert!(scope_base.privileged_to(&scope_base));
         assert!(scope_less.allow_access(&scope_base));
         assert!(scope_base.allow_access(&scope_base));
 
-        assert!(!scope_less.priviledged_to(&scope_base));
+        assert!(!scope_less.privileged_to(&scope_base));
         assert!(!scope_base.allow_access(&scope_less));
 
-        assert!(!scope_less.priviledged_to(&scope_uncmp));
-        assert!(!scope_base.priviledged_to(&scope_uncmp));
+        assert!(!scope_less.privileged_to(&scope_uncmp));
+        assert!(!scope_base.privileged_to(&scope_uncmp));
         assert!(!scope_uncmp.allow_access(&scope_less));
         assert!(!scope_uncmp.allow_access(&scope_base));
     }

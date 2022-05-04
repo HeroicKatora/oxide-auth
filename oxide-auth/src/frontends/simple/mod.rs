@@ -1,4 +1,4 @@
-//! A baseline implemention of [`Endpoint`] and [`WebRequest`].
+//! A baseline implementation of [`Endpoint`] and [`WebRequest`].
 //!
 //! Contains primitive extension implementations as well as straightforward request formats
 //! suitable for HTTP-less OAuth applications. This is useful for testing as well as token

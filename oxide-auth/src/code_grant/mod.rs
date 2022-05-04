@@ -27,7 +27,7 @@
 //! [`endpoint`]: ../endpoint/index.html
 //! [`Endpoint`]: ../endpoint/trait.Endpoint.html
 
-pub mod accesstoken;
+pub mod access_token;
 pub mod authorization;
 pub mod error;
 pub mod extensions;

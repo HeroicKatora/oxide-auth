@@ -17,7 +17,8 @@ use serde::Deserializer;
 /// * `HashMap<String, String>`
 /// * `HashMap<String, Vec<String>>`
 /// * `HashMap<Cow<'static, str>, Cow<'static, str>>`
-///
+/// 
+/// # Safety
 /// You should generally not have to implement this trait yourself, and if you do there are
 /// additional requirements on your implementation to guarantee standard conformance. Therefore the
 /// trait is marked as `unsafe`.
@@ -67,7 +68,7 @@ unsafe impl QueryParameter for NormalizedParameter {
 
 impl NormalizedParameter {
     /// Create an empty map.
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         NormalizedParameter::default()
     }
 
@@ -115,7 +116,7 @@ impl<'de> de::Deserialize<'de> for NormalizedParameter {
                 A: de::SeqAccess<'a>,
             {
                 while let Some((key, value)) = access.next_element::<(String, String)>()? {
-                    self.0.insert_or_poison(key.into(), value.into())
+                    self.0.insert_or_poison(key.into(), value.into());
                 }
 
                 Ok(self.0)
@@ -166,6 +167,10 @@ impl ToOwned for dyn QueryParameter + Send {
 ///
 /// If this were done with slices, that would require choosing a particular
 /// value type of the underlying slice e.g. `[String]`.
+/// 
+/// # Safety
+/// Generally, you do not need to implement this yourself. However, there are constraints for
+/// correct implementations if you do, thus this trait is marked `unsafe`.
 pub unsafe trait UniqueValue {
     /// Borrow the unique value reference.
     fn get_unique(&self) -> Option<&str>;
@@ -259,7 +264,7 @@ unsafe impl UniqueValue for str {
 
 unsafe impl UniqueValue for String {
     fn get_unique(&self) -> Option<&str> {
-        Some(&self)
+        Some(self)
     }
 }
 
@@ -325,7 +330,7 @@ unsafe impl<V: UniqueValue> UniqueValue for Vec<V> {
 mod test {
     use super::*;
 
-    /// Compilation tests for various possible QueryParameter impls.
+    /// Compilation tests for various possible [`QueryParameter`] impls.
     #[allow(unused)]
     #[allow(dead_code)]
     fn test_query_parameter_impls() {

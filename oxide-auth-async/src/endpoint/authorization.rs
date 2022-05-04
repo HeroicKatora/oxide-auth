@@ -5,8 +5,11 @@ use oxide_auth::{
     code_grant::authorization::{Error as AuthorizationError, Request as AuthorizationRequest},
 };
 
-use crate::code_grant::authorization::{
-    authorization_code, Endpoint as AuthorizationEndpoint, Extension, Pending,
+use crate::{
+    code_grant::authorization::{
+        authorization_code, Endpoint as AuthorizationEndpoint, Extension, Pending,
+    },
+    endpoint::OwnerSolicitor,
 };
 
 use super::*;
@@ -65,7 +68,7 @@ where
     inner: AuthorizationPartialInner<'a, E, R>,
 
     /// TODO: offer this in the public api instead of dropping the request.
-    _with_request: Option<Box<dyn FnOnce(R) -> () + Send>>,
+    _with_request: Option<Box<dyn FnOnce(R) + Send>>,
 }
 
 /// Result type from processing an authentication request.

@@ -19,7 +19,7 @@ use rand::{RngCore, thread_rng};
 use serde::{Deserialize, Serialize};
 use url::{Url, ParseError as ParseUrlError};
 
-/// Registrars provie a way to interact with clients.
+/// Registrars provide a way to interact with clients.
 ///
 /// Most importantly, they determine defaulted parameters for a request as well as the validity
 /// of provided parameters. In general, implementations of this trait will probably offer an
@@ -101,7 +101,7 @@ impl<'de> Deserialize<'de> for ExactUrl {
         D: serde::Deserializer<'de>,
     {
         let string: &str = Deserialize::deserialize(deserializer)?;
-        core::str::FromStr::from_str(&string).map_err(serde::de::Error::custom)
+        core::str::FromStr::from_str(string).map_err(serde::de::Error::custom)
     }
 }
 
@@ -207,7 +207,7 @@ pub struct PreGrant {
 /// Handled responses from a registrar.
 #[derive(Clone, Debug)]
 pub enum RegistrarError {
-    /// One of several different causes that should be indistiguishable.
+    /// One of several different causes that should be indistinguishable.
     ///
     /// * Indicates an entirely unknown client.
     /// * The client is not authorized.
@@ -215,7 +215,7 @@ pub enum RegistrarError {
     ///   exact match on the url, to prevent injection of bad query parameters for example but not
     ///   strictly required.
     ///
-    /// These should be indistiguishable to avoid security problems.
+    /// These should be indistinguishable to avoid security problems.
     Unspecified,
 
     /// Something went wrong with this primitive that has no security reason.
@@ -600,9 +600,11 @@ pub struct Argon2 {
 
 impl PasswordPolicy for Argon2 {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
-        let mut config = Config::default();
-        config.ad = client_id.as_bytes();
-        config.secret = &[];
+        let config = Config {
+            ad: client_id.as_bytes(),
+            secret: &[],
+            ..Default::default()
+        };
 
         let mut salt = vec![0; 32];
         thread_rng()
@@ -649,7 +651,7 @@ impl ClientMap {
     }
 
     // This is not an instance method because it needs to borrow the box but register needs &mut
-    fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> &'a dyn PasswordPolicy {
+    fn current_policy(policy: &Option<Box<dyn PasswordPolicy>>) -> &dyn PasswordPolicy {
         policy
             .as_ref()
             .map(|boxed| &**boxed)
@@ -862,8 +864,7 @@ mod tests {
                 .expect("Authorization of public client has changed");
             registrar
                 .check(public_id, Some(b""))
-                .err()
-                .expect("Authorization with password succeeded");
+                .expect_err("Authorization with password succeeded");
         }
 
         let private_client = Client::confidential(
@@ -881,8 +882,7 @@ mod tests {
                 .expect("Authorization with right password did not succeed");
             registrar
                 .check(private_id, Some(b"Not the private passphrase"))
-                .err()
-                .expect("Authorization succeed with wrong password");
+                .expect_err("Authorization succeed with wrong password");
         }
     }
 

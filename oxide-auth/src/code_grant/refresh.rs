@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use chrono::{Duration, Utc};
 
 use crate::code_grant::{
-    accesstoken::TokenResponse,
+    access_token::TokenResponse,
     error::{AccessTokenError, AccessTokenErrorType},
 };
 use crate::primitives::grant::Grant;
@@ -301,7 +301,7 @@ impl Refresh {
                 client: &grant.client_id,
                 pass: None,
             },
-            RefreshState::Recovering { token, .. } => Output::RecoverRefresh { token: &token },
+            RefreshState::Recovering { token, .. } => Output::RecoverRefresh { token },
             RefreshState::Issuing { token, grant, .. } => Output::Refresh {
                 token,
                 grant: grant.clone(),
@@ -478,7 +478,7 @@ fn validate(scope: Option<Cow<str>>, grant: Box<Grant>, token: String) -> Result
     let scope = match scope {
         Some(scope) => {
             // ... MUST NOT include any scope not originally granted.
-            if !grant.scope.priviledged_to(&scope) {
+            if !grant.scope.privileged_to(&scope) {
                 // ... or exceeds the scope grant (Section 5.2)
                 return Err(Error::invalid(AccessTokenErrorType::InvalidScope));
             }
