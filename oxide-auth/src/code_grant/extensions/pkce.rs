@@ -193,11 +193,17 @@ impl Method {
     }
 
     fn from_encoded(encoded: Cow<str>) -> Result<Method, PkceError> {
-        // TODO: avoid allocation in case of borrow and invalid.
         match encoded.chars().last() {
-            // None => Err(()),
-            Some('p') => Ok(Method::Plain(avoid_alloc_cow_str_to_string(encoded))),
-            Some('S') => Ok(Method::Sha256(avoid_alloc_cow_str_to_string(encoded))),
+            Some('p') => {
+                let mut string = avoid_alloc_cow_str_to_string(encoded);
+                string.pop();
+                Ok(Method::Plain(string))
+            }
+            Some('S') => {
+                let mut string = avoid_alloc_cow_str_to_string(encoded);
+                string.pop();
+                Ok(Method::Sha256(string))
+            }
             _ => Err(PkceError::InvalidMethod(
                 "No/invalid encoding character indicator at end of string, expected `p` or `S`"
                     .to_string(),

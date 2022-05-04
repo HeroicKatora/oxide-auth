@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 
 use oxide_auth::endpoint::{OAuthError as EndpointError, QueryParameter, WebRequest, WebResponse};
-use oxide_auth::frontends::simple::endpoint::Error as SimpleError;
+use oxide_auth::frontends::simple::endpoint::Error as FError;
 
 use iron::{Request, Response};
 use iron::error::IronError;
@@ -205,12 +205,12 @@ impl From<OAuthResponse> for Response {
     }
 }
 
-impl<'a, 'b, 'c: 'b> From<SimpleError<OAuthRequest<'a, 'b, 'c>>> for OAuthError {
-    fn from(error: SimpleError<OAuthRequest<'a, 'b, 'c>>) -> Self {
+impl<'a, 'b, 'c: 'b> From<FError<OAuthRequest<'a, 'b, 'c>>> for OAuthError {
+    fn from(error: FError<OAuthRequest<'a, 'b, 'c>>) -> Self {
         let as_oauth = match error {
             // if you see an IDE error here its not you or this code, its your IDE.
-            SimpleError::Web(Error::BadRequest) => EndpointError::BadRequest,
-            SimpleError::OAuth(oauth) => oauth,
+            FError::Web(_) => EndpointError::BadRequest,
+            FError::OAuth(oauth) => oauth,
         };
 
         let status = match as_oauth {
