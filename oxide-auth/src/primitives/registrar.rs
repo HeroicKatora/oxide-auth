@@ -127,7 +127,7 @@ impl<'de> Deserialize<'de> for ExactUrl {
 ///
 /// # Note
 ///
-/// Local host ips (e.g. 127.0.0.1, [::1]) are treated as non-localhosts, so their ports are
+/// Local host ips (e.g. 127.0.0.1, \[::1\]) are treated as non-localhosts, so their ports are
 /// considered.
 ///
 /// [`ExactUrl`]: ExactUrl

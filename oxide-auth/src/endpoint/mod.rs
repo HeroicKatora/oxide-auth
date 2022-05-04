@@ -63,7 +63,7 @@ pub use self::refresh::RefreshFlow;
 pub use self::resource::*;
 pub use self::query::*;
 
-/// Answer from [`OwnerAuthorizer`] to indicate the owners choice.
+/// Answer from `OwnerAuthorizer` to indicate the owners choice.
 pub enum OwnerConsent<Response: WebResponse> {
     /// The owner did not authorize the client.
     Denied,
@@ -302,7 +302,7 @@ pub trait WebRequest {
     type Response: WebResponse<Error = Self::Error>;
 
     /// Retrieve a parsed version of the url query.
-    /// 
+    ///
     /// # Errors
     /// An Err return value indicates a malformed query or an otherwise malformed [`WebRequest`]. Note
     /// that an empty query should result in `Ok(HashMap::new())` instead of an Err.
@@ -315,7 +315,7 @@ pub trait WebRequest {
     fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error>;
 
     /// Contents of the authorization header or none if none exists.
-    /// 
+    ///
     /// # Errors
     /// An Err value indicates a malformed header or request.
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error>;

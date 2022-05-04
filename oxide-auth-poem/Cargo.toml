@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth-poem"
-version = "0.1.0"
+version = "0.2.0"
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 authors = ["l1npengtul <l1npengtul@protonmail.com>"]
 description = "A OAuth2 server library for Poem featuring a set of configurable and pluggable backends."

@@ -18,8 +18,8 @@
 //!
 //! ## Guide to implementing a custom front-end
 //!
-//! All front-end implementations should start with two closely related traits: [`WebRequest`] and
-//! [`WebResponse`].  These central interfaces are used to interact with the libraries supported
+//! All front-end implementations should start with two closely related traits: `WebRequest` and
+//! `WebResponse`.  These central interfaces are used to interact with the libraries supported
 //! token flows (currently only authorization code grant).
 //!
 //! Lets step through those implementations one by one.  As an example request type, let's pretend

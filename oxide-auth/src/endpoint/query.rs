@@ -17,7 +17,7 @@ use serde::Deserializer;
 /// * `HashMap<String, String>`
 /// * `HashMap<String, Vec<String>>`
 /// * `HashMap<Cow<'static, str>, Cow<'static, str>>`
-/// 
+///
 /// # Safety
 /// You should generally not have to implement this trait yourself, and if you do there are
 /// additional requirements on your implementation to guarantee standard conformance. Therefore the
@@ -42,7 +42,7 @@ pub unsafe trait QueryParameter {
 /// in the memory associated with the request, it needs to be allocated to outlive the borrow on
 /// the request.  This allocation may as well perform the minimization/normalization into a
 /// representation actually consumed by the backend. This normal form thus encapsulates the
-/// associated `clone-into-normal form` by various possible constructors from references [WIP].
+/// associated `clone-into-normal form` by various possible constructors from references \[WIP\].
 ///
 /// This gives rise to a custom `Cow<QueryParameter>` instance by requiring that normalization into
 /// memory with unrelated lifetime is always possible.
@@ -68,7 +68,8 @@ unsafe impl QueryParameter for NormalizedParameter {
 
 impl NormalizedParameter {
     /// Create an empty map.
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         NormalizedParameter::default()
     }
 
@@ -167,7 +168,7 @@ impl ToOwned for dyn QueryParameter + Send {
 ///
 /// If this were done with slices, that would require choosing a particular
 /// value type of the underlying slice e.g. `[String]`.
-/// 
+///
 /// # Safety
 /// Generally, you do not need to implement this yourself. However, there are constraints for
 /// correct implementations if you do, thus this trait is marked `unsafe`.
