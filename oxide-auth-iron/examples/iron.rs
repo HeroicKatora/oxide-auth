@@ -166,7 +166,7 @@ here</a> to begin the authorization process.
         }
     }
 
-    /// In larger app, you'd likey wrap it in your own Endpoint instead of `Generic`.
+    /// In larger app, you'd likely wrap it in your own Endpoint instead of `Generic`.
     pub fn endpoint(
         &self,
     ) -> Generic<

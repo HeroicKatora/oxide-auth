@@ -356,7 +356,7 @@ impl From<RegisteredUrl> for Url {
 
 /// Compares the registered url as an exact string if it was registered as exact, otherwise
 /// semantically.
-impl cmp::PartialEq<ExactUrl> for RegisteredUrl {
+impl PartialEq<ExactUrl> for RegisteredUrl {
     fn eq(&self, exact: &ExactUrl) -> bool {
         match self {
             RegisteredUrl::Exact(url) => url == exact,
@@ -366,7 +366,7 @@ impl cmp::PartialEq<ExactUrl> for RegisteredUrl {
     }
 }
 
-impl cmp::PartialEq<IgnoreLocalPortUrl> for RegisteredUrl {
+impl PartialEq<IgnoreLocalPortUrl> for RegisteredUrl {
     fn eq(&self, ign_lport: &IgnoreLocalPortUrl) -> bool {
         match self {
             RegisteredUrl::Exact(url) => ign_lport == &IgnoreLocalPortUrl::from(url),
@@ -377,7 +377,7 @@ impl cmp::PartialEq<IgnoreLocalPortUrl> for RegisteredUrl {
 }
 
 /// Compares the registered url semantically.
-impl cmp::PartialEq<Url> for RegisteredUrl {
+impl PartialEq<Url> for RegisteredUrl {
     fn eq(&self, semantic: &Url) -> bool {
         self.to_url() == *semantic
     }
@@ -570,7 +570,7 @@ impl<'a> RegisteredClient<'a> {
     }
 }
 
-impl cmp::PartialOrd<Self> for PreGrant {
+impl PartialOrd<Self> for PreGrant {
     /// `PreGrant` is compared by scope if `client_id` and `redirect_uri` are equal.
     fn partial_cmp(&self, rhs: &PreGrant) -> Option<cmp::Ordering> {
         if (&self.client_id, &self.redirect_uri) != (&rhs.client_id, &rhs.redirect_uri) {

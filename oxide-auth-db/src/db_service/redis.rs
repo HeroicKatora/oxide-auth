@@ -95,8 +95,8 @@ impl StringfiedEncodedClient {
 
 impl RedisDataSource {
     pub fn new(url: String, max_pool_size: u32, client_prefix: String) -> Result<Self, RedisError> {
-        let manager = r2d2_redis::RedisConnectionManager::new(url.as_str())?;
-        let pool = r2d2::Pool::builder().max_size(max_pool_size).build(manager);
+        let manager = RedisConnectionManager::new(url.as_str())?;
+        let pool = Pool::builder().max_size(max_pool_size).build(manager);
         match pool {
             Ok(pool) => Ok(RedisDataSource {
                 url,

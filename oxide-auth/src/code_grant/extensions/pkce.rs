@@ -4,7 +4,6 @@ use std::fmt::{Display, Formatter};
 
 use crate::{
     primitives::grant::{GrantExtension, Value},
-    util::avoid_alloc_cow_str_to_string,
 };
 
 use base64;
@@ -12,34 +11,52 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PkceError {
-    NoChallenge,
-    NoVerifier,
-    FailedVerification(&'static str),
-    InvalidMethod(String),
-    UnsupportedMethod,
+pub struct PkceError {
+    inner: InternalPkceErr,
 }
 
 impl Display for PkceError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+
+impl Error for PkceError {}
+
+impl From<InternalPkceErr> for PkceError {
+    fn from(internal_pkce: InternalPkceErr) -> Self {
+        PkceError { inner: internal_pkce }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum InternalPkceErr {
+    NoChallenge,
+    NoVerifier,
+    InvalidMethod,
+    UnsupportedMethodPlain,
+    FailedVerification,
+}
+
+impl Display for InternalPkceErr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                // perhaps use thiserror so we can avoid these allocs?
-                PkceError::NoChallenge =>
-                    "PKCE: It was indicated that an error was required but none was given".to_string(),
-                PkceError::NoVerifier =>
-                    "PKCE: The challenge was agreed upon but there is no verifier present".to_string(),
-                PkceError::FailedVerification(reason) => format!("PKCE: Failed to verify PKCE method: {reason}"),
-                PkceError::InvalidMethod(method) => format!("PKCE: Method must be either `S256`(sha256) or `plain`, but was given: {method}"),
-                PkceError::UnsupportedMethod => "PKCE: Method is unsupported due to indicator `allow_plain: false` and `method: plain`".to_string(),
+                InternalPkceErr::NoChallenge =>
+                    "PKCE: It was indicated that an challenge was required but none was given",
+                InternalPkceErr::NoVerifier =>
+                    "PKCE: The challenge was agreed upon but there was no verifier present",
+                InternalPkceErr::FailedVerification => "PKCE: Failed to verify PKCE method",
+                InternalPkceErr::InvalidMethod => "PKCE: Method must be either `S256`(sha256) or `plain`",
+                InternalPkceErr::UnsupportedMethodPlain => "PKCE: Method is unsupported due to indicator `allow_plain: false` and `method: plain`",
             }
         )
     }
 }
 
-impl Error for PkceError {}
+impl Error for InternalPkceErr {}
 
 /// Proof Key for Code Exchange by OAuth Public Clients
 ///
@@ -117,7 +134,7 @@ impl Pkce {
         let method = method.unwrap_or(Cow::Borrowed("plain"));
 
         let challenge = match challenge {
-            None if self.required => return Err(PkceError::NoChallenge),
+            None if self.required => return Err(InternalPkceErr::NoChallenge.into()),
             None => return Ok(None),
             Some(challenge) => challenge,
         };
@@ -139,21 +156,21 @@ impl Pkce {
     /// error.
     pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), PkceError> {
         let (method, verifier) = match (method, verifier) {
-            (None, _) if self.required => return Err(PkceError::NoChallenge),
+            (None, _) if self.required => return Err(InternalPkceErr::NoChallenge.into()),
             (None, _) => return Ok(()),
             // An internal saved method but no verifier
-            (Some(_), None) => return Err(PkceError::NoVerifier),
+            (Some(_), None) => return Err(InternalPkceErr::NoVerifier.into()),
             (Some(method), Some(verifier)) => (method, verifier),
         };
 
         let method = match method.into_private_value() {
             Ok(Some(method)) => method,
-            _ => return Err(PkceError::NoVerifier),
+            _ => return Err(InternalPkceErr::NoVerifier.into()),
         };
 
         let method = Method::from_encoded(Cow::Owned(method))?;
 
-        method.verify(&verifier)
+        method.verify(&verifier).map_err(Into::into)
     }
 }
 
@@ -169,19 +186,19 @@ fn b64encode(data: &[u8]) -> String {
 }
 
 impl Method {
-    fn from_parameter(method: impl AsRef<str>, challenge: impl AsRef<str>) -> Result<Self, PkceError> {
+    fn from_parameter(method: Cow<str>, challenge: Cow<str>) -> Result<Self, InternalPkceErr> {
         match method.as_ref() {
-            "plain" => Ok(Method::Plain(challenge.as_ref().to_string())),
-            "S256" => Ok(Method::Sha256(challenge.as_ref().to_string())),
-            _ => Err(PkceError::InvalidMethod(method.as_ref().to_string())),
+            "plain" => Ok(Method::Plain(challenge.into_owned())),
+            "S256" => Ok(Method::Sha256(challenge.into_owned())),
+            _ => Err(InternalPkceErr::InvalidMethod),
         }
     }
 
-    fn assert_supported_method(self, allow_plain: bool) -> Result<Self, PkceError> {
+    fn assert_supported_method(self, allow_plain: bool) -> Result<Self, InternalPkceErr> {
         match (self, allow_plain) {
             (this, true) => Ok(this),
             (Method::Sha256(content), false) => Ok(Method::Sha256(content)),
-            (Method::Plain(_), false) => Err(PkceError::UnsupportedMethod),
+            (Method::Plain(_), false) => Err(InternalPkceErr::UnsupportedMethodPlain),
         }
     }
 
@@ -192,32 +209,29 @@ impl Method {
         }
     }
 
-    fn from_encoded(encoded: Cow<str>) -> Result<Method, PkceError> {
+    fn from_encoded(encoded: Cow<str>) -> Result<Method, InternalPkceErr> {
         match encoded.chars().last() {
             Some('p') => {
-                let mut string = avoid_alloc_cow_str_to_string(encoded);
+                let mut string = encoded.into_owned();
                 string.pop();
                 Ok(Method::Plain(string))
             }
             Some('S') => {
-                let mut string = avoid_alloc_cow_str_to_string(encoded);
+                let mut string = encoded.into_owned();
                 string.pop();
                 Ok(Method::Sha256(string))
             }
-            _ => Err(PkceError::InvalidMethod(
-                "No/invalid encoding character indicator at end of string, expected `p` or `S`"
-                    .to_string(),
-            )),
+            _ => Err(InternalPkceErr::InvalidMethod),
         }
     }
 
-    fn verify(&self, verifier: &str) -> Result<(), PkceError> {
+    fn verify(&self, verifier: &str) -> Result<(), InternalPkceErr> {
         match self {
             Method::Plain(encoded) => {
                 if encoded.as_bytes().ct_eq(verifier.as_bytes()).into() {
                     Ok(())
                 } else {
-                    Err(PkceError::FailedVerification("Plain not equal"))
+                    Err(InternalPkceErr::FailedVerification)
                 }
             }
             Method::Sha256(encoded) => {
@@ -227,7 +241,7 @@ impl Method {
                 if encoded.as_bytes().ct_eq(b64digest.as_bytes()).into() {
                     Ok(())
                 } else {
-                    Err(PkceError::FailedVerification("Sha256 digest not equal"))
+                    Err(InternalPkceErr::FailedVerification)
                 }
             }
         }

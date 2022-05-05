@@ -1,15 +1,17 @@
 //! Provides the handling for Authorization Code Requests
 use std::borrow::Cow;
 use std::result::Result as StdResult;
-
 use url::Url;
 use chrono::{Duration, Utc};
-
-use crate::code_grant::error::{AuthorizationError, AuthorizationErrorType};
-use crate::primitives::authorizer::Authorizer;
-use crate::primitives::registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant};
-use crate::primitives::grant::{Extensions, Grant};
-use crate::{endpoint::Scope, endpoint::Solicitation, primitives::registrar::BoundClient};
+use crate::{
+    code_grant::error::{AuthorizationError, AuthorizationErrorType},
+    primitives::{
+        authorizer::Authorizer,
+        registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant, BoundClient},
+        grant::{Extensions, Grant},
+    },
+    endpoint::{Scope, Solicitation},
+};
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait Request {
@@ -216,7 +218,7 @@ impl Authorization {
                 extensions,
             } => Output::Ok {
                 pre_grant: pre_grant.clone(),
-                state: state.as_ref().map(Clone::clone), // ??
+                state: state.as_ref().map(Clone::clone),
                 extensions: extensions.clone(),
             },
         }
@@ -309,7 +311,7 @@ impl Authorization {
 /// If the client is not registered, the request will otherwise be ignored, if the request has
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
-pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> self::Result<Pending> {
+pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Pending> {
     enum Requested {
         None,
         Bind {

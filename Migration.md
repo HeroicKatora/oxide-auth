@@ -50,9 +50,9 @@ replicate the old behaviour, its body should simply consist of `Err(())`.
 
 ## v0.4.5
 
-An empty `refresh` token in the `IssuedToken` will no longer inidicate support
+An empty `refresh` token in the `IssuedToken` will no longer indicate support
 for refreshing to the client. Furthermore, refresh tokens need to be
-explicitely enabled for `TokenSigner` as there is no good way to revoke them
+explicitly enabled for `TokenSigner` as there is no good way to revoke them
 and are mostly intended for usage in custom signers.
 
 ## v0.4.1
@@ -66,7 +66,7 @@ larger code bases would be implementing `endpoint::Endpoint` yourself.
 
 Note that `MethodAuthorizer` got replaced by `frontends::simple::FnSolicitor`
 and the `IronAuthorizer` has been fully removed. `SimpleAuthorization` was
-superseeded by `endpoint::OwnerAuthorization`.
+superseded by `endpoint::OwnerAuthorization`.
 
 Support for a Bearer token authorizing Middleware implementation has not yet
 been implemented. Also, see the notes on `QueryParamter` and module reordering
@@ -94,7 +94,7 @@ multiple independent extensions at the same time, this is no longer required
 for other frontends. The data portion of a `GrantExtension` has been renamed to
 the more unique `Value`, and the `simple` extension module extends on this
 trait to offer `AccessTokenAddon` and `AuthorizationAddon`, simple traits to
-implement only a portion of a fullblown system of extension at a time.
+implement only a portion of a full-blown system of extension at a time.
 
 Serde support for `NormalizedParameter` so that there is less confusion about
 how to construct them and the potential pitfalls of dropping duplicate
@@ -171,7 +171,7 @@ The following names have changed for consistency:
 ### Actix frontend
 
 The standardization of a simple, reusable `Endpoint` offers exiting new
-possibilites. Foremost, a simple newtype wrapper around this and other
+possibilities. Foremost, a simple newtype wrapper around this and other
 primitives imbues them with `Actor` powers and messaging. Requests and
 responses are now more composable so the former now has a simpler
 representation and the necessity of tacking on owner owner consent information
@@ -184,7 +184,7 @@ The initial construction of a `OAuthRequest` is now the result of an
 the actix message constructors. Since `OAuthRequest` now also implements
 `WebRequest` in a simple manner, many implementors will likely want to use a
 newtype style to further customize error types and response representations.
-Keep in mind that for a request to be useable as a message to an endpoint
+Keep in mind that for a request to be usable as a message to an endpoint
 actor, the error types of the two have to agree. This restriction may be lifted
 in later versions.
 
@@ -337,7 +337,7 @@ of the endpoint does that conversion.
 Rationale: The trait bounds puts some restrictions on implementing endpoints
 with error types that are not defined in the current trait. Additionally, it
 made it impossible to generalize over the underlying request type, as there is
-no way to implemention `impl<T> From<T> for ErrorType`, of course.
+no way to implement `impl<T> From<T> for ErrorType`, of course.
 
 ----
 
@@ -349,7 +349,7 @@ traits `AuthorizationExtension` etc. have been moved to the new
 frontend.
 
 Rationale: This is to allow groups of extensions working closely together, such
-as possibly for OpenID in the future. It also solves a few efficieny and design
+as possibly for OpenID in the future. It also solves a few efficient and design
 issues by leaving the representation more open to library users/frontends.
 Since extension do not provide guarantees on idempotency, they can not be
 simply retried. Therefore, the asynchronous interface of actix can not

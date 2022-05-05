@@ -24,15 +24,17 @@ here</a> to begin the authorization process.
 </html>
 ";
 
+pub type GenericEndpoint = Generic<
+    ClientMap,
+    AuthMap<RandomGenerator>,
+    TokenMap<RandomGenerator>,
+    Vacant,
+    Vec<Scope>,
+    fn() -> OAuthResponse,
+>;
+
 struct State {
-    endpoint: Generic<
-        ClientMap,
-        AuthMap<RandomGenerator>,
-        TokenMap<RandomGenerator>,
-        Vacant,
-        Vec<Scope>,
-        fn() -> OAuthResponse,
-    >,
+    endpoint: GenericEndpoint,
 }
 
 enum Extras {
@@ -42,7 +44,7 @@ enum Extras {
 }
 
 async fn get_authorize(
-    (req, state): (OAuthRequest, web::Data<Addr<State>>),
+    (req, state): (OAuthRequest, Data<Addr<State>>),
 ) -> Result<OAuthResponse, WebError> {
     // GET requests should not mutate server state and are extremely
     // vulnerable accidental repetition as well as Cross-Site Request
@@ -51,7 +53,7 @@ async fn get_authorize(
 }
 
 async fn post_authorize(
-    (r, req, state): (HttpRequest, OAuthRequest, web::Data<Addr<State>>),
+    (r, req, state): (HttpRequest, OAuthRequest, Data<Addr<State>>),
 ) -> Result<OAuthResponse, WebError> {
     // Some authentication should be performed here in production cases
     state
@@ -59,19 +61,15 @@ async fn post_authorize(
         .await?
 }
 
-async fn token((req, state): (OAuthRequest, web::Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
+async fn token((req, state): (OAuthRequest, Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
     state.send(Token(req).wrap(Extras::Nothing)).await?
 }
 
-async fn refresh(
-    (req, state): (OAuthRequest, web::Data<Addr<State>>),
-) -> Result<OAuthResponse, WebError> {
+async fn refresh((req, state): (OAuthRequest, Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
     state.send(Refresh(req).wrap(Extras::Nothing)).await?
 }
 
-async fn index(
-    (req, state): (OAuthResource, web::Data<Addr<State>>),
-) -> Result<OAuthResponse, WebError> {
+async fn index((req, state): (OAuthResource, Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
     match state
         .send(Resource(req.into_request()).wrap(Extras::Nothing))
         .await?
@@ -84,7 +82,7 @@ async fn index(
     }
 }
 
-async fn start_browser() -> () {
+async fn start_browser() {
     let _ = thread::spawn(support::open_in_browser);
 }
 
@@ -161,9 +159,9 @@ impl State {
         }
     }
 
-    pub fn with_solicitor<'a, S>(
-        &'a mut self, solicitor: S,
-    ) -> impl Endpoint<OAuthRequest, Error = WebError> + 'a
+    pub fn with_solicitor<S>(
+        &'_ mut self, solicitor: S,
+    ) -> impl Endpoint<OAuthRequest, Error = WebError> + '_
     where
         S: OwnerSolicitor<OAuthRequest> + 'static,
     {
@@ -200,7 +198,7 @@ where
                         OAuthResponse::ok()
                             .content_type("text/html")
                             .unwrap()
-                            .body(&crate::support::consent_page_html("/authorize".into(), pre_grant)),
+                            .body(&support::consent_page_html("/authorize", pre_grant)),
                     )
                 });
 

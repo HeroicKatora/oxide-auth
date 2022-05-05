@@ -1,7 +1,7 @@
 //! Helper methods for several examples.
 //!
 //! The support files for each frontend include a client instance for several implemented
-//! frontends. These are not part of the main example code as this library focusses purely on the
+//! frontends. These are not part of the main example code as this library focuses purely on the
 //! server side. This module contains code that can be shared between the different frontends.
 //! Since we want to be able to run the actix example but share it with rocket examples but
 //! rocket includes macros in its crate root, the module include order is a bit strange.
@@ -11,7 +11,7 @@
 #![allow(unused)]
 
 /// Simplistic reqwest client.
-#[path="./client.rs"]
+#[path = "./client.rs"]
 mod client;
 
 use oxide_auth::endpoint::Solicitation;
@@ -39,11 +39,14 @@ pub fn open_in_browser() {
         Err(Error::new(ErrorKind::Other, "Open not supported"))
     };
 
-    open_with.and_then(|cmd| Command::new(cmd).arg(target_addres).status())
-        .and_then(|status| if status.success() {
-            Ok(())
-        } else { 
-            Err(Error::new(ErrorKind::Other, "Non zero status")) 
+    open_with
+        .and_then(|cmd| Command::new(cmd).arg(target_addres).status())
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(Error::new(ErrorKind::Other, "Non zero status"))
+            }
         })
         .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
 }
@@ -51,7 +54,7 @@ pub fn open_in_browser() {
 pub fn consent_page_html(route: &str, solicitation: Solicitation) -> String {
     macro_rules! template {
         () => {
-"<html>'{0:}' (at {1:}) is requesting permission for '{2:}'
+            "<html>'{0:}' (at {1:}) is requesting permission for '{2:}'
 <form method=\"post\">
     <input type=\"submit\" value=\"Accept\" formaction=\"{4:}?{3:}&allow=true\">
     <input type=\"submit\" value=\"Deny\" formaction=\"{4:}?{3:}&deny=true\">
@@ -72,8 +75,9 @@ pub fn consent_page_html(route: &str, solicitation: Solicitation) -> String {
     if let Some(state) = state {
         extra.push(("state", state));
     }
-    
-    format!(template!(), 
+
+    format!(
+        template!(),
         grant.client_id,
         grant.redirect_uri,
         grant.scope,

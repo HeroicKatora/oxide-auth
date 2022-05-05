@@ -280,7 +280,7 @@ impl AccessToken {
                     ..
                 },
                 Input::Authenticated,
-            ) => Self::authencicated(client, code, redirect_uri),
+            ) => Self::authenticated(client, code, redirect_uri),
             (
                 AccessTokenState::Recover {
                     client, redirect_uri, ..
@@ -368,7 +368,7 @@ impl AccessToken {
         })
     }
 
-    fn authencicated(client: String, code: String, redirect_uri: url::Url) -> AccessTokenState {
+    fn authenticated(client: String, code: String, redirect_uri: url::Url) -> AccessTokenState {
         AccessTokenState::Recover {
             client,
             code,

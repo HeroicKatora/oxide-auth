@@ -1,26 +1,21 @@
-use oxide_auth::primitives::authorizer::AuthMap;
-use oxide_auth::primitives::issuer::TokenMap;
-use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{
+    primitives::{
+        authorizer::AuthMap,
+        issuer::TokenMap,
+        grant::{Grant, Extensions},
+        registrar::{Client, ClientMap, RegisteredUrl},
+    },
     frontends::simple::endpoint::Error,
-    primitives::registrar::{Client, ClientMap, RegisteredUrl},
     endpoint::WebRequest,
 };
-
 use crate::{
     endpoint::{access_token::AccessTokenFlow, Endpoint},
     primitives::Authorizer,
 };
-//use crate::frontends::simple::endpoint::access_token_flow;
-
 use std::collections::HashMap;
-
-use base64;
 use chrono::{Utc, Duration};
-use serde_json;
-
-use super::{Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery};
-use super::defaults::*;
+use crate::primitives::{Issuer, Registrar};
+use super::{Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery, defaults::*};
 
 struct AccessTokenSetup {
     registrar: ClientMap,
@@ -52,14 +47,22 @@ impl<'a> AccessTokenEndpoint<'a> {
 impl<'a> Endpoint<CraftedRequest> for AccessTokenEndpoint<'a> {
     type Error = Error<CraftedRequest>;
 
-    fn registrar(&self) -> Option<&(dyn crate::primitives::Registrar + Sync)> {
+    fn registrar(&self) -> Option<&(dyn Registrar + Sync)> {
         Some(self.registrar)
     }
-    fn authorizer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Authorizer + Send)> {
+    fn authorizer_mut(&mut self) -> Option<&mut (dyn Authorizer + Send)> {
         Some(self.authorizer)
     }
-    fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
+    fn issuer_mut(&mut self) -> Option<&mut (dyn Issuer + Send)> {
         Some(self.issuer)
+    }
+    fn owner_solicitor(
+        &mut self,
+    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
+        None
+    }
+    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
+        None
     }
     fn response(
         &mut self, _: &mut CraftedRequest, _: oxide_auth::endpoint::Template,
@@ -71,14 +74,6 @@ impl<'a> Endpoint<CraftedRequest> for AccessTokenEndpoint<'a> {
     }
     fn web_error(&mut self, _err: <CraftedRequest as WebRequest>::Error) -> Self::Error {
         unimplemented!()
-    }
-    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
-        None
-    }
-    fn owner_solicitor(
-        &mut self,
-    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
-        None
     }
 }
 
@@ -179,7 +174,7 @@ impl AccessTokenSetup {
         .unwrap();
         match smol::run(access_token_flow.execute(request)) {
             Ok(ref response) => Self::assert_json_error_set(response),
-            resp => panic!("Expected non-error reponse, got {:?}", resp),
+            resp => panic!("Expected non-error response, got {:?}", resp),
         }
     }
 
@@ -191,7 +186,7 @@ impl AccessTokenSetup {
         ))
         .unwrap();
         let response =
-            smol::run(access_token_flow.execute(request)).expect("Expected non-error reponse");
+            smol::run(access_token_flow.execute(request)).expect("Expected non-error response");
 
         self.assert_ok_access_token(response);
     }
@@ -256,7 +251,7 @@ fn access_valid_private() {
     setup.test_success(valid_public);
 }
 
-// When creating a client from a preparsed url expect all equivalent urls to also be valid
+// When creating a client from a prepared url expect all equivalent urls to also be valid
 // parameters for the redirect_uri. Partly because `Url` already does some normalization during
 // parsing. The RFC recommends string-based comparison when the 'client registration included the
 // full redirection URI'. When passing an URL however, for the moment the only way, this does not
@@ -324,7 +319,7 @@ fn access_equivalent_url() {
 #[test]
 fn access_request_unknown_client() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate as some unknown client with the passphrase
+    // Trying to authenticate as some unknown client with the passphrase
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -348,7 +343,7 @@ fn access_request_unknown_client() {
 #[test]
 fn access_request_wrong_authentication() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with an unsupported method (instead of Basic)
+    // Trying to authenticate with an unsupported method (instead of Basic)
     let wrong_authentication = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -369,7 +364,7 @@ fn access_request_wrong_authentication() {
 #[test]
 fn access_request_wrong_password() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with the wrong password
+    // Trying to authenticate with the wrong password
     let wrong_password = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -393,7 +388,7 @@ fn access_request_wrong_password() {
 #[test]
 fn access_request_empty_password() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with an empty password
+    // Trying to authenticate with an empty password
     let empty_password = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -414,7 +409,7 @@ fn access_request_empty_password() {
 #[test]
 fn access_request_multiple_client_indications() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with an unsupported method (instead of Basic)
+    // Trying to authenticate with an unsupported method (instead of Basic)
     let multiple_client_indications = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -436,7 +431,7 @@ fn access_request_multiple_client_indications() {
 #[test]
 fn access_request_public_authorization() {
     let mut setup = AccessTokenSetup::public_client();
-    // Trying to autenticate a public client
+    // Trying to authenticate a public client
     let public_authorization = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -457,7 +452,7 @@ fn access_request_public_authorization() {
 #[test]
 fn access_request_public_missing_client() {
     let mut setup = AccessTokenSetup::public_client();
-    // Trying to autenticate with an unsupported method (instead of Basic)
+    // Trying to authenticate with an unsupported method (instead of Basic)
     let public_missing_client = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -478,7 +473,7 @@ fn access_request_public_missing_client() {
 #[test]
 fn access_request_invalid_basic() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with an invalid basic authentication header
+    // Trying to authenticate with an invalid basic authentication header
     let invalid_basic = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -572,7 +567,7 @@ fn access_request_multiple_codes() {
         .get_mut("code")
         .unwrap()
         .push("AnotherAuthToken".to_string());
-    // Trying to get an access token with mutiple codes, even if one is correct
+    // Trying to get an access token with multiple codes, even if one is correct
     let multiple_codes = CraftedRequest {
         query: None,
         urlbody: Some(urlbody),
@@ -646,7 +641,7 @@ fn unwanted_private_in_body_fails() {
         auth: None,
     };
 
-    // in body must only succeed if we enabled it explicitely in the flow.
+    // in body must only succeed if we enabled it explicitly in the flow.
     setup.test_simple_error(valid_public);
 }
 

@@ -189,7 +189,7 @@ impl IssuedToken {
     ///
     /// This is essential for issuers that can not revoke their tokens. Since refresh tokens are
     /// both long-lived and more powerful than their access token counterparts, it is more
-    /// dangerous to have an unrevokable refresh token.
+    /// dangerous to have an irrevocable refresh token.
     ///
     /// This is only a shorthand for initializing the `IssuedToken` with `None` for `refresh`.
     ///

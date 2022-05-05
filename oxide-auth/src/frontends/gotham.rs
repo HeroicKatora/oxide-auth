@@ -79,17 +79,17 @@ use std::sync::{Arc, Mutex, LockResult, MutexGuard};
 /// A struct that wraps all oauth related services and makes them available through state.
 #[derive(StateData, Clone)]
 pub struct GothamOauthProvider {
-    registrar: Arc<Mutex<Registrar + Send>>,
-    authorizer: Arc<Mutex<Authorizer + Send>>,
-    issuer: Arc<Mutex<Issuer + Send>>,
+    registrar: Arc<Mutex<dyn Registrar + Send>>,
+    authorizer: Arc<Mutex<dyn Authorizer + Send>>,
+    issuer: Arc<Mutex<dyn Issuer + Send>>,
 }
 impl GothamOauthProvider {
-
     /// Constructs a new Gotham OAuth provider, wrapping all the common oauth services.
-    pub fn new<R, A, I>(registrar: R, data: A, issuer: I) -> Self where
+    pub fn new<R, A, I>(registrar: R, data: A, issuer: I) -> Self
+    where
         R: Registrar + Send + 'static,
         A: Authorizer + Send + 'static,
-        I: Issuer + Send + 'static
+        I: Issuer + Send + 'static,
     {
         Self {
             registrar: Arc::new(Mutex::new(registrar)),
@@ -98,18 +98,18 @@ impl GothamOauthProvider {
         }
     }
 
-    /// Thread-safely access the underlying registrar, which is responsible for client registrarion.
-    pub fn registrar(&self) -> LockResult<MutexGuard<Registrar + Send + 'static>> {
+    /// Thread-safely access the underlying registrar, which is responsible for client registration.
+    pub fn registrar(&self) -> LockResult<MutexGuard<impl Registrar + Send + 'static>> {
         self.registrar.lock()
     }
 
     /// Thread-safely access the underlying authorizer, which builds and holds authorization codes.
-    pub fn authorizer(&self) -> LockResult<MutexGuard<Authorizer + Send + 'static>> {
+    pub fn authorizer(&self) -> LockResult<MutexGuard<impl Authorizer + Send + 'static>> {
         self.authorizer.lock()
     }
 
     /// Thread-safely access the underlying issuer, which builds and holds access tokens.
-    pub fn issuer(&self) -> LockResult<MutexGuard<Issuer + Send + 'static>> {
+    pub fn issuer(&self) -> LockResult<MutexGuard<impl Issuer + Send + 'static>> {
         self.issuer.lock()
     }
 
@@ -121,10 +121,9 @@ impl GothamOauthProvider {
 
         let mut request = Request::new(method.clone(), uri.clone());
         for header in headers.iter() {
-            request.headers_mut().set_raw(
-                header.name().to_owned(),
-                header.raw().clone()
-            );
+            request
+                .headers_mut()
+                .set_raw(header.name().to_owned(), header.raw().clone());
         }
 
         request
@@ -162,7 +161,7 @@ pub struct OAuthStateDataMiddleware {
 impl OAuthStateDataMiddleware {
     /// Construct a new middleware containing the provider that wraps all common auth services.
     pub fn new(provider: GothamOauthProvider) -> Self {
-        Self { provider: provider }
+        Self { provider }
     }
 }
 
@@ -186,7 +185,7 @@ pub struct OAuthGuardMiddleware {
 impl OAuthGuardMiddleware {
     /// Construct a new guard middleware with the scopes that it should guard against.
     pub fn new(scopes: Vec<Scope>) -> Self {
-        Self { scopes: scopes }
+        Self { scopes }
     }
 }
 
@@ -196,18 +195,16 @@ impl Middleware for OAuthGuardMiddleware {
         Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
     {
         let oauth = state.borrow::<GothamOauthProvider>().clone();
-        let f = oauth.guard_request(&state).then(move |result| {
-            match result {
-                Ok(guard) => {
-                    let mut issuer = oauth.issuer().unwrap();
-                    let flow = AccessFlow::new(&mut *issuer, self.scopes.as_slice());
-                    match guard.handle(flow) {
-                        Ok(_) => chain(state),
-                        Err(e) => Box::new(future::err((state, e.into_handler_error())))
-                    }
-                },
-                Err(e) => Box::new(future::err((state, e.into_handler_error()))),
+        let f = oauth.guard_request(&state).then(move |result| match result {
+            Ok(guard) => {
+                let mut issuer = oauth.issuer().unwrap();
+                let flow = AccessFlow::new(&mut *issuer, self.scopes.as_slice());
+                match guard.handle(flow) {
+                    Ok(_) => chain(state),
+                    Err(e) => Box::new(future::err((state, e.into_handler_error()))),
+                }
             }
+            Err(e) => Box::new(future::err((state, e.into_handler_error()))),
         });
 
         Box::new(f)
@@ -252,22 +249,26 @@ impl WebRequest for ResolvedRequest {
     type Response = Response;
 
     fn query(&mut self) -> Result<QueryParameter, ()> {
-        self.query.as_ref().map(|query| QueryParameter::SingleValue(
-            SingleValueQuery::StringValue(Cow::Borrowed(query))))
+        self.query
+            .as_ref()
+            .map(|query| {
+                QueryParameter::SingleValue(SingleValueQuery::StringValue(Cow::Borrowed(query)))
+            })
             .ok_or(())
     }
 
     fn urlbody(&mut self) -> Result<QueryParameter, ()> {
-        self.body.as_ref().map(|body| QueryParameter::SingleValue(
-            SingleValueQuery::StringValue(Cow::Borrowed(body))))
+        self.body
+            .as_ref()
+            .map(|body| QueryParameter::SingleValue(SingleValueQuery::StringValue(Cow::Borrowed(body))))
             .ok_or(())
     }
 
-    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()>{
+    fn authheader(&mut self) -> Result<Option<Cow<str>>, ()> {
         match &self.authorization {
             &Ok(Some(ref string)) => Ok(Some(Cow::Borrowed(string))),
             &Ok(None) => Ok(None),
-            &Err(_) => Err(())
+            &Err(_) => Err(()),
         }
     }
 }
@@ -316,10 +317,10 @@ impl WebResponse for Response {
 
     /// Add an `WWW-Authenticate` header
     fn with_authorization(mut self, kind: &str) -> Result<Self, Self::Error> {
-        self.headers_mut().set_raw("WWW-Authenticate", vec![kind.as_bytes().to_vec()]);
+        self.headers_mut()
+            .set_raw("WWW-Authenticate", vec![kind.as_bytes().to_vec()]);
         Ok(self)
     }
-
 }
 
 impl ResolvedRequest {
@@ -334,9 +335,9 @@ impl ResolvedRequest {
         });
 
         ResolvedRequest {
-            request: request,
-            authorization: authorization,
-            query: query,
+            request,
+            authorization,
+            query,
             body: None,
         }
     }
@@ -354,9 +355,11 @@ struct ResolvedOwnerAuthorization<A> {
 
 impl<A> OwnerAuthorizer<ResolvedRequest> for ResolvedOwnerAuthorization<A>
 where
-    A: Fn(&Request, &PreGrant) -> OwnerAuthorization<Response>
+    A: Fn(&Request, &PreGrant) -> OwnerAuthorization<Response>,
 {
-    fn check_authorization(self, request: ResolvedRequest, grant: &PreGrant) -> OwnerAuthorization<Response> {
+    fn check_authorization(
+        self, request: ResolvedRequest, grant: &PreGrant,
+    ) -> OwnerAuthorization<Response> {
         // @todo Investigate passing along the state.
         (self.handler)(&request.request, grant)
     }
@@ -372,26 +375,23 @@ impl Future for AuthorizationCodeRequest {
     }
 }
 
-
 impl Future for GrantRequest {
     type Item = ReadyGrantRequest;
     type Error = OAuthError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.body.take().unwrap().poll() {
-            Ok(Async::Ready(body)) => {
-                body.and_then(|valid_body| {
-                    String::from_utf8(valid_body.to_vec()).ok()
-                })
+            Ok(Async::Ready(body)) => body
+                .and_then(|valid_body| String::from_utf8(valid_body.to_vec()).ok())
                 .and_then(|body_string| {
                     serde_urlencoded::from_str::<HashMap<String, String>>(body_string.as_str()).ok()
                 })
                 .and_then(|decoded_body| {
-                    let resolved = ResolvedRequest::with_body(self.request.take().unwrap(), decoded_body);
+                    let resolved =
+                        ResolvedRequest::with_body(self.request.take().unwrap(), decoded_body);
                     Some(Async::Ready(ReadyGrantRequest(resolved)))
                 })
-                .ok_or_else(|| OAuthError::BadRequest)
-            },
+                .ok_or_else(|| OAuthError::BadRequest),
             Ok(Async::NotReady) => Ok(Async::NotReady),
 
             // Not a valid url encoded body
@@ -412,11 +412,12 @@ impl Future for GuardRequest {
 
 impl ReadyAuthorizationCodeRequest {
     /// Wrapper proxy method to the handler of authorization flow, passing the resolved request.
-    pub fn handle<A>(self, flow: AuthorizationFlow, authorizer: A)-> Result<Response, OAuthError>
+    pub fn handle<A>(self, flow: AuthorizationFlow, authorizer: A) -> Result<Response, OAuthError>
     where
-        A: Fn(&Request, &PreGrant) -> OwnerAuthorization<Response>
+        A: Fn(&Request, &PreGrant) -> OwnerAuthorization<Response>,
     {
-        flow.handle(self.0).complete(ResolvedOwnerAuthorization { handler: authorizer })
+        flow.handle(self.0)
+            .complete(ResolvedOwnerAuthorization { handler: authorizer })
     }
 }
 

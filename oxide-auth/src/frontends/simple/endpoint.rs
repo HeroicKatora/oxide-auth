@@ -613,19 +613,19 @@ impl<T: Issuer> OptIssuer for T {
 
 impl OptRegistrar for Vacant {
     fn opt_ref(&self) -> Option<&dyn Registrar> {
-        Option::None
+        None
     }
 }
 
 impl OptAuthorizer for Vacant {
     fn opt_mut(&mut self) -> Option<&mut dyn Authorizer> {
-        Option::None
+        None
     }
 }
 
 impl OptIssuer for Vacant {
     fn opt_mut(&mut self) -> Option<&mut dyn Issuer> {
-        Option::None
+        None
     }
 }
 

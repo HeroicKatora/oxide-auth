@@ -237,7 +237,7 @@ impl Refresh {
     ///
     /// The provided `Input` needs to fulfill the *previous* `Output` request. See their
     /// documentation for more information.
-    pub fn advance<'req>(&mut self, input: Input<'req>) -> Output<'_> {
+    pub fn advance(&mut self, input: Input) -> Output { // Breaking change for 0.6
         // Run the next state transition if we got the right input. Errors that happen will be
         // stored as a inescapable error state.
         match (self.take(), input) {

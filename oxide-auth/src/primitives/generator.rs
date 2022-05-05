@@ -175,7 +175,7 @@ impl Assertion {
         Ok((serde_grant.grant(), tag))
     }
 
-    fn signature(&self, data: &[u8]) -> Output<hmac::Hmac<sha2::Sha256>> {
+    fn signature(&self, data: &[u8]) -> Output<Hmac<sha2::Sha256>> {
         let mut hasher = self.hasher.clone();
         hasher.update(data);
         hasher.finalize()

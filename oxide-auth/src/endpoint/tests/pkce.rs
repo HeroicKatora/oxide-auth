@@ -125,13 +125,13 @@ impl PkceSetup {
 
     fn assert_nonerror_redirect(response: CraftedResponse) {
         assert_eq!(response.status, Status::Redirect, "Expected redirect to client");
-        assert!(response.location.unwrap().as_str().find("error").is_none());
+        assert!(!response.location.unwrap().as_str().contains("error"));
     }
 
     fn json_response(body: Option<Body>) -> TokenResponse {
         let body = match body {
             Some(Body::Json(content)) => content,
-            other => panic!("Expected json formated credentials, got {:?}", other),
+            other => panic!("Expected json formatted credentials, got {:?}", other),
         };
 
         serde_json::from_str(&body).expect("Body not json encoded")

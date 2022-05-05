@@ -147,7 +147,7 @@ enum InnerTemplate<'a> {
         authorization_error: Option<&'a mut AuthorizationError>,
     },
 
-    /// The request did not conform to specification or was otheriwse invalid.
+    /// The request did not conform to specification or was otherwise invalid.
     ///
     /// As such, it was not handled further. Some processes still warrant a response body to be
     /// set in the case of an invalid request, containing additional information for the client.
@@ -208,10 +208,6 @@ impl<'flow> Solicitation<'flow> {
     /// across a redirect or a consent screen presented by the user agent.
     #[must_use]
     pub fn state(&self) -> Option<&str> {
-        // match self.state {
-        //     None => None,
-        //     Some(ref state) => Some(state),
-        // }
         self.state.as_ref().map(AsRef::as_ref)
     }
 
@@ -347,7 +343,7 @@ pub trait WebResponse {
     /// A pure text response with no special media type set.
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error>;
 
-    /// Json repsonse data, with media type `aplication/json`.
+    /// Json response data, with media type `application/json`.
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error>;
 }
 
@@ -540,7 +536,7 @@ impl<'a> Template<'a> {
 /// Slightly tweaked from an `Into`, there is `Option<&'a mut T>` from `&'a mut Option<T>`.
 fn reborrow<'a, T>(opt: &'a mut Option<&mut T>) -> Option<&'a mut T> {
     match opt {
-        // Magically does correct lifetime coercision.
+        // Magically does correct lifetime coercion.
         Some(inner) => Some(inner),
         None => None,
     }

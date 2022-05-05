@@ -154,7 +154,7 @@ impl fmt::Display for Scope {
     }
 }
 
-impl cmp::PartialOrd for Scope {
+impl PartialOrd for Scope {
     fn partial_cmp(&self, rhs: &Self) -> Option<cmp::Ordering> {
         let intersect_count = self.tokens.intersection(&rhs.tokens).count();
         if intersect_count == self.tokens.len() && intersect_count == rhs.tokens.len() {

@@ -139,7 +139,7 @@ impl WebResponse for CraftedResponse {
         Ok(())
     }
 
-    /// Json repsonse data, with media type `aplication/json.
+    /// Json response data, with media type `application/json.
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
         self.body = Some(Body::Json(data.to_owned()));
         Ok(())

@@ -83,7 +83,7 @@ Added token refresh
 
 Allow client secret in access token request body
 - Optional, and NOT RECOMMENDED feature of rfc6749.
-- Can be explicitely enabled in an `AccessTokenFlow`.
+- Can be explicitly enabled in an `AccessTokenFlow`.
 
 Ergonomic improvements
 - Reworked examples to be based on the same client. Thus, they all have similar
@@ -205,7 +205,7 @@ Renamings (`old` -> `new`):
 Thanks and More:
   For all of you that stick with me during the long period of seeming
   inactivity, this has been an exciting year. I've grown a lot in Rust and as a
-  developer. The first versions were coined by a bit of naivity on my part and
+  developer. The first versions were coined by a bit of naivety on my part and
   this one hopefully feels more mature and idiomatic.
 
 # v0.3.1 (2018-Mar-30)
@@ -259,7 +259,7 @@ Introduced the following features:
    A trait based system allows passing a collection of extensions to
    request handlers.  After the basic request checks passed, extensions
    can handle additional parameters of the request.  Based on
-   inidivudual logic, they can block the request with an error, attach
+   individual logic, they can block the request with an error, attach
    additional information or simply pass it on.  Any attached
    information become available to the same extension in subsequent
    requests with the employed grant.

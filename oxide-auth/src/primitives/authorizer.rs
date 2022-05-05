@@ -148,7 +148,7 @@ pub mod tests {
 
         // Authorize the same token again.
         let token_again = authorizer
-            .authorize(grant.clone())
+            .authorize(grant)
             .expect("Authorization should not fail here");
         // We don't produce the same token twice.
         assert_ne!(token, token_again);

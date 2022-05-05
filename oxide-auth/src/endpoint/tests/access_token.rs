@@ -249,7 +249,7 @@ fn access_equivalent_url() {
 #[test]
 fn access_request_unknown_client() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate as some unknown client with the passphrase
+    // Trying to authenticate as some unknown client with the passphrase
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -273,7 +273,7 @@ fn access_request_unknown_client() {
 #[test]
 fn access_request_wrong_authentication() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with an unsupported method (instead of Basic)
+    // Trying to authenticate with an unsupported method (instead of Basic)
     let wrong_authentication = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -294,7 +294,7 @@ fn access_request_wrong_authentication() {
 #[test]
 fn access_request_wrong_password() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with the wrong password
+    // Trying to authenticate with the wrong password
     let wrong_password = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -318,7 +318,7 @@ fn access_request_wrong_password() {
 #[test]
 fn access_request_empty_password() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with an empty password
+    // Trying to authenticate with an empty password
     let empty_password = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -339,7 +339,7 @@ fn access_request_empty_password() {
 #[test]
 fn access_request_multiple_client_indications() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with an unsupported method (instead of Basic)
+    // Trying to authenticate with an unsupported method (instead of Basic)
     let multiple_client_indications = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -361,7 +361,7 @@ fn access_request_multiple_client_indications() {
 #[test]
 fn access_request_public_authorization() {
     let mut setup = AccessTokenSetup::public_client();
-    // Trying to autenticate a public client
+    // Trying to authenticate a public client
     let public_authorization = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -382,7 +382,7 @@ fn access_request_public_authorization() {
 #[test]
 fn access_request_public_missing_client() {
     let mut setup = AccessTokenSetup::public_client();
-    // Trying to autenticate with an unsupported method (instead of Basic)
+    // Trying to authenticate with an unsupported method (instead of Basic)
     let public_missing_client = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -403,7 +403,7 @@ fn access_request_public_missing_client() {
 #[test]
 fn access_request_invalid_basic() {
     let mut setup = AccessTokenSetup::private_client();
-    // Trying to autenticate with an invalid basic authentication header
+    // Trying to authenticate with an invalid basic authentication header
     let invalid_basic = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -497,7 +497,7 @@ fn access_request_multiple_codes() {
         .get_mut("code")
         .unwrap()
         .push("AnotherAuthToken".to_string());
-    // Trying to get an access token with mutiple codes, even if one is correct
+    // Trying to get an access token with multiple codes, even if one is correct
     let multiple_codes = CraftedRequest {
         query: None,
         urlbody: Some(urlbody),
@@ -571,7 +571,7 @@ fn unwanted_private_in_body_fails() {
         auth: None,
     };
 
-    // in body must only succeed if we enabled it explicitely in the flow.
+    // in body must only succeed if we enabled it explicitly in the flow.
     setup.test_simple_error(valid_public);
 }
 

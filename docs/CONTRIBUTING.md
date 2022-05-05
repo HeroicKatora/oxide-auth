@@ -7,7 +7,7 @@ easiest way to track its progress is by opening a tracking issue.
 
 In case you already have working code - even better. Simply link the pull
 request in the issue. If you have not done so already, you _may_ also add
-yourself to the [list of constributors][contributors] (that's up to You, there
+yourself to the [list of contributors][contributors] (that's up to You, there
 is no need to so).
 
 Please respect that I maintain this on my own currently and have limited time.

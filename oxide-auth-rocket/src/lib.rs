@@ -97,7 +97,7 @@ impl<'r> OAuthRequest<'r> {
     pub fn add_body(&mut self, data: Data) {
         // Nothing to do if we already have a body, or already generated an error. This includes
         // the case where the content type does not indicate a form, as the error is silent until a
-        // body is explicitely requested.
+        // body is explicitly requested.
         if let Ok(None) = self.body {
             match serde_urlencoded::from_reader(data.open()) {
                 Ok(query) => self.body = Ok(Some(query)),

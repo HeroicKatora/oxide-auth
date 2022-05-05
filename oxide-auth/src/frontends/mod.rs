@@ -92,19 +92,19 @@
 //! # }
 //!
 //! impl WebRequest for ExampleRequest {
-//!     // Declare the corresponding response type.
-//!     type Response = ExampleResponse;
-//!
 //!     // Our internal frontends error type is `OAuthError`
 //!     type Error = OAuthError;
 //!
-//!     fn query(&mut self) -> Result<Cow<QueryParameter + 'static>, OAuthError> {
+//!     // Declare the corresponding response type.
+//!     type Response = ExampleResponse;
+//!
+//!     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, OAuthError> {
 //!         Ok(Cow::Borrowed(&self.query))
 //!     }
 //!
-//!     fn urlbody(&mut self) -> Result<Cow<QueryParameter + 'static>, OAuthError> {
+//!     fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, OAuthError> {
 //!         self.urlbody.as_ref()
-//!             .map(|body| Cow::Borrowed(body as &QueryParameter))
+//!             .map(|body| Cow::Borrowed(body as &dyn QueryParameter))
 //!             .ok_or(OAuthError::PrimitiveError)
 //!     }
 //!
@@ -128,7 +128,7 @@
 //!     fn redirect(&mut self, target: Url) -> Result<(), OAuthError> {
 //!         self.status = 302;
 //!         self.www_authenticate = None;
-//!         self.location = Some(target.into_string());
+//!         self.location = Some(target.into());
 //!         Ok(())
 //!     }
 //!

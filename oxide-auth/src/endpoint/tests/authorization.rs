@@ -36,7 +36,7 @@ impl AuthorizationSetup {
 
     fn test_success(&mut self, request: CraftedRequest) {
         let response = authorization_flow(
-            &mut self.registrar,
+            &self.registrar,
             &mut self.authorizer,
             &mut Allow(EXAMPLE_OWNER_ID.to_string()),
         )
@@ -46,14 +46,14 @@ impl AuthorizationSetup {
         assert_eq!(response.status, Status::Redirect);
 
         match response.location {
-            Some(ref url) if url.as_str().find("error").is_none() => (),
+            Some(ref url) if !url.as_str().contains("error") => (),
             other => panic!("Expected successful redirect: {:?}", other),
         }
     }
 
     fn test_silent_error(&mut self, request: CraftedRequest) {
         match authorization_flow(
-            &mut self.registrar,
+            &self.registrar,
             &mut self.authorizer,
             &mut Allow(EXAMPLE_OWNER_ID.to_string()),
         )
@@ -69,8 +69,8 @@ impl AuthorizationSetup {
     where
         P: OwnerSolicitor<CraftedRequest>,
     {
-        let response = authorization_flow(&mut self.registrar, &mut self.authorizer, &mut pagehandler)
-            .execute(request);
+        let response =
+            authorization_flow(&self.registrar, &mut self.authorizer, &mut pagehandler).execute(request);
 
         let response = match response {
             Err(resp) => panic!("Expected redirect with error set: {:?}", resp),
@@ -83,10 +83,7 @@ impl AuthorizationSetup {
                     .query_pairs()
                     .collect::<HashMap<_, _>>()
                     .get("error")
-                    .is_some() =>
-            {
-                ()
-            }
+                    .is_some() => {}
             other => panic!("Expected location with error set description: {:?}", other),
         }
     }
@@ -166,9 +163,9 @@ fn auth_request_silent_mismatching_redirect() {
 fn auth_request_silent_mismatching_literal_redirect() {
     // The redirect_uri does not match if stringly matched.
     let mut setup = AuthorizationSetup::new();
-    const UNIQUE_CLIENT: &'static str = "client_auth_request_silent_mismatching_literal_redirect";
-    const REGISTERED_URL: &'static str = "https://right.client.example/endpoint";
-    const TRIED_URL: &'static str = "https://right.client.example/endpoint/";
+    const UNIQUE_CLIENT: &str = "client_auth_request_silent_mismatching_literal_redirect";
+    const REGISTERED_URL: &str = "https://right.client.example/endpoint";
+    const TRIED_URL: &str = "https://right.client.example/endpoint/";
 
     let client = Client::confidential(
         UNIQUE_CLIENT,
