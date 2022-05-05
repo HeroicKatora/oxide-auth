@@ -5,7 +5,7 @@ use crate::{
     code_grant::access_token::{
         access_token, Error as TokenError, Extension, Endpoint as TokenEndpoint, Request as TokenRequest,
     },
-    endpoint::NormalizedParameter
+    endpoint::NormalizedParameter,
 };
 
 use super::{
@@ -81,7 +81,7 @@ where
     /// - `registrar`
     /// - `authorizer`
     /// - `issuer`
-    /// 
+    ///
     /// otherwise this will error.
     ///
     /// # Panics
@@ -249,8 +249,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
         }
     }
 
-    fn parse_header(header: impl AsRef<str>) -> Result<Authorization, Invalid> {
-        let header = header.as_ref();
+    fn parse_header(header: Cow<str>) -> Result<Authorization, Invalid> {
         let authorization = {
             if !header.starts_with("Basic ") {
                 return Err(Invalid);
