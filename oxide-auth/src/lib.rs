@@ -66,6 +66,7 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![allow(clippy::module_name_repetitions)]
+// TODO: remove this!
 #![allow(clippy::result_unit_err)]
 
 pub mod code_grant;

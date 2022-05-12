@@ -1,62 +1,10 @@
 use std::borrow::Cow;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 
-use crate::{
-    primitives::grant::{GrantExtension, Value},
-};
+use crate::primitives::grant::{GrantExtension, Value};
 
 use base64;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PkceError {
-    inner: InternalPkceErr,
-}
-
-impl Display for PkceError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner)
-    }
-}
-
-impl Error for PkceError {}
-
-impl From<InternalPkceErr> for PkceError {
-    fn from(internal_pkce: InternalPkceErr) -> Self {
-        PkceError { inner: internal_pkce }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum InternalPkceErr {
-    NoChallenge,
-    NoVerifier,
-    InvalidMethod,
-    UnsupportedMethodPlain,
-    FailedVerification,
-}
-
-impl Display for InternalPkceErr {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                InternalPkceErr::NoChallenge =>
-                    "PKCE: It was indicated that an challenge was required but none was given",
-                InternalPkceErr::NoVerifier =>
-                    "PKCE: The challenge was agreed upon but there was no verifier present",
-                InternalPkceErr::FailedVerification => "PKCE: Failed to verify PKCE method",
-                InternalPkceErr::InvalidMethod => "PKCE: Method must be either `S256`(sha256) or `plain`",
-                InternalPkceErr::UnsupportedMethodPlain => "PKCE: Method is unsupported due to indicator `allow_plain: false` and `method: plain`",
-            }
-        )
-    }
-}
-
-impl Error for InternalPkceErr {}
 
 /// Proof Key for Code Exchange by OAuth Public Clients
 ///
@@ -69,7 +17,7 @@ impl Error for InternalPkceErr {}
 /// (from the respective [RFC 7636])
 ///
 /// In short, public clients share a verifier for a secret token when requesting their initial
-/// authorization code. When they then make a second request to the authorization server, trading
+/// authorization code. When they then make a second request to the autorization server, trading
 /// this code for an access token, they can credible assure the server of their identity by
 /// presenting the secret token.
 ///
@@ -77,7 +25,7 @@ impl Error for InternalPkceErr {}
 /// impersonating the client, while the `S256` method, which uses one-way hash functions, makes
 /// any attack short of reading the victim client's memory infeasible.
 ///
-/// Support for the `plain` method is OPTIONAL and must be turned on explicitly.
+/// Support for the `plain` method is OPTIONAL and must be turned on explicitely.
 ///
 /// [RFC 7636]: https://tools.ietf.org/html/rfc7636
 pub struct Pkce {
@@ -92,7 +40,6 @@ enum Method {
 
 impl Pkce {
     /// A pkce extensions which requires clients to use it.
-    #[must_use]
     pub fn required() -> Pkce {
         Pkce {
             required: true,
@@ -101,7 +48,6 @@ impl Pkce {
     }
 
     /// Pkce extension which will check verifiers if present but not require them.
-    #[must_use]
     pub fn optional() -> Pkce {
         Pkce {
             required: false,
@@ -119,22 +65,19 @@ impl Pkce {
     ///
     /// The method defaults to `plain` when none is given, effectively offering increased
     /// compatibility but less security. Support for `plain` is optional and needs to be enabled
-    /// explicitly through `Pkce::allow_plain`. This extension may also require clients to use it,
+    /// explicitely through `Pkce::allow_plain`. This extension may also require clients to use it,
     /// in which case giving no challenge also leads to an error.
     ///
     /// The resulting string MUST NOT be publicly available to the client. Otherwise, it would be
     /// trivial for a third party to impersonate the client in the access token request phase. For
     /// a SHA256 methods the results would not be quite as severe but still bad practice.
-    ///
-    /// # Errors
-    /// If it is indicated a challenge is required but none is given, this will error.
     pub fn challenge(
         &self, method: Option<Cow<str>>, challenge: Option<Cow<str>>,
-    ) -> Result<Option<Value>, PkceError> {
+    ) -> Result<Option<Value>, ()> {
         let method = method.unwrap_or(Cow::Borrowed("plain"));
 
         let challenge = match challenge {
-            None if self.required => return Err(InternalPkceErr::NoChallenge.into()),
+            None if self.required => return Err(()),
             None => return Ok(None),
             Some(challenge) => challenge,
         };
@@ -151,26 +94,25 @@ impl Pkce {
     /// method data is present as an extension. This is not strictly necessary since clients should
     /// not be able to delete private extension data but this check does not cost a lot.
     ///
-    /// # Errors
     /// When a challenge was agreed upon but no verifier is present, this method will return an
     /// error.
-    pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), PkceError> {
+    pub fn verify(&self, method: Option<Value>, verifier: Option<Cow<str>>) -> Result<(), ()> {
         let (method, verifier) = match (method, verifier) {
-            (None, _) if self.required => return Err(InternalPkceErr::NoChallenge.into()),
+            (None, _) if self.required => return Err(()),
             (None, _) => return Ok(()),
             // An internal saved method but no verifier
-            (Some(_), None) => return Err(InternalPkceErr::NoVerifier.into()),
+            (Some(_), None) => return Err(()),
             (Some(method), Some(verifier)) => (method, verifier),
         };
 
         let method = match method.into_private_value() {
             Ok(Some(method)) => method,
-            _ => return Err(InternalPkceErr::NoVerifier.into()),
+            _ => return Err(()),
         };
 
         let method = Method::from_encoded(Cow::Owned(method))?;
 
-        method.verify(&verifier).map_err(Into::into)
+        method.verify(&verifier)
     }
 }
 
@@ -186,19 +128,19 @@ fn b64encode(data: &[u8]) -> String {
 }
 
 impl Method {
-    fn from_parameter(method: Cow<str>, challenge: Cow<str>) -> Result<Self, InternalPkceErr> {
+    fn from_parameter(method: Cow<str>, challenge: Cow<str>) -> Result<Self, ()> {
         match method.as_ref() {
             "plain" => Ok(Method::Plain(challenge.into_owned())),
             "S256" => Ok(Method::Sha256(challenge.into_owned())),
-            _ => Err(InternalPkceErr::InvalidMethod),
+            _ => Err(()),
         }
     }
 
-    fn assert_supported_method(self, allow_plain: bool) -> Result<Self, InternalPkceErr> {
+    fn assert_supported_method(self, allow_plain: bool) -> Result<Self, ()> {
         match (self, allow_plain) {
             (this, true) => Ok(this),
             (Method::Sha256(content), false) => Ok(Method::Sha256(content)),
-            (Method::Plain(_), false) => Err(InternalPkceErr::UnsupportedMethodPlain),
+            (Method::Plain(_), false) => Err(()),
         }
     }
 
@@ -209,7 +151,7 @@ impl Method {
         }
     }
 
-    fn from_encoded(encoded: Cow<str>) -> Result<Method, InternalPkceErr> {
+    fn from_encoded(encoded: Cow<str>) -> Result<Method, ()> {
         match encoded.chars().last() {
             Some('p') => {
                 let mut string = encoded.into_owned();
@@ -221,17 +163,17 @@ impl Method {
                 string.pop();
                 Ok(Method::Sha256(string))
             }
-            _ => Err(InternalPkceErr::InvalidMethod),
+            _ => Err(()),
         }
     }
 
-    fn verify(&self, verifier: &str) -> Result<(), InternalPkceErr> {
+    fn verify(&self, verifier: &str) -> Result<(), ()> {
         match self {
             Method::Plain(encoded) => {
                 if encoded.as_bytes().ct_eq(verifier.as_bytes()).into() {
                     Ok(())
                 } else {
-                    Err(InternalPkceErr::FailedVerification)
+                    Err(())
                 }
             }
             Method::Sha256(encoded) => {
@@ -241,7 +183,7 @@ impl Method {
                 if encoded.as_bytes().ct_eq(b64digest.as_bytes()).into() {
                     Ok(())
                 } else {
-                    Err(InternalPkceErr::FailedVerification)
+                    Err(())
                 }
             }
         }
