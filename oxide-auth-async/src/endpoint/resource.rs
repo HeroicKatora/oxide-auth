@@ -115,7 +115,7 @@ where
 impl<R: WebRequest> WrappedRequest<R> {
     fn new(request: &mut R) -> Self {
         let token = match request.authheader() {
-            // TODO: this is unecessarily wasteful, we always clone.
+            // TODO: this is unnecessarily wasteful, we always clone.
             Ok(Some(token)) => Some(token.into_owned()),
             Ok(None) => None,
             Err(error) => return Self::from_error(error),

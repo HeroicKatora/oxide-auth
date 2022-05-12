@@ -11,7 +11,7 @@ use serde_json;
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
 use super::defaults::*;
-use crate::code_grant::accesstoken::TokenResponse;
+use crate::code_grant::access_token::TokenResponse;
 use crate::frontends::simple::endpoint::{refresh_flow, resource_flow};
 
 struct RefreshTokenSetup {
@@ -89,7 +89,7 @@ impl RefreshTokenSetup {
         assert!(issued.refreshable());
         let refresh_token = issued.refresh.clone().unwrap();
 
-        let basic_authorization = "DO_NOT_USE".into();
+        let basic_authorization = "DO_NOT_USE".to_string();
 
         RefreshTokenSetup {
             registrar,
@@ -103,7 +103,7 @@ impl RefreshTokenSetup {
     fn assert_success(&mut self, request: CraftedRequest) -> RefreshedToken {
         let response = refresh_flow(&self.registrar, &mut self.issuer)
             .execute(request)
-            .expect("Expected non-failed reponse");
+            .expect("Expected non-failed response");
         assert_eq!(response.status, Status::Ok);
         let body = match response.body {
             Some(Body::Json(body)) => body,
@@ -123,7 +123,7 @@ impl RefreshTokenSetup {
     fn assert_unauthenticated(&mut self, request: CraftedRequest) {
         let response = refresh_flow(&self.registrar, &mut self.issuer)
             .execute(request)
-            .expect("Expected non-failed reponse");
+            .expect("Expected non-failed response");
         let body = self.assert_json_body(&response);
         if response.status == Status::Unauthorized {
             assert!(response.www_authenticate.is_some());
@@ -137,7 +137,7 @@ impl RefreshTokenSetup {
     fn assert_invalid(&mut self, request: CraftedRequest) {
         let response = refresh_flow(&self.registrar, &mut self.issuer)
             .execute(request)
-            .expect("Expected non-failed reponse");
+            .expect("Expected non-failed response");
         let body = self.assert_json_body(&response);
         assert_eq!(response.status, Status::BadRequest);
 
@@ -149,7 +149,7 @@ impl RefreshTokenSetup {
     fn assert_invalid_grant(&mut self, request: CraftedRequest) {
         let response = refresh_flow(&self.registrar, &mut self.issuer)
             .execute(request)
-            .expect("Expected non-failed reponse");
+            .expect("Expected non-failed response");
         let body = self.assert_json_body(&response);
         assert_eq!(response.status, Status::BadRequest);
 
@@ -161,7 +161,7 @@ impl RefreshTokenSetup {
     fn assert_wrong_authentication(&mut self, request: CraftedRequest) {
         let response = refresh_flow(&self.registrar, &mut self.issuer)
             .execute(request)
-            .expect("Expected non-failed reponse");
+            .expect("Expected non-failed response");
         assert_eq!(response.status, Status::Unauthorized);
         assert!(response.www_authenticate.is_some());
 
@@ -247,7 +247,7 @@ fn access_valid_private() {
 fn public_private_invalid_grant() {
     let mut setup = RefreshTokenSetup::public_client();
     let client = Client::confidential(
-        "PrivateClient".into(),
+        "PrivateClient",
         RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
         EXAMPLE_SCOPE.parse().unwrap(),
         EXAMPLE_PASSPHRASE.as_bytes(),

@@ -29,7 +29,7 @@
 //! [`Issuer`]: ../../primitives/issuer/trait.Issuer.html
 //! [`Registrar`]: ../../primitives/registrar/trait.Registrar.html
 mod authorization;
-mod accesstoken;
+mod access_token;
 mod error;
 mod refresh;
 mod resource;
@@ -53,17 +53,17 @@ use url::Url;
 
 // Re-export the extension traits under prefixed names.
 pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
-pub use crate::code_grant::accesstoken::Extension as AccessTokenExtension;
+pub use crate::code_grant::access_token::Extension as AccessTokenExtension;
 
 pub use crate::primitives::registrar::PreGrant;
 pub use self::authorization::*;
-pub use self::accesstoken::*;
+pub use self::access_token::*;
 pub use self::error::OAuthError;
 pub use self::refresh::RefreshFlow;
 pub use self::resource::*;
 pub use self::query::*;
 
-/// Answer from OwnerAuthorizer to indicate the owners choice.
+/// Answer from `OwnerAuthorizer` to indicate the owners choice.
 pub enum OwnerConsent<Response: WebResponse> {
     /// The owner did not authorize the client.
     Denied,
@@ -124,6 +124,7 @@ enum InnerTemplate<'a> {
         /// The underlying cause for denying access.
         ///
         /// The http authorization header is to be set according to this field.
+        #[allow(dead_code)]
         error: Option<ResourceError>,
 
         /// Information on an access token error.
@@ -146,7 +147,7 @@ enum InnerTemplate<'a> {
         authorization_error: Option<&'a mut AuthorizationError>,
     },
 
-    /// The request did not conform to specification or was otheriwse invalid.
+    /// The request did not conform to specification or was otherwise invalid.
     ///
     /// As such, it was not handled further. Some processes still warrant a response body to be
     /// set in the case of an invalid request, containing additional information for the client.
@@ -183,6 +184,7 @@ impl<'flow> Solicitation<'flow> {
     /// Clone the solicitation into an owned structure.
     ///
     /// This mainly helps with sending it across threads.
+    #[must_use]
     pub fn into_owned(self) -> Solicitation<'static> {
         Solicitation {
             grant: Cow::Owned(self.grant.into_owned()),
@@ -195,6 +197,7 @@ impl<'flow> Solicitation<'flow> {
     /// The information in the `PreGrant` is the authoritative information on the client and scopes
     /// associated with the request. It has already been validated against those settings and
     /// restrictions that were applied when registering the client.
+    #[must_use]
     pub fn pre_grant(&self) -> &PreGrant {
         self.grant.as_ref()
     }
@@ -203,17 +206,16 @@ impl<'flow> Solicitation<'flow> {
     ///
     /// This will need to be provided to the response back to the client so it must be preserved
     /// across a redirect or a consent screen presented by the user agent.
+    #[must_use]
     pub fn state(&self) -> Option<&str> {
-        match self.state {
-            None => None,
-            Some(ref state) => Some(&state),
-        }
+        self.state.as_ref().map(AsRef::as_ref)
     }
 
     /// Create a new solicitation request from a pre grant.
     ///
     /// You usually wouldn't need to call this manually as it is called by the endpoint's flow and
     /// then handed with all available information to the solicitor.
+    #[must_use]
     pub fn new(grant: &'flow PreGrant) -> Self {
         Solicitation {
             grant: Cow::Borrowed(grant),
@@ -222,6 +224,7 @@ impl<'flow> Solicitation<'flow> {
     }
 
     /// Add a client state to the solicitation.
+    #[must_use]
     pub fn with_state(self, state: &'flow str) -> Self {
         Solicitation {
             state: Some(Cow::Borrowed(state)),
@@ -296,24 +299,31 @@ pub trait WebRequest {
 
     /// Retrieve a parsed version of the url query.
     ///
-    /// An Err return value indicates a malformed query or an otherwise malformed WebRequest. Note
+    /// # Errors
+    /// An Err return value indicates a malformed query or an otherwise malformed [`WebRequest`]. Note
     /// that an empty query should result in `Ok(HashMap::new())` instead of an Err.
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error>;
 
     /// Retrieve the parsed `application/x-form-urlencoded` body of the request.
     ///
+    /// # Errors
     /// An Err value / indicates a malformed body or a different Content-Type.
     fn urlbody(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error>;
 
-    /// Contents of the authorization header or none if none exists. An Err value indicates a
-    /// malformed header or request.
+    /// Contents of the authorization header or none if none exists.
+    ///
+    /// # Errors
+    /// An Err value indicates a malformed header or request.
     fn authheader(&mut self) -> Result<Option<Cow<str>>, Self::Error>;
 }
 
-/// Response representation into which the Request is transformed by the code_grant types.
+/// Response representation into which the Request is transformed by the `code_grant` types.
 ///
 /// At most one of the methods `body_text`, `body_json` will be called. Some flows will
 /// however not call any of those methods.
+/// # Errors
+/// If one of these fields failed to set, the method will error
+#[allow(clippy::missing_errors_doc)]
 pub trait WebResponse {
     /// The error generated when trying to construct an unhandled or invalid response.
     type Error;
@@ -333,7 +343,7 @@ pub trait WebResponse {
     /// A pure text response with no special media type set.
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error>;
 
-    /// Json repsonse data, with media type `aplication/json.
+    /// Json response data, with media type `application/json`.
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error>;
 }
 
@@ -526,7 +536,7 @@ impl<'a> Template<'a> {
 /// Slightly tweaked from an `Into`, there is `Option<&'a mut T>` from `&'a mut Option<T>`.
 fn reborrow<'a, T>(opt: &'a mut Option<&mut T>) -> Option<&'a mut T> {
     match opt {
-        // Magically does correct lifetime coercision.
+        // Magically does correct lifetime coercion.
         Some(inner) => Some(inner),
         None => None,
     }

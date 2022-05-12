@@ -1,10 +1,13 @@
 //! Async versions of all primitives traits.
 use async_trait::async_trait;
-use oxide_auth::primitives::{grant::Grant, scope::Scope};
-use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken};
-use oxide_auth::primitives::{
-    authorizer, registrar, issuer,
-    registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant},
+use oxide_auth::{
+    primitives::{
+        grant::Grant,
+        scope::Scope,
+        issuer::{IssuedToken, RefreshedToken},
+        authorizer, registrar, issuer,
+        registrar::{ClientUrl, BoundClient, RegistrarError, PreGrant},
+    },
 };
 
 #[async_trait]
@@ -65,6 +68,7 @@ where
 pub trait Registrar {
     async fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError>;
 
+    #[allow(clippy::needless_lifetimes)] // Clippy is wrong here, we need this lifetime.
     async fn negotiate<'a>(
         &self, client: BoundClient<'a>, scope: Option<Scope>,
     ) -> Result<PreGrant, RegistrarError>;
@@ -81,6 +85,7 @@ where
         registrar::Registrar::bound_redirect(self, bound)
     }
 
+    #[allow(clippy::needless_lifetimes)]
     async fn negotiate<'a>(
         &self, client: BoundClient<'a>, scope: Option<Scope>,
     ) -> Result<PreGrant, RegistrarError> {

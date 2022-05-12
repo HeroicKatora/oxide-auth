@@ -149,10 +149,10 @@ pub struct OAuthResponse {
 #[derive(Debug)]
 /// The error type for Oxide Auth operations
 pub enum WebError {
-    /// Errors occuring in Endpoint operations
+    /// Errors occurring in Endpoint operations
     Endpoint(OAuthError),
 
-    /// Errors occuring when producing Headers
+    /// Errors occurring when producing Headers
     Header(InvalidHeaderValue),
 
     /// Errors with the request encoding
@@ -447,8 +447,10 @@ impl fmt::Display for WebError {
             WebError::Authorization => write!(f, "Request has invalid Authorization headers"),
             WebError::Canceled => write!(f, "Operation canceled"),
             WebError::Mailbox => write!(f, "An actor's mailbox was full"),
-            WebError::InternalError(None) => write!(f, "An internal server error occured"),
-            WebError::InternalError(Some(ref e)) => write!(f, "An internal server error occured: {}", e),
+            WebError::InternalError(None) => write!(f, "An internal server error occurred"),
+            WebError::InternalError(Some(ref e)) => {
+                write!(f, "An internal server error occurred: {}", e)
+            }
         }
     }
 }

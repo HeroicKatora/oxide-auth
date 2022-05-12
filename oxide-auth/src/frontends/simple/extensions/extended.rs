@@ -26,7 +26,7 @@ impl<Inner> Extended<Inner, AddonList> {
 }
 
 impl<Inner, E> Extended<Inner, E> {
-    /// Wrap an inner endpoint with a preconstructed extension instance.
+    /// Wrap an inner endpoint with a pre-constructed extension instance.
     pub fn extend_with(inner: Inner, extension: E) -> Self {
         Extended {
             inner,

@@ -171,7 +171,7 @@ impl WebResponse for Response {
         Ok(())
     }
 
-    /// Json repsonse data, with media type `aplication/json.
+    /// Json response data, with media type `application/json.
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
         self.body = Some(Body::Json(data.to_owned()));
         Ok(())
@@ -243,7 +243,7 @@ where
         self.0.body_text(text).map_err(&mut self.1)
     }
 
-    /// Json repsonse data, with media type `aplication/json.
+    /// Json response data, with media type `application/json`.
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
         self.0.body_json(data).map_err(&mut self.1)
     }

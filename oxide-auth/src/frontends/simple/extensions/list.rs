@@ -2,12 +2,12 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::{AuthorizationAddon, AccessTokenAddon, AddonResult};
-use crate::code_grant::accesstoken::{Extension as AccessTokenExtension, Request};
+use crate::code_grant::access_token::{Extension as AccessTokenExtension, Request};
 use crate::code_grant::authorization::{Extension as AuthorizationExtension, Request as AuthRequest};
 use crate::endpoint::Extension;
 use crate::primitives::grant::{Extensions, GrantExtension};
 
-/// A simple list of loosly related authorization and access addons.
+/// A simple list of loosely related authorization and access addons.
 ///
 /// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
 /// other types.
@@ -71,9 +71,7 @@ impl Extension for AddonList {
 }
 
 impl AccessTokenExtension for AddonList {
-    fn extend(
-        &mut self, request: &dyn Request, mut data: Extensions,
-    ) -> std::result::Result<Extensions, ()> {
+    fn extend(&mut self, request: &dyn Request, mut data: Extensions) -> Result<Extensions, ()> {
         let mut result_data = Extensions::new();
 
         for ext in self.access_token.iter() {

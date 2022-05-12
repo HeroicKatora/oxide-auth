@@ -77,8 +77,8 @@ enum CraftedError {
 }
 
 impl WebRequest for CraftedRequest {
-    type Response = CraftedResponse;
     type Error = CraftedError;
+    type Response = CraftedResponse;
 
     fn query(&mut self) -> Result<Cow<dyn QueryParameter + 'static>, Self::Error> {
         self.query
@@ -139,7 +139,7 @@ impl WebResponse for CraftedResponse {
         Ok(())
     }
 
-    /// Json repsonse data, with media type `aplication/json.
+    /// Json response data, with media type `application/json.
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
         self.body = Some(Body::Json(data.to_owned()));
         Ok(())

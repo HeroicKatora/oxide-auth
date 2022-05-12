@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use chrono::{Duration, Utc};
 
 use crate::code_grant::{
-    accesstoken::TokenResponse,
+    access_token::TokenResponse,
     error::{AccessTokenError, AccessTokenErrorType},
 };
 use crate::primitives::grant::Grant;
@@ -237,7 +237,7 @@ impl Refresh {
     ///
     /// The provided `Input` needs to fulfill the *previous* `Output` request. See their
     /// documentation for more information.
-    pub fn advance<'req>(&mut self, input: Input<'req>) -> Output<'_> {
+    pub fn advance(&mut self, input: Input) -> Output { // Breaking change for 0.6
         // Run the next state transition if we got the right input. Errors that happen will be
         // stored as a inescapable error state.
         match (self.take(), input) {
@@ -301,7 +301,7 @@ impl Refresh {
                 client: &grant.client_id,
                 pass: None,
             },
-            RefreshState::Recovering { token, .. } => Output::RecoverRefresh { token: &token },
+            RefreshState::Recovering { token, .. } => Output::RecoverRefresh { token },
             RefreshState::Issuing { token, grant, .. } => Output::Refresh {
                 token,
                 grant: grant.clone(),
@@ -478,7 +478,7 @@ fn validate(scope: Option<Cow<str>>, grant: Box<Grant>, token: String) -> Result
     let scope = match scope {
         Some(scope) => {
             // ... MUST NOT include any scope not originally granted.
-            if !grant.scope.priviledged_to(&scope) {
+            if !grant.scope.privileged_to(&scope) {
                 // ... or exceeds the scope grant (Section 5.2)
                 return Err(Error::invalid(AccessTokenErrorType::InvalidScope));
             }

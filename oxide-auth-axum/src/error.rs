@@ -8,10 +8,10 @@ use oxide_auth::frontends::{dev::OAuthError, simple::endpoint::Error};
 #[derive(Debug)]
 /// The error type for Oxide Auth operations
 pub enum WebError {
-    /// Errors occuring in Endpoint operations
+    /// Errors occurring in Endpoint operations
     Endpoint(OAuthError),
 
-    /// Errors occuring in Endpoint operations
+    /// Errors occurring in Endpoint operations
     Header(InvalidHeaderValue),
 
     /// Errors with the request encoding
@@ -43,8 +43,10 @@ impl std::fmt::Display for WebError {
             WebError::Query => write!(f, "No query present"),
             WebError::Body => write!(f, "No body present"),
             WebError::Authorization => write!(f, "Request has invalid Authorization headers"),
-            WebError::InternalError(None) => write!(f, "An internal server error occured"),
-            WebError::InternalError(Some(ref e)) => write!(f, "An internal server error occured: {}", e),
+            WebError::InternalError(None) => write!(f, "An internal server error occurred"),
+            WebError::InternalError(Some(ref e)) => {
+                write!(f, "An internal server error occurred: {}", e)
+            }
         }
     }
 }

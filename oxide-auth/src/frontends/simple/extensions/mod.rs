@@ -2,7 +2,7 @@
 //!
 //! Note that extensions will probably return in `v0.4` but not its preview versions.
 pub use crate::code_grant::authorization::Request as AuthorizationRequest;
-pub use crate::code_grant::accesstoken::Request as AccessTokenRequest;
+pub use crate::code_grant::access_token::Request as AccessTokenRequest;
 
 mod extended;
 mod pkce;
@@ -40,7 +40,7 @@ pub trait AuthorizationAddon: GrantExtension {
     ///
     /// Derived information which needs to be bound to the returned grant can be stored in an
     /// encoded form by returning `Ok(extension_data)` while errors can be signaled via `Err(())`.
-    /// Extensions can also store their pure existance by initializing the extension struct without
+    /// Extensions can also store their pure existence by initializing the extension struct without
     /// data. Specifically, the data can be used in a corresponding `AccessTokenExtension`.
     fn execute(&self, request: &dyn AuthorizationRequest) -> AddonResult;
 }

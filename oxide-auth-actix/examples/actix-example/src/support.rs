@@ -38,7 +38,7 @@ pub fn dummy_client() -> dev::Server {
 }
 
 async fn endpoint_impl(
-    (query, state): (web::Query<HashMap<String, String>>, web::Data<Client>),
+    (query, state): (web::Query<HashMap<String, String>>, Data<Client>),
 ) -> impl Responder {
     if let Some(cause) = query.get("error") {
         return HttpResponse::BadRequest()
@@ -56,14 +56,14 @@ async fn endpoint_impl(
     }
 }
 
-async fn refresh(state: web::Data<Client>) -> impl Responder {
+async fn refresh(state: Data<Client>) -> impl Responder {
     match state.refresh() {
         Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }
 
-async fn get_with_token(state: web::Data<Client>) -> impl Responder {
+async fn get_with_token(state: Data<Client>) -> impl Responder {
     let protected_page = match state.retrieve_protected_page() {
         Ok(page) => page,
         Err(err) => return HttpResponse::InternalServerError().body(format!("{}", err)),

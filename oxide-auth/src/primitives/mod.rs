@@ -1,4 +1,4 @@
-//! A collection of primites useful for more than one authorization method.
+//! A collection of primitives useful for more than one authorization method.
 //!
 //! A primitive is the smallest independent unit of policy used in OAuth related endpoints. For
 //! example, an `authorizer` generates and verifies Authorization Codes.  There only is, as you

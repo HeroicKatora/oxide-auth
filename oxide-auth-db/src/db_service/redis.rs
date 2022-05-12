@@ -95,8 +95,8 @@ impl StringfiedEncodedClient {
 
 impl RedisDataSource {
     pub fn new(url: String, max_pool_size: u32, client_prefix: String) -> Result<Self, RedisError> {
-        let manager = r2d2_redis::RedisConnectionManager::new(url.as_str())?;
-        let pool = r2d2::Pool::builder().max_size(max_pool_size).build(manager);
+        let manager = RedisConnectionManager::new(url.as_str())?;
+        let pool = Pool::builder().max_size(max_pool_size).build(manager);
         match pool {
             Ok(pool) => Ok(RedisDataSource {
                 url,
@@ -148,7 +148,7 @@ impl OauthClientDBRepository for RedisDataSource {
         let mut r = self.pool.get()?;
         let client_str = r.get::<&str, String>(&(self.client_prefix.to_owned() + id))?;
         let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;
-        Ok(stringfied_client.to_encoded_client()?)
+        stringfied_client.to_encoded_client()
     }
 
     fn regist_from_encoded_client(&self, client: EncodedClient) -> anyhow::Result<()> {

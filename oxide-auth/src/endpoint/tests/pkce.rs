@@ -3,7 +3,7 @@ use crate::primitives::issuer::TokenMap;
 use crate::primitives::generator::RandomGenerator;
 use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
-use crate::code_grant::accesstoken::TokenResponse;
+use crate::code_grant::access_token::TokenResponse;
 use crate::endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
 use crate::frontends::simple::extensions::{AddonList, Extended, Pkce};
 use crate::frontends::simple::endpoint::{Generic, Error, Vacant};
@@ -38,9 +38,9 @@ impl PkceSetup {
         let issuer = TokenMap::new(RandomGenerator::new(16));
 
         PkceSetup {
-            registrar: registrar,
-            authorizer: authorizer,
-            issuer: issuer,
+            registrar,
+            authorizer,
+            issuer,
             auth_token: token,
             // The following are from https://tools.ietf.org/html/rfc7636#page-18
             sha256_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string(),
@@ -125,13 +125,13 @@ impl PkceSetup {
 
     fn assert_nonerror_redirect(response: CraftedResponse) {
         assert_eq!(response.status, Status::Redirect, "Expected redirect to client");
-        assert!(response.location.unwrap().as_str().find("error").is_none());
+        assert!(!response.location.unwrap().as_str().contains("error"));
     }
 
     fn json_response(body: Option<Body>) -> TokenResponse {
         let body = match body {
             Some(Body::Json(content)) => content,
-            other => panic!("Expected json formated credentials, got {:?}", other),
+            other => panic!("Expected json formatted credentials, got {:?}", other),
         };
 
         serde_json::from_str(&body).expect("Body not json encoded")

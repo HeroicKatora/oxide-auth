@@ -104,7 +104,7 @@ impl<I: TagGrant> Authorizer for AuthMap<I> {
         Ok(token)
     }
 
-    fn extract<'a>(&mut self, grant: &'a str) -> Result<Option<Grant>, ()> {
+    fn extract(&mut self, grant: &str) -> Result<Option<Grant>, ()> {
         Ok(self.tokens.remove(grant))
     }
 }
@@ -148,7 +148,7 @@ pub mod tests {
 
         // Authorize the same token again.
         let token_again = authorizer
-            .authorize(grant.clone())
+            .authorize(grant)
             .expect("Authorization should not fail here");
         // We don't produce the same token twice.
         assert_ne!(token, token_again);

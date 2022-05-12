@@ -3,9 +3,9 @@
 //! The backend codifies the requirements for the  from the [RFC 6749] into types and functions as
 //! safely as possible. The result of the backend are abstract results, actions which should be
 //! executed or relayed by the frontend using its available types. Abstract in this sense means
-//! that the reponses from the backend are not generic on an input type.
+//! that the responses from the backend are not generic on an input type.
 //!
-//! Another consideration is the possiblilty of reusing some components with other oauth schemes.
+//! Another consideration is the possibility of reusing some components with other oauth schemes.
 //! In this way, the backend is used to group necessary types and as an interface to implementors,
 //! to be able to infer the range of applicable end effectors (i.e. authorizers, issuer,
 //! registrars).
@@ -27,7 +27,7 @@
 //! [`endpoint`]: ../endpoint/index.html
 //! [`Endpoint`]: ../endpoint/trait.Endpoint.html
 
-pub mod accesstoken;
+pub mod access_token;
 pub mod authorization;
 pub mod error;
 pub mod extensions;

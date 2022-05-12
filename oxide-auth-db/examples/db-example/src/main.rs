@@ -25,15 +25,17 @@ here</a> to begin the authorization process.
 </html>
 ";
 
+type GenericEndpoint = Generic<
+    DBRegistrar,
+    AuthMap<RandomGenerator>,
+    TokenMap<RandomGenerator>,
+    Vacant,
+    Vec<Scope>,
+    fn() -> OAuthResponse,
+>;
+
 struct State {
-    endpoint: Generic<
-        DBRegistrar,
-        AuthMap<RandomGenerator>,
-        TokenMap<RandomGenerator>,
-        Vacant,
-        Vec<Scope>,
-        fn() -> OAuthResponse,
-    >,
+    endpoint: GenericEndpoint,
 }
 
 enum Extras {
@@ -43,7 +45,7 @@ enum Extras {
 }
 
 async fn get_authorize(
-    (req, state): (OAuthRequest, web::Data<Addr<State>>),
+    (req, state): (OAuthRequest, Data<Addr<State>>),
 ) -> Result<OAuthResponse, WebError> {
     // GET requests should not mutate server state and are extremely
     // vulnerable accidental repetition as well as Cross-Site Request
@@ -52,7 +54,7 @@ async fn get_authorize(
 }
 
 async fn post_authorize(
-    (r, req, state): (HttpRequest, OAuthRequest, web::Data<Addr<State>>),
+    (r, req, state): (HttpRequest, OAuthRequest, Data<Addr<State>>),
 ) -> Result<OAuthResponse, WebError> {
     // Some authentication should be performed here in production cases
     state
@@ -60,19 +62,15 @@ async fn post_authorize(
         .await?
 }
 
-async fn token((req, state): (OAuthRequest, web::Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
+async fn token((req, state): (OAuthRequest, Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
     state.send(Token(req).wrap(Extras::Nothing)).await?
 }
 
-async fn refresh(
-    (req, state): (OAuthRequest, web::Data<Addr<State>>),
-) -> Result<OAuthResponse, WebError> {
+async fn refresh((req, state): (OAuthRequest, Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
     state.send(Refresh(req).wrap(Extras::Nothing)).await?
 }
 
-async fn index(
-    (req, state): (OAuthResource, web::Data<Addr<State>>),
-) -> Result<OAuthResponse, WebError> {
+async fn index((req, state): (OAuthResource, Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
     match state
         .send(Resource(req.into_request()).wrap(Extras::Nothing))
         .await?
@@ -85,27 +83,27 @@ async fn index(
     }
 }
 
-async fn start_browser() -> () {
+async fn start_browser() {
     let _ = thread::spawn(support::open_in_browser);
 }
 
 /// Example of a main function of an actix-web server supporting oauth.
 #[actix_web::main]
 pub async fn main() -> std::io::Result<()> {
-    std::env::set_var(
+    env::set_var(
         "RUST_LOG",
         "actix_example=info,actix_web=info,actix_http=info,actix_service=info",
     );
-    std::env::set_var("REDIS_URL", "redis://localhost/3");
-    std::env::set_var("MAX_POOL_SIZE", "32");
+    env::set_var("REDIS_URL", "redis://localhost/3");
+    env::set_var("MAX_POOL_SIZE", "32");
 
-    std::env::set_var("CLIENT_PREFIX", "client:");
+    env::set_var("CLIENT_PREFIX", "client:");
 
     env_logger::init();
 
     let redis_url = env::var("REDIS_URL").expect("REDIS_URL should be set");
-    let max_pool_size = env::var("MAX_POOL_SIZE").unwrap_or("32".parse().unwrap());
-    let client_prefix = env::var("CLIENT_PREFIX").unwrap_or("client:".parse().unwrap());
+    let max_pool_size = env::var("MAX_POOL_SIZE").unwrap_or_else(|_| "32".parse().unwrap());
+    let client_prefix = env::var("CLIENT_PREFIX").unwrap_or_else(|_| "client:".parse().unwrap());
 
     // Start, then open in browser, don't care about this finishing.
     rt::spawn(start_browser());
@@ -167,9 +165,9 @@ impl State {
         }
     }
 
-    pub fn with_solicitor<'a, S>(
-        &'a mut self, solicitor: S,
-    ) -> impl Endpoint<OAuthRequest, Error = WebError> + 'a
+    pub fn with_solicitor<S>(
+        &'_ mut self, solicitor: S,
+    ) -> impl Endpoint<OAuthRequest, Error = WebError> + '_
     where
         S: OwnerSolicitor<OAuthRequest> + 'static,
     {
@@ -206,7 +204,7 @@ where
                         OAuthResponse::ok()
                             .content_type("text/html")
                             .unwrap()
-                            .body(&crate::support::consent_page_html("/authorize".into(), pre_grant)),
+                            .body(&support::consent_page_html("/authorize", pre_grant)),
                     )
                 });
 

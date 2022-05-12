@@ -1,11 +1,17 @@
 use std::str::from_utf8;
 use std::marker::PhantomData;
 
-use crate::code_grant::accesstoken::{
-    access_token, Error as TokenError, Extension, Endpoint as TokenEndpoint, Request as TokenRequest,
+use crate::{
+    code_grant::access_token::{
+        access_token, Error as TokenError, Extension, Endpoint as TokenEndpoint, Request as TokenRequest,
+    },
+    endpoint::NormalizedParameter,
 };
 
-use super::*;
+use super::{
+    Authorizer, Cow, Endpoint, InnerTemplate, Issuer, OAuthError, QueryParameter, Registrar, WebRequest,
+    WebResponse,
+};
 
 /// Offers access tokens to authenticated third parties.
 ///
@@ -16,7 +22,7 @@ use super::*;
 ///
 /// Client credentials can be allowed to appear in the request body instead of being
 /// required to be passed as HTTP Basic authorization. This is not recommended and must be
-/// enabled explicitely. See [`allow_credentials_in_body`] for details.
+/// enabled explicitly. See [`allow_credentials_in_body`] for details.
 ///
 /// [`allow_credentials_in_body`]: #method.allow_credentials_in_body
 pub struct AccessTokenFlow<E, R>
@@ -70,7 +76,15 @@ where
     /// Binds the endpoint to a particular type of request that it supports, for many
     /// implementations this is probably single type anyways.
     ///
-    /// ## Panics
+    /// # Errors
+    /// The endpoint needs to give a `Some(_)` value for
+    /// - `registrar`
+    /// - `authorizer`
+    /// - `issuer`
+    ///
+    /// otherwise this will error.
+    ///
+    /// # Panics
     ///
     /// Indirectly `execute` may panic when this flow is instantiated with an inconsistent
     /// endpoint, for details see the documentation of `Endpoint` and `execute`. For
@@ -104,15 +118,18 @@ where
     /// RECOMMENDED and need not be supported. The parameters MUST NOT appear in the request URI
     /// itself.
     ///
-    /// Thus support is disabled by default and must be explicitely enabled.
+    /// Thus support is disabled by default and must be explicitly enabled.
     pub fn allow_credentials_in_body(&mut self, allow: bool) {
         self.allow_credentials_in_body = allow;
     }
 
     /// Use the checked endpoint to check for authorization for a resource.
     ///
-    /// ## Panics
+    /// # Errors
+    /// If the token returned by the request and handler is invalid, or setting the response body as JSON fails this
+    /// will error.
     ///
+    /// # Panics
     /// When the registrar, authorizer, or issuer returned by the endpoint is suddenly
     /// `None` when previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
@@ -225,7 +242,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
     fn from_err(err: FailParse<R::Error>) -> Self {
         WrappedRequest {
             request: PhantomData,
-            body: Cow::Owned(Default::default()),
+            body: Cow::Owned(NormalizedParameter::default()),
             authorization: None,
             error: Some(err),
             allow_credentials_in_body: false,

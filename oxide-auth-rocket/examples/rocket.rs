@@ -166,7 +166,7 @@ fn consent_form<'r>(
     OwnerConsent::InProgress(
         Response::build()
             .status(http::Status::Ok)
-            .header(http::ContentType::HTML)
+            .header(ContentType::HTML)
             .sized_body(io::Cursor::new(support::consent_page_html(
                 "/authorize",
                 solicitation,

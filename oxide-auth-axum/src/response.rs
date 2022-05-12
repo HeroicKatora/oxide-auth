@@ -9,7 +9,7 @@ use axum::{
 use oxide_auth::frontends::dev::{WebResponse, Url};
 
 #[derive(Default, Clone, Debug)]
-/// Type implementing `WebResponse` and `IntoResponse` for use in route handlers
+/// Type implementing [`WebResponse`] and [`IntoResponse`] for use in route handlers
 pub struct OAuthResponse {
     status: StatusCode,
     headers: HeaderMap,
@@ -17,7 +17,7 @@ pub struct OAuthResponse {
 }
 
 impl OAuthResponse {
-    /// Set the `ContentType` header on a response
+    /// Set the [`ContentType`] header on a response
     pub fn content_type(mut self, content_type: &str) -> Result<Self, WebError> {
         self.headers
             .insert(header::CONTENT_TYPE, content_type.try_into()?);

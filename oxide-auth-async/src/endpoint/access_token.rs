@@ -3,7 +3,7 @@ use std::{borrow::Cow, marker::PhantomData};
 
 use oxide_auth::{
     endpoint::{QueryParameter, WebRequest, OAuthError, WebResponse, Template, NormalizedParameter},
-    code_grant::accesstoken::{Error as TokenError, Request as TokenRequest},
+    code_grant::access_token::{Error as TokenError, Request as TokenRequest},
 };
 
 use super::Endpoint;
@@ -21,7 +21,7 @@ use crate::{
 ///
 /// Client credentials can be allowed to appear in the request body instead of being
 /// required to be passed as HTTP Basic authorization. This is not recommended and must be
-/// enabled explicitely. See [`allow_credentials_in_body`] for details.
+/// enabled explicitly. See [`allow_credentials_in_body`] for details.
 ///
 /// [`allow_credentials_in_body`]: #method.allow_credentials_in_body
 pub struct AccessTokenFlow<E, R>
@@ -114,7 +114,7 @@ where
     /// RECOMMENDED and need not be supported. The parameters MUST NOT appear in the request URI
     /// itself.
     ///
-    /// Thus support is disabled by default and must be explicitely enabled.
+    /// Thus support is disabled by default and must be explicitly enabled.
     pub fn allow_credentials_in_body(&mut self, allow: bool) {
         self.allow_credentials_in_body = allow;
     }

@@ -161,7 +161,7 @@ impl Assertion {
         TaggedAssertion(self, tag)
     }
 
-    fn extract<'a>(&self, token: &'a str) -> Result<(Grant, String), ()> {
+    fn extract(&self, token: &str) -> Result<(Grant, String), ()> {
         let decoded = decode(token).map_err(|_| ())?;
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
 
@@ -175,7 +175,7 @@ impl Assertion {
         Ok((serde_grant.grant(), tag))
     }
 
-    fn signature(&self, data: &[u8]) -> Output<hmac::Hmac<sha2::Sha256>> {
+    fn signature(&self, data: &[u8]) -> Output<Hmac<sha2::Sha256>> {
         let mut hasher = self.hasher.clone();
         hasher.update(data);
         hasher.finalize()
@@ -214,7 +214,7 @@ impl<'a> TaggedAssertion<'a> {
     ///
     /// Result in an Err if either the signature is invalid or if the tag does not match the
     /// expected usage tag given to this assertion.
-    pub fn extract<'b>(&self, token: &'b str) -> Result<Grant, ()> {
+    pub fn extract(&self, token: &str) -> Result<Grant, ()> {
         self.0
             .extract(token)
             .and_then(|(token, tag)| if tag == self.1 { Ok(token) } else { Err(()) })
@@ -304,7 +304,7 @@ mod url_serde {
     use serde::de::{Deserialize, Deserializer, Error};
 
     pub fn serialize<S: Serializer>(url: &Url, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&url.to_string())
+        serializer.serialize_str(url.as_ref())
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {

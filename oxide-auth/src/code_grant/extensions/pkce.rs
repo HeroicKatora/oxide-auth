@@ -152,12 +152,17 @@ impl Method {
     }
 
     fn from_encoded(encoded: Cow<str>) -> Result<Method, ()> {
-        // TODO: avoid allocation in case of borrow and invalid.
-        let mut encoded = encoded.into_owned();
-        match encoded.pop() {
-            None => Err(()),
-            Some('p') => Ok(Method::Plain(encoded)),
-            Some('S') => Ok(Method::Sha256(encoded)),
+        match encoded.chars().last() {
+            Some('p') => {
+                let mut string = encoded.into_owned();
+                string.pop();
+                Ok(Method::Plain(string))
+            }
+            Some('S') => {
+                let mut string = encoded.into_owned();
+                string.pop();
+                Ok(Method::Sha256(string))
+            }
             _ => Err(()),
         }
     }

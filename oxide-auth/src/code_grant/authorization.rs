@@ -1,15 +1,17 @@
 //! Provides the handling for Authorization Code Requests
 use std::borrow::Cow;
 use std::result::Result as StdResult;
-
 use url::Url;
 use chrono::{Duration, Utc};
-
-use crate::code_grant::error::{AuthorizationError, AuthorizationErrorType};
-use crate::primitives::authorizer::Authorizer;
-use crate::primitives::registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant};
-use crate::primitives::grant::{Extensions, Grant};
-use crate::{endpoint::Scope, endpoint::Solicitation, primitives::registrar::BoundClient};
+use crate::{
+    code_grant::error::{AuthorizationError, AuthorizationErrorType},
+    primitives::{
+        authorizer::Authorizer,
+        registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant, BoundClient},
+        grant::{Extensions, Grant},
+    },
+    endpoint::{Scope, Solicitation},
+};
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait Request {
@@ -70,7 +72,7 @@ pub trait Endpoint {
     fn extension(&mut self) -> &mut dyn Extension;
 }
 
-/// The result will indicate wether the authorization succeed or not.
+/// The result will indicate whether the authorization succeed or not.
 pub struct Authorization {
     state: AuthorizationState,
     extensions: Option<Extensions>,
@@ -136,7 +138,7 @@ pub enum Output<'machine> {
     },
     /// Ask for extensions if any
     Extend,
-    /// Ask registrar to negociate
+    /// Ask registrar to negotiate
     Negotiate {
         /// The current bound client
         bound_client: &'machine BoundClient<'static>,
@@ -170,7 +172,7 @@ impl Authorization {
     }
 
     /// Go to next state
-    pub fn advance<'req>(&mut self, input: Input<'req>) -> Output<'_> {
+    pub fn advance(&mut self, input: Input) -> Output {
         self.state = match (self.take(), input) {
             (current, Input::None) => current,
             (
@@ -207,7 +209,7 @@ impl Authorization {
             },
             AuthorizationState::Extending { .. } => Output::Extend,
             AuthorizationState::Negotiating { bound_client } => Output::Negotiate {
-                bound_client: &bound_client,
+                bound_client,
                 scope: self.scope.clone(),
             },
             AuthorizationState::Pending {
@@ -216,7 +218,7 @@ impl Authorization {
                 extensions,
             } => Output::Ok {
                 pre_grant: pre_grant.clone(),
-                state: state.clone(),
+                state: state.as_ref().map(Clone::clone),
                 extensions: extensions.clone(),
             },
         }
@@ -302,14 +304,14 @@ impl Authorization {
 
 /// Retrieve allowed scope and redirect url from the registrar.
 ///
-/// Checks the validity of any given input as the registrar instance communicates the registrated
+/// Checks the validity of any given input as the registrar instance communicates the registered
 /// parameters. The registrar can also set or override the requested (default) scope of the client.
 /// This will result in a tuple of negotiated parameters which can be used further to authorize
 /// the client by the owner or, in case of errors, in an action to be taken.
 /// If the client is not registered, the request will otherwise be ignored, if the request has
 /// some other syntactical error, the client is contacted at its redirect url with an error
 /// response.
-pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> self::Result<Pending> {
+pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Pending> {
     enum Requested {
         None,
         Bind {
@@ -425,9 +427,9 @@ pub fn authorization_code(handler: &mut dyn Endpoint, request: &dyn Request) -> 
 }
 
 /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
-/// can signal a reponse using this object.
+/// can signal a response using this object.
 // Don't ever implement `Clone` here. It's to make it very
-// hard for the user toaccidentally respond to a request in two conflicting ways. This has
+// hard for the user to accidentally respond to a request in two conflicting ways. This has
 // potential security impact if it could be both denied and authorized.
 pub struct Pending {
     pre_grant: PreGrant,
@@ -506,7 +508,7 @@ pub enum Error {
 
 /// Encapsulates a redirect to a valid redirect_uri with an error response. The implementation
 /// makes it possible to alter the contained error, for example to provide additional optional
-/// information. The error type should not be altered by the frontend but the specificalities
+/// information. The error type should not be altered by the frontend but the specifics
 /// of this should be enforced by the frontend instead.
 #[derive(Clone)]
 pub struct ErrorUrl {
@@ -565,11 +567,10 @@ impl Error {
     }
 }
 
-impl Into<Url> for ErrorUrl {
-    /// Finalize the error url by saving its parameters in the query part of the redirect_uri
-    fn into(self) -> Url {
-        let mut url = self.base_uri;
-        url.query_pairs_mut().extend_pairs(self.error.into_iter());
+impl From<ErrorUrl> for Url {
+    fn from(err_url: ErrorUrl) -> Self {
+        let mut url = err_url.base_uri;
+        url.query_pairs_mut().extend_pairs(err_url.error.into_iter());
         url
     }
 }

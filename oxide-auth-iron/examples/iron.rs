@@ -6,7 +6,7 @@ extern crate router;
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 
-use iron::{Iron, Request, Response};
+use iron::{Iron, IronError, Request, Response};
 use iron::headers::ContentType;
 use iron::status::Status;
 use iron::middleware::Handler;
@@ -15,6 +15,7 @@ use oxide_auth::endpoint::{OwnerConsent, Solicitation};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
 use oxide_auth_iron::{OAuthRequest, OAuthResponse, OAuthError};
+use oxide_auth::frontends::simple::endpoint::Error as FError;
 
 #[rustfmt::skip]
 #[path = "../../examples/support/iron.rs"]
@@ -31,7 +32,7 @@ fn main_router() -> impl Handler + 'static {
 
     // One clone for each of the move-closures below.
     let (auth_get_state, auth_post_state, token_state, get_state) =
-        (state.clone(), state.clone(), state.clone(), state.clone());
+        (state.clone(), state.clone(), state.clone(), state);
     let mut router = router::Router::new();
     router.get(
         "/authorize",
@@ -42,9 +43,10 @@ fn main_router() -> impl Handler + 'static {
                 .with_solicitor(FnSolicitor(consent_form))
                 .authorization_flow()
                 .execute(request.into())
-                .map_err(|e| {
-                    let e: OAuthError = e.into();
-                    e.into()
+                .map_err(|e: FError<OAuthRequest>| {
+                    let e = OAuthError::from(e);
+                    let err: IronError = e.into();
+                    err
                 })?;
             Ok(response.into())
         },
@@ -59,9 +61,10 @@ fn main_router() -> impl Handler + 'static {
                 .with_solicitor(FnSolicitor(consent_decision))
                 .authorization_flow()
                 .execute(request.into())
-                .map_err(|e| {
-                    let e: OAuthError = e.into();
-                    e.into()
+                .map_err(|e: FError<OAuthRequest>| {
+                    let e = OAuthError::from(e);
+                    let err: IronError = e.into();
+                    err
                 })?;
             Ok(response.into())
         },
@@ -75,9 +78,10 @@ fn main_router() -> impl Handler + 'static {
                 .endpoint()
                 .access_token_flow()
                 .execute(request.into())
-                .map_err(|e| {
-                    let e: OAuthError = e.into();
-                    e.into()
+                .map_err(|e: FError<OAuthRequest>| {
+                    let e = OAuthError::from(e);
+                    let err: IronError = e.into();
+                    err
                 })?;
             Ok(response.into())
         },
@@ -162,7 +166,7 @@ here</a> to begin the authorization process.
         }
     }
 
-    /// In larger app, you'd likey wrap it in your own Endpoint instead of `Generic`.
+    /// In larger app, you'd likely wrap it in your own Endpoint instead of `Generic`.
     pub fn endpoint(
         &self,
     ) -> Generic<

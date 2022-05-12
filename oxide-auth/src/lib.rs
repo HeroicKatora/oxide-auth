@@ -64,6 +64,10 @@
 //! [`OwnerSolicitor`]: endpoint/trait.OwnerSolicitor.html
 //! [`Scopes`]: endpoint/trait.Scopes.html
 #![warn(missing_docs)]
+#![warn(clippy::all)]
+#![allow(clippy::module_name_repetitions)]
+// TODO: remove this!
+#![allow(clippy::result_unit_err)]
 
 pub mod code_grant;
 pub mod endpoint;

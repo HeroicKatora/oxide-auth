@@ -131,7 +131,7 @@ pub mod resource {
 pub mod access_token {
     use async_trait::async_trait;
     use oxide_auth::{
-        code_grant::accesstoken::{
+        code_grant::access_token::{
             AccessToken, BearerToken, Error, Input, Output, PrimitiveError, Request as TokenRequest,
         },
         primitives::{
@@ -149,14 +149,14 @@ pub mod access_token {
         /// authorization code request.
         async fn extend(
             &mut self, request: &(dyn TokenRequest + Sync), data: Extensions,
-        ) -> std::result::Result<Extensions, ()>;
+        ) -> Result<Extensions, ()>;
     }
 
     #[async_trait]
     impl Extension for () {
         async fn extend(
             &mut self, _: &(dyn TokenRequest + Sync), _: Extensions,
-        ) -> std::result::Result<Extensions, ()> {
+        ) -> Result<Extensions, ()> {
             Ok(Extensions::new())
         }
     }
@@ -286,14 +286,12 @@ pub mod authorization {
     #[async_trait]
     pub trait Extension {
         /// Inspect the request to produce extension data.
-        async fn extend(
-            &mut self, request: &(dyn Request + Sync),
-        ) -> std::result::Result<Extensions, ()>;
+        async fn extend(&mut self, request: &(dyn Request + Sync)) -> Result<Extensions, ()>;
     }
 
     #[async_trait]
     impl Extension for () {
-        async fn extend(&mut self, _: &(dyn Request + Sync)) -> std::result::Result<Extensions, ()> {
+        async fn extend(&mut self, _: &(dyn Request + Sync)) -> Result<Extensions, ()> {
             Ok(Extensions::new())
         }
     }
@@ -317,7 +315,7 @@ pub mod authorization {
     }
 
     /// Represents a valid, currently pending authorization request not bound to an owner. The frontend
-    /// can signal a reponse using this object.
+    /// can signal a response using this object.
     #[derive(Clone)]
     pub struct Pending {
         pre_grant: PreGrant,
@@ -382,7 +380,7 @@ pub mod authorization {
 
     /// Retrieve allowed scope and redirect url from the registrar.
     ///
-    /// Checks the validity of any given input as the registrar instance communicates the registrated
+    /// Checks the validity of any given input as the registrar instance communicates the registered
     /// parameters. The registrar can also set or override the requested (default) scope of the client.
     /// This will result in a tuple of negotiated parameters which can be used further to authorize
     /// the client by the owner or, in case of errors, in an action to be taken.

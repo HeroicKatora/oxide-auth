@@ -2,7 +2,7 @@ use oxide_auth::primitives::issuer::{IssuedToken, RefreshedToken, TokenMap, Toke
 use oxide_auth::primitives::generator::RandomGenerator;
 use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{
-    code_grant::accesstoken::TokenResponse,
+    code_grant::access_token::TokenResponse,
     endpoint::{WebRequest},
     primitives::registrar::{Client, ClientMap, RegisteredUrl},
     frontends::simple::endpoint::Error,
@@ -15,9 +15,7 @@ use crate::{
 
 use std::collections::HashMap;
 
-use base64;
 use chrono::{Utc, Duration};
-use serde_json;
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
 use super::{defaults::*, resource::ResourceEndpoint};
@@ -42,8 +40,16 @@ impl<'a> Endpoint<CraftedRequest> for RefreshTokenEndpoint<'a> {
     fn authorizer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Authorizer + Send)> {
         None
     }
-    fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
+    fn issuer_mut(&mut self) -> Option<&mut (dyn Issuer + Send)> {
         Some(self.issuer)
+    }
+    fn owner_solicitor(
+        &mut self,
+    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
+        None
+    }
+    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
+        None
     }
     fn response(
         &mut self, _: &mut CraftedRequest, _: oxide_auth::endpoint::Template,
@@ -55,14 +61,6 @@ impl<'a> Endpoint<CraftedRequest> for RefreshTokenEndpoint<'a> {
     }
     fn web_error(&mut self, _err: <CraftedRequest as WebRequest>::Error) -> Self::Error {
         unimplemented!()
-    }
-    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
-        None
-    }
-    fn owner_solicitor(
-        &mut self,
-    ) -> Option<&mut (dyn crate::endpoint::OwnerSolicitor<CraftedRequest> + Send)> {
-        None
     }
 }
 
@@ -139,7 +137,7 @@ impl RefreshTokenSetup {
         assert!(issued.refreshable());
         let refresh_token = issued.refresh.clone().unwrap();
 
-        let basic_authorization = "DO_NOT_USE".into();
+        let basic_authorization = "DO_NOT_USE".to_string();
 
         RefreshTokenSetup {
             registrar,
@@ -153,7 +151,7 @@ impl RefreshTokenSetup {
     fn assert_success(&mut self, request: CraftedRequest) -> RefreshedToken {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::run(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response = smol::run(refresh_flow.execute(request)).expect("Expected non-failed response");
         assert_eq!(response.status, Status::Ok);
         let body = match response.body {
             Some(Body::Json(body)) => body,
@@ -173,7 +171,7 @@ impl RefreshTokenSetup {
     fn assert_unauthenticated(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::run(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response = smol::run(refresh_flow.execute(request)).expect("Expected non-failed response");
         let body = self.assert_json_body(&response);
         if response.status == Status::Unauthorized {
             assert!(response.www_authenticate.is_some());
@@ -187,7 +185,7 @@ impl RefreshTokenSetup {
     fn assert_invalid(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::run(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response = smol::run(refresh_flow.execute(request)).expect("Expected non-failed response");
         let body = self.assert_json_body(&response);
         assert_eq!(response.status, Status::BadRequest);
 
@@ -211,7 +209,7 @@ impl RefreshTokenSetup {
     fn assert_wrong_authentication(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::run(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response = smol::run(refresh_flow.execute(request)).expect("Expected non-failed response");
         assert_eq!(response.status, Status::Unauthorized);
         assert!(response.www_authenticate.is_some());
 
@@ -297,7 +295,7 @@ fn access_valid_private() {
 fn public_private_invalid_grant() {
     let mut setup = RefreshTokenSetup::public_client();
     let client = Client::confidential(
-        "PrivateClient".into(),
+        "PrivateClient",
         RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
         EXAMPLE_SCOPE.parse().unwrap(),
         EXAMPLE_PASSPHRASE.as_bytes(),

@@ -1,4 +1,4 @@
-//! Encapsulates various shared mechanisms for handlings different grants.
+//! Encapsulates various shared mechanisms for handling different grants.
 use super::{Url, Time};
 use super::scope::Scope;
 
@@ -29,7 +29,7 @@ pub enum Value {
     /// An extension that the token owner is allowed to read and interpret.
     Public(Option<String>),
 
-    /// Identifies an extenion whose content and/or existance MUST be kept secret.
+    /// Identifies an extension whose content and/or existence MUST be kept secret.
     Private(Option<String>),
     // Content which is not saved on the server but initialized/interpreted from other sources.
     // foreign_content: String,
@@ -93,7 +93,7 @@ impl Value {
     /// but consists only of the key, and `Some(_)` otherwise.
     pub fn public_value(&self) -> Result<Option<&str>, ()> {
         match self {
-            Value::Public(Some(content)) => Ok(Some(&content)),
+            Value::Public(Some(content)) => Ok(Some(content)),
             Value::Public(None) => Ok(None),
             _ => Err(()),
         }
@@ -116,7 +116,7 @@ impl Value {
     /// but consists only of the key, and `Some(_)` otherwise.
     pub fn private_value(&self) -> Result<Option<&str>, ()> {
         match self {
-            Value::Private(Some(content)) => Ok(Some(&content)),
+            Value::Private(Some(content)) => Ok(Some(content)),
             Value::Private(None) => Ok(None),
             _ => Err(()),
         }
@@ -153,7 +153,7 @@ impl Extensions {
 
     /// Retrieve the stored data of an instance.
     ///
-    /// This removes the data from the store to avoid possible mixups and to allow a copyless
+    /// This removes the data from the store to avoid possible mix-ups and to allow a copyless
     /// retrieval of bigger data strings.
     pub fn remove(&mut self, extension: &dyn GrantExtension) -> Option<Value> {
         self.extensions.remove(extension.identifier())
