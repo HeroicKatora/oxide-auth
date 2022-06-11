@@ -1,10 +1,13 @@
 use crate::primitives::db_registrar::OauthClientDBRepository;
+
 use oxide_auth::primitives::prelude::Scope;
 use oxide_auth::primitives::registrar::{ClientType, EncodedClient, RegisteredUrl, ExactUrl};
-use r2d2::Pool;
+
+use r2d2_redis::r2d2::Pool;
 use r2d2_redis::redis::{Commands, RedisError, ErrorKind};
 use r2d2_redis::RedisConnectionManager;
 use std::str::FromStr;
+use serde::{Serialize, Deserialize};
 use url::Url;
 
 // // TODO 参数化
@@ -96,7 +99,7 @@ impl StringfiedEncodedClient {
 impl RedisDataSource {
     pub fn new(url: String, max_pool_size: u32, client_prefix: String) -> Result<Self, RedisError> {
         let manager = r2d2_redis::RedisConnectionManager::new(url.as_str())?;
-        let pool = r2d2::Pool::builder().max_size(max_pool_size).build(manager);
+        let pool = Pool::builder().max_size(max_pool_size).build(manager);
         match pool {
             Ok(pool) => Ok(RedisDataSource {
                 url,
