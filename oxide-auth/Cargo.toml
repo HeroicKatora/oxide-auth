@@ -30,7 +30,7 @@ rmp-serde = "0.15"
 url = { version = "2.2.2", features = ["serde"] }
 
 [dev-dependencies]
-reqwest = "0.10.8"
+reqwest = { version = "0.11.10", features = ["blocking"] }
 
 [package.metadata.docs.rs]
 features = []
