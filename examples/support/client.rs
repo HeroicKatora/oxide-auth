@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::{Arc, RwLock};
 
-use self::reqwest::{header, Response};
+use self::reqwest::{header, blocking::Response};
 use oxide_auth::endpoint::UniqueValue;
 
 /// Send+Sync client implementation.
@@ -98,7 +98,7 @@ impl Client {
 
     pub fn authorize(&self, code: &str) -> Result<(), Error> {
         // Construct a request against http://localhost:8020/token, the access token endpoint
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
 
         let mut state = self.state.write().unwrap();
 
@@ -142,7 +142,7 @@ impl Client {
     }
 
     pub fn retrieve_protected_page(&self) -> Result<String, Error> {
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
 
         let state = self.state.read().unwrap();
         let token = match state.token {
@@ -168,7 +168,7 @@ impl Client {
     }
 
     pub fn refresh(&self) -> Result<(), Error> {
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
 
         let mut state = self.state.write().unwrap();
         let refresh = match state.refresh {
@@ -223,8 +223,7 @@ impl Client {
 }
 
 fn parse_token_response(mut response: Response) -> Result<TokenMap, serde_json::Error> {
-    let mut token = String::new();
-    response.read_to_string(&mut token).unwrap();
+    let token = response.text().unwrap();
     serde_json::from_str(&token)
 }
 

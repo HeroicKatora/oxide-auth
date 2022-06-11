@@ -41,7 +41,7 @@ pub fn dummy_client(mut state: State) -> (State, Response) {
     };
 
     // Construct a request against http://localhost:8020/token, the access token endpoint
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     let mut params = HashMap::new();
     params.insert("grant_type", "authorization_code");
     params.insert("client_id", "LocalClient");

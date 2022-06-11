@@ -18,6 +18,6 @@ serde_urlencoded = "0.7"
 url = "2"
 
 [dev-dependencies]
-reqwest = "0.9"
+reqwest = { version = "0.11.10", features = ["blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

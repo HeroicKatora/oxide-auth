@@ -1,4 +1,3 @@
-extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
 
@@ -14,7 +13,7 @@ use std::sync::{Arc, RwLock};
 use iron::{headers, modifiers, IronResult, Request, Response};
 use iron::middleware::Handler;
 use iron::status::Status;
-use self::reqwest::header;
+use reqwest::header;
 
 /// Rough client function mirroring core functionality of an oauth client. This is not actually
 /// needed in your implementation but merely exists to provide an interactive example. It will
@@ -53,7 +52,7 @@ fn endpoint(state: Arc<State>, req: &mut Request) -> IronResult<Response> {
     };
 
     // Construct a request against http://localhost:8020/token, the access token endpoint
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     let mut params = HashMap::new();
     params.insert("grant_type", "authorization_code");
     params.insert("client_id", "LocalClient");
@@ -107,7 +106,7 @@ fn view(state: Arc<State>, _: &mut Request) -> IronResult<Response> {
     let token_map = state.token_map.read().unwrap();
     let token_map = token_map.as_ref().unwrap();
 
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     // Request the page with the oauth token
     let page_request = client
         .get("http://localhost:8020/")
