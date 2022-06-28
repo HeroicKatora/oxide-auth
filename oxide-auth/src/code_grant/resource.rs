@@ -266,7 +266,10 @@ fn validate(request: &'_ dyn Request) -> Result<ResourceState> {
         }
     };
 
-    if !client_token.starts_with(BEARER_START) {
+    if !client_token
+        .to_uppercase()
+        .starts_with(&BEARER_START.to_uppercase())
+    {
         return Err(Error::InvalidRequest {
             authenticate: Authenticate::empty(),
         });
