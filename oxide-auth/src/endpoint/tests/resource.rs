@@ -95,6 +95,26 @@ fn resource_success() {
 }
 
 #[test]
+fn resource_casing_success() {
+    let mut setup = ResourceSetup::new();
+    let success = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some("bearer ".to_string() + &setup.authtoken),
+    };
+
+    setup.test_access_success(success);
+
+    let success = CraftedRequest {
+        query: None,
+        urlbody: None,
+        auth: Some("bEArEr ".to_string() + &setup.authtoken),
+    };
+
+    setup.test_access_success(success);
+}
+
+#[test]
 fn resource_no_authorization() {
     // Does not have any authorization
     let no_authorization = CraftedRequest {
