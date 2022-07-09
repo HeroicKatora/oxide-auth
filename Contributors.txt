@@ -6,3 +6,4 @@ ParisLiakos (Paris Liakos, gotham frontend)
 asonix <asonix@asonix.dog> (actix 1.0 update)
 Geobert Quach (on behalf of Isode Ltd.)
 robjtede <robjtede@icloud.com> (actix-web 3.0 update)
+Oleg Chirukhin <oleg@jetstorm.ru>
