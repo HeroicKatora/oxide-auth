@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use base64::{encode, decode};
-use hmac::{crypto_mac::Output, Mac, Hmac, NewMac};
+use hmac::{digest::CtOutput, Mac, Hmac};
 use rand::{rngs::OsRng, RngCore, thread_rng};
 use serde::{Deserialize, Serialize};
 use rmp_serde;
@@ -167,7 +167,7 @@ impl Assertion {
 
         let mut hasher = self.hasher.clone();
         hasher.update(&assertion.0);
-        hasher.verify(assertion.1.as_slice()).map_err(|_| ())?;
+        hasher.verify_slice(assertion.1.as_slice()).map_err(|_| ())?;
 
         let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String) =
             rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
@@ -175,7 +175,7 @@ impl Assertion {
         Ok((serde_grant.grant(), tag))
     }
 
-    fn signature(&self, data: &[u8]) -> Output<hmac::Hmac<sha2::Sha256>> {
+    fn signature(&self, data: &[u8]) -> CtOutput<hmac::Hmac<sha2::Sha256>> {
         let mut hasher = self.hasher.clone();
         hasher.update(data);
         hasher.finalize()
