@@ -181,6 +181,27 @@ fn access_valid_private() {
     setup.test_success(valid_public);
 }
 
+#[test]
+fn regression_case_insensitive_basic() {
+    let mut setup = AccessTokenSetup::private_client();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: Some("basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_success(valid_public);
+}
+
 // When creating a client from a preparsed url expect all equivalent urls to also be valid
 // parameters for the redirect_uri. Partly because `Url` already does some normalization during
 // parsing. The RFC recommends string-based comparison when the 'client registration included the

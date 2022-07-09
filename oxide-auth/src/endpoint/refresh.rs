@@ -4,7 +4,10 @@ use std::str::from_utf8;
 
 use crate::code_grant::refresh::{refresh, Error, Endpoint as RefreshEndpoint, Request};
 use crate::primitives::{registrar::Registrar, issuer::Issuer};
-use super::{Endpoint, InnerTemplate, OAuthError, QueryParameter, WebRequest, WebResponse};
+use super::{
+    Endpoint, InnerTemplate, OAuthError, QueryParameter, WebRequest, WebResponse,
+    is_authorization_method,
+};
 
 /// Takes requests from clients to refresh their access tokens.
 pub struct RefreshFlow<E, R>
@@ -175,11 +178,12 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
 
     fn parse_header(header: Cow<str>) -> Result<Authorization, InitError<R::Error>> {
         let authorization = {
-            if !header.starts_with("Basic ") {
-                return Err(InitError::Malformed);
-            }
+            let auth_data = match is_authorization_method(&header, "Basic ") {
+                None => return Err(InitError::Malformed),
+                Some(data) => data,
+            };
 
-            let combined = match base64::decode(&header[6..]) {
+            let combined = match base64::decode(auth_data) {
                 Err(_) => return Err(InitError::Malformed),
                 Ok(vec) => vec,
             };

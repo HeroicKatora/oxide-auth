@@ -2,6 +2,20 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.5.2 (2022-Jul-10)
+
+Maintenance release:
+- Updates a few internal dependencies: `hmac`, `sha2`, `rust-argon2`,
+  `rmp-serde`. Of these, both `rust-argon2` and `rmp-serde` have reached stable
+  version `1`. Future version may expose their types for more in-depth
+  interactions.
+
+Bug fixes:
+- Parsing `Authorization` header now matches the type with a case insensitive
+  comparison. This affects usage of `Bearer` authentication in the resource
+  flow and handling of client authentication in the refresh and access token
+  flows.
+
 # v0.5.1
 
 Maintenance release

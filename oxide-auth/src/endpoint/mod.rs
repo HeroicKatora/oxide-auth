@@ -682,3 +682,12 @@ impl<'a> From<InnerTemplate<'a>> for Template<'a> {
         Template { inner }
     }
 }
+
+fn is_authorization_method<'h>(header: &'h str, method: &'static str) -> Option<&'h str> {
+    let header_method = header.get(..method.len())?;
+    if header_method.eq_ignore_ascii_case(method) {
+        Some(&header[method.len()..])
+    } else {
+        None
+    }
+}
