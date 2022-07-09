@@ -1,11 +1,15 @@
+use std::borrow::Cow;
 use std::str::from_utf8;
 use std::marker::PhantomData;
 
 use crate::code_grant::accesstoken::{
     access_token, Error as TokenError, Extension, Endpoint as TokenEndpoint, Request as TokenRequest,
 };
-
-use super::*;
+use crate::primitives::{authorizer::Authorizer, registrar::Registrar, issuer::Issuer};
+use super::{
+    Endpoint, InnerTemplate, OAuthError, QueryParameter, WebRequest, WebResponse,
+    is_authorization_method,
+};
 
 /// Offers access tokens to authenticated third parties.
 ///
@@ -234,11 +238,12 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
 
     fn parse_header(header: Cow<str>) -> Result<Authorization, Invalid> {
         let authorization = {
-            if !header.starts_with("Basic ") {
-                return Err(Invalid);
-            }
+            let auth_data = match is_authorization_method(&header, "Basic ") {
+                None => return Err(Invalid),
+                Some(data) => data,
+            };
 
-            let combined = match base64::decode(&header[6..]) {
+            let combined = match base64::decode(auth_data) {
                 Err(_) => return Err(Invalid),
                 Ok(vec) => vec,
             };

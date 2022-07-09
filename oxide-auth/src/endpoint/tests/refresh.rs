@@ -341,6 +341,27 @@ fn invalid_request() {
 }
 
 #[test]
+fn regression_case_insensitive_basic() {
+    let mut setup = RefreshTokenSetup::private_client();
+
+    setup.basic_authorization.replace_range(..6, "basic ");
+    let case_changed_authorization = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![
+                ("grant_type", "refresh_token"),
+                ("refresh_token", &setup.refresh_token),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: Some(setup.basic_authorization.clone()),
+    };
+
+    setup.assert_success(case_changed_authorization);
+}
+
+#[test]
 fn public_invalid_token() {
     const WRONG_REFRESH_TOKEN: &str = "not_the_issued_token";
     let mut setup = RefreshTokenSetup::public_client();
