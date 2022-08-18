@@ -136,7 +136,7 @@ pub enum Output<'machine> {
     },
     /// Ask for extensions if any
     Extend,
-    /// Ask registrar to negociate
+    /// Ask registrar to negotiate
     Negotiate {
         /// The current bound client
         bound_client: &'machine BoundClient<'static>,

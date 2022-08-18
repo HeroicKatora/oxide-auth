@@ -29,6 +29,7 @@
 
 pub mod accesstoken;
 pub mod authorization;
+pub mod clientcredentials;
 pub mod error;
 pub mod extensions;
 pub mod refresh;
