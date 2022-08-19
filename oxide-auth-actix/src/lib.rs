@@ -26,7 +26,7 @@ use url::Url;
 
 mod operations;
 
-pub use operations::{Authorize, Refresh, Resource, Token};
+pub use operations::{Authorize, Refresh, Resource, Token, ClientCredentials};
 
 /// Describes an operation that can be performed in the presence of an `Endpoint`
 ///

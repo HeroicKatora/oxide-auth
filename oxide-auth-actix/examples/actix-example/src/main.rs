@@ -7,13 +7,13 @@ use actix_web::{
     App, HttpRequest, HttpServer, rt,
 };
 use oxide_auth::{
-    endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation},
+    endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation, QueryParameter},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
     primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
 };
 use oxide_auth_actix::{
     Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResource, OAuthResponse, Refresh,
-    Resource, Token, WebError,
+    Resource, Token, WebError, ClientCredentials,
 };
 use std::thread;
 
@@ -60,7 +60,14 @@ async fn post_authorize(
 }
 
 async fn token((req, state): (OAuthRequest, web::Data<Addr<State>>)) -> Result<OAuthResponse, WebError> {
-    state.send(Token(req).wrap(Extras::Nothing)).await?
+    let grant_type = req.body().and_then(|body| body.unique_value("grant_type"));
+    // Different grant types determine which flow to perform.
+    match grant_type.as_deref() {
+        Some("client_credentials") => state.send(ClientCredentials(req).wrap(Extras::Nothing)).await?,
+        // Each flow will validate the grant_type again, so we can let one case handle
+        // any incorrect or unsupported options.
+        _ => state.send(Token(req).wrap(Extras::Nothing)).await?,
+    }
 }
 
 async fn refresh(
@@ -131,13 +138,14 @@ impl State {
         State {
             endpoint: Generic {
                 // A registrar with one pre-registered client
-                registrar: vec![Client::public(
+                registrar: vec![Client::confidential(
                     "LocalClient",
                     "http://localhost:8021/endpoint"
                         .parse::<url::Url>()
                         .unwrap()
                         .into(),
                     "default-scope".parse().unwrap(),
+                    "SecretSecret".as_bytes(),
                 )]
                 .into_iter()
                 .collect(),

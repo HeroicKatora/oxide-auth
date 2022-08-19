@@ -16,7 +16,7 @@ use actix_web::{
 pub fn dummy_client() -> dev::Server {
     let client = Client::new(ClientConfig {
         client_id: "LocalClient".into(),
-        client_secret: None,
+        client_secret: Some("SecretSecret".to_owned()),
         protected_url: "http://localhost:8020/".into(),
         token_url: "http://localhost:8020/token".into(),
         refresh_url: "http://localhost:8020/refresh".into(),
