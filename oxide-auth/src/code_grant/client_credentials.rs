@@ -2,7 +2,7 @@
 use std::mem;
 use std::borrow::Cow;
 
-use chrono::Utc;
+use chrono::{Utc, Duration};
 use url::Url;
 
 use crate::code_grant::accesstoken::BearerToken;
@@ -470,7 +470,7 @@ pub fn client_credentials(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                     client_id: pre_grant.client_id.clone(),
                     scope: pre_grant.scope.clone(),
                     redirect_uri: redirect_uri.clone(),
-                    until: Utc::now(), // TODO: suggest a better expiry than right now?
+                    until: Utc::now() + Duration::minutes(10),
                     extensions,
                 };
                 let token = handler.issuer().issue(grant).map_err(|_| {
