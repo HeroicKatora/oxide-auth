@@ -44,6 +44,20 @@ pub trait Request {
     fn allow_credentials_in_body(&self) -> bool {
         false
     }
+
+    /// Allow the refresh token to be included in the response.
+    ///
+    /// According to [RFC-6749 Section 4.4.3][4.4.3] "A refresh token SHOULD NOT be included" in
+    /// the response for the client credentials grant. Following that recommendation, the default
+    /// behaviour of this flow is to discard any refresh token that is returned from the issuer.
+    ///
+    /// If this behaviour is not what you want (it is possible that your particular application
+    /// does have a use for a client credentials refresh token), you may enable this feature.
+    ///
+    /// [4.4.3]: https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
+    fn allow_refresh_token(&self) -> bool {
+        false
+    }
 }
 
 /// A system of addons provided additional data.
@@ -473,13 +487,16 @@ pub fn client_credentials(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                     until: Utc::now() + Duration::minutes(10),
                     extensions,
                 };
-                let token = handler.issuer().issue(grant).map_err(|_| {
+                let mut token = handler.issuer().issue(grant).map_err(|_| {
                     Error::Primitive(Box::new(PrimitiveError {
                         // FIXME: endpoint should get and handle these.
                         grant: None,
                         extensions: None,
                     }))
                 })?;
+                if !request.allow_refresh_token() {
+                    token.refresh = None;
+                }
                 Input::Issued(token)
             }
         };

@@ -28,6 +28,7 @@ where
 {
     endpoint: WrappedToken<E, R>,
     allow_credentials_in_body: bool,
+    allow_refresh_token: bool,
 }
 
 struct WrappedToken<E: Endpoint<R>, R: WebRequest> {
@@ -51,6 +52,9 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
 
     /// The credentials-in-body flag from the flow.
     allow_credentials_in_body: bool,
+
+    /// The refresh token flag from the flow.
+    allow_refresh_token: bool,
 }
 
 struct Invalid;
@@ -93,6 +97,7 @@ where
                 r_type: PhantomData,
             },
             allow_credentials_in_body: false,
+            allow_refresh_token: false,
         })
     }
 
@@ -107,6 +112,20 @@ where
         self.allow_credentials_in_body = allow;
     }
 
+    /// Allow the refresh token to be included in the response.
+    ///
+    /// According to [RFC-6749 Section 4.4.3][4.4.3] "A refresh token SHOULD NOT be included" in
+    /// the response for the client credentials grant. Following that recommendation, the default
+    /// behaviour of this flow is to discard any refresh token that is returned from the issuer.
+    ///
+    /// If this behaviour is not what you want (it is possible that your particular application
+    /// does have a use for a client credentials refresh token), you may enable this feature.
+    ///
+    /// [4.4.3]: https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
+    pub fn allow_refresh_token(&mut self, allow: bool) {
+        self.allow_refresh_token = allow;
+    }
+
     /// Use the checked endpoint to check for authorization for a resource.
     ///
     /// ## Panics
@@ -116,7 +135,11 @@ where
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
         let issued = client_credentials(
             &mut self.endpoint,
-            &WrappedRequest::new(&mut request, self.allow_credentials_in_body),
+            &WrappedRequest::new(
+                &mut request,
+                self.allow_credentials_in_body,
+                self.allow_refresh_token,
+            ),
         );
 
         let token = match issued {
@@ -198,11 +221,13 @@ impl<E: Endpoint<R>, R: WebRequest> ClientCredentialsEndpoint for WrappedToken<E
 }
 
 impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
-    pub fn new(request: &'a mut R, credentials: bool) -> Self {
-        Self::new_or_fail(request, credentials).unwrap_or_else(Self::from_err)
+    pub fn new(request: &'a mut R, credentials: bool, allow_refresh_token: bool) -> Self {
+        Self::new_or_fail(request, credentials, allow_refresh_token).unwrap_or_else(Self::from_err)
     }
 
-    fn new_or_fail(request: &'a mut R, credentials: bool) -> Result<Self, FailParse<R::Error>> {
+    fn new_or_fail(
+        request: &'a mut R, credentials: bool, allow_refresh_token: bool,
+    ) -> Result<Self, FailParse<R::Error>> {
         // If there is a header, it must parse correctly.
         let authorization = match request.authheader() {
             Err(err) => return Err(FailParse::Err(err)),
@@ -216,6 +241,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             authorization,
             error: None,
             allow_credentials_in_body: credentials,
+            allow_refresh_token: allow_refresh_token,
         })
     }
 
@@ -226,6 +252,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             authorization: None,
             error: Some(err),
             allow_credentials_in_body: false,
+            allow_refresh_token: false,
         }
     }
 
@@ -288,6 +315,10 @@ impl<'a, R: WebRequest> ClientCredentialsRequest for WrappedRequest<'a, R> {
 
     fn allow_credentials_in_body(&self) -> bool {
         self.allow_credentials_in_body
+    }
+
+    fn allow_refresh_token(&self) -> bool {
+        self.allow_refresh_token
     }
 }
 
