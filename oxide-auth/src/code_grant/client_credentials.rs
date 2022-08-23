@@ -3,12 +3,11 @@ use std::mem;
 use std::borrow::Cow;
 
 use chrono::{Utc, Duration};
-use url::Url;
 
 use crate::code_grant::accesstoken::BearerToken;
 use crate::code_grant::error::{AccessTokenError, AccessTokenErrorType};
-use crate::endpoint::Scope;
-use crate::primitives::issuer::{IssuedToken, Issuer};
+use crate::endpoint::{Scope, Solicitation};
+use crate::primitives::issuer::Issuer;
 use crate::primitives::grant::{Extensions, Grant};
 use crate::primitives::registrar::{Registrar, RegistrarError, BoundClient, PreGrant, ClientUrl};
 
@@ -158,7 +157,6 @@ enum ClientCredentialsState {
     },
     Issue {
         pre_grant: PreGrant,
-        redirect_uri: Url,
         extensions: Extensions,
     },
     Err(Error),
@@ -183,8 +181,6 @@ pub enum Input {
         /// The pre grant from the negotiation
         pre_grant: PreGrant,
     },
-    /// The token produced by the backend
-    Issued(IssuedToken),
     /// Advance without input as far as possible, or just retrieve the output again.
     None,
 }
@@ -227,22 +223,16 @@ pub enum Output<'machine> {
         /// The scope, if any
         scope: Option<Scope>,
     },
-    /// The issuer should issue a new client credentials
+    /// The state machine finished and the frontend should assign an owner ID and then
+    /// issue the token.
     ///
     /// Fullfilled by `Input::Issued`
-    Issue {
+    Ok {
         /// The grant to be used in the token generation
         pre_grant: &'machine PreGrant,
-        /// The redirect uri, being passed along
-        redirect_uri: &'machine Url,
         /// The extensions to include
         extensions: &'machine Extensions,
     },
-    /// The state machine finished and a new bearer token was generated
-    ///
-    /// This output **can not** be requested repeatedly, any future `Input` will yield a primitive
-    /// error instead.
-    Ok(BearerToken),
     /// The state machine finished in an error.
     ///
     /// The error will be repeated on *any* following input.
@@ -271,15 +261,9 @@ impl ClientCredentials {
                 Self::extended(bound_client, extensions)
             }
             (
-                ClientCredentialsState::Negotiating {
-                    bound_client,
-                    extensions,
-                },
+                ClientCredentialsState::Negotiating { extensions, .. },
                 Input::Negotiated { pre_grant },
-            ) => Self::negotiated(pre_grant, bound_client, extensions),
-            (ClientCredentialsState::Issue { pre_grant, .. }, Input::Issued(token)) => {
-                return Output::Ok(Self::finish(token, pre_grant.scope));
-            }
+            ) => Self::negotiated(pre_grant, extensions),
             (ClientCredentialsState::Err(err), _) => ClientCredentialsState::Err(err),
             (_, _) => ClientCredentialsState::Err(Error::Primitive(Box::new(PrimitiveError::empty()))),
         };
@@ -302,11 +286,9 @@ impl ClientCredentials {
             },
             ClientCredentialsState::Issue {
                 pre_grant,
-                redirect_uri,
                 extensions,
-            } => Output::Issue {
+            } => Output::Ok {
                 pre_grant,
-                redirect_uri,
                 extensions,
             },
         }
@@ -379,24 +361,66 @@ impl ClientCredentials {
         }
     }
 
-    fn negotiated(
-        pre_grant: PreGrant, bound_client: BoundClient<'static>, extensions: Extensions,
-    ) -> ClientCredentialsState {
+    fn negotiated(pre_grant: PreGrant, extensions: Extensions) -> ClientCredentialsState {
         ClientCredentialsState::Issue {
             pre_grant,
-            redirect_uri: bound_client.redirect_uri.to_url(),
             extensions,
         }
     }
+}
 
-    fn finish(token: IssuedToken, scope: Scope) -> BearerToken {
-        BearerToken(token, scope.to_string())
+/// Represents a valid, currently pending client credentials not bound to an owner.
+///
+/// This will be passed along to the solicitor to obtain the owner ID, and then
+/// a token will be issued. Since this is the client credentials flow, a pending
+/// response is considered an internal error.
+// Don't ever implement `Clone` here. It's to make it very
+// hard for the user to accidentally respond to a request in two conflicting ways. This has
+// potential security impact if it could be both denied and authorized.
+pub struct Pending {
+    pre_grant: PreGrant,
+    extensions: Extensions,
+}
+
+impl Pending {
+    /// Reference this pending state as a solicitation.
+    pub fn as_solicitation(&self) -> Solicitation<'_> {
+        Solicitation {
+            grant: Cow::Borrowed(&self.pre_grant),
+            state: None,
+        }
+    }
+
+    /// Inform the backend about consent from a resource owner.
+    ///
+    /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
+    /// same endpoint as was used to create the pending request.
+    pub fn issue(
+        self, handler: &mut dyn Endpoint, owner_id: String, allow_refresh_token: bool,
+    ) -> Result<BearerToken> {
+        let mut token = handler
+            .issuer()
+            .issue(Grant {
+                owner_id,
+                client_id: self.pre_grant.client_id,
+                redirect_uri: self.pre_grant.redirect_uri.into_url(),
+                scope: self.pre_grant.scope.clone(),
+                until: Utc::now() + Duration::minutes(10),
+                extensions: self.extensions,
+            })
+            .map_err(|()| Error::Primitive(Box::new(PrimitiveError::empty())))?;
+
+        if !allow_refresh_token {
+            token.refresh = None;
+        }
+
+        Ok(BearerToken(token, self.pre_grant.scope.to_string()))
     }
 }
 
 // FiXME: use state machine instead
 /// Try to get client credentials.
-pub fn client_credentials(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<BearerToken> {
+pub fn client_credentials(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Pending> {
     enum Requested {
         None,
         Authenticate {
@@ -410,11 +434,6 @@ pub fn client_credentials(handler: &mut dyn Endpoint, request: &dyn Request) -> 
         Negotiate {
             bound_client: BoundClient<'static>,
             scope: Option<Scope>,
-        },
-        Issue {
-            pre_grant: PreGrant,
-            redirect_uri: Url,
-            extensions: Extensions,
         },
     }
 
@@ -474,31 +493,6 @@ pub fn client_credentials(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                     })?;
                 Input::Negotiated { pre_grant }
             }
-            Requested::Issue {
-                pre_grant,
-                redirect_uri,
-                extensions,
-            } => {
-                let grant = Grant {
-                    owner_id: pre_grant.client_id.clone(),
-                    client_id: pre_grant.client_id.clone(),
-                    scope: pre_grant.scope.clone(),
-                    redirect_uri: redirect_uri.clone(),
-                    until: Utc::now() + Duration::minutes(10),
-                    extensions,
-                };
-                let mut token = handler.issuer().issue(grant).map_err(|_| {
-                    Error::Primitive(Box::new(PrimitiveError {
-                        // FIXME: endpoint should get and handle these.
-                        grant: None,
-                        extensions: None,
-                    }))
-                })?;
-                if !request.allow_refresh_token() {
-                    token.refresh = None;
-                }
-                Input::Issued(token)
-            }
         };
 
         requested = match client_credentials.advance(input) {
@@ -514,16 +508,15 @@ pub fn client_credentials(handler: &mut dyn Endpoint, request: &dyn Request) -> 
                 bound_client: bound_client.clone(),
                 scope,
             },
-            Output::Issue {
+            Output::Ok {
                 pre_grant,
-                redirect_uri,
                 extensions,
-            } => Requested::Issue {
-                pre_grant: pre_grant.clone(),
-                redirect_uri: redirect_uri.clone(),
-                extensions: extensions.clone(),
-            },
-            Output::Ok(token) => return Ok(token),
+            } => {
+                return Ok(Pending {
+                    pre_grant: pre_grant.clone(),
+                    extensions: extensions.clone(),
+                })
+            }
             Output::Err(e) => return Err(*e),
         };
     }

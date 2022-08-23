@@ -38,6 +38,7 @@ struct State {
 enum Extras {
     AuthGet,
     AuthPost(String),
+    ClientCredentials,
     Nothing,
 }
 
@@ -63,7 +64,11 @@ async fn token((req, state): (OAuthRequest, web::Data<Addr<State>>)) -> Result<O
     let grant_type = req.body().and_then(|body| body.unique_value("grant_type"));
     // Different grant types determine which flow to perform.
     match grant_type.as_deref() {
-        Some("client_credentials") => state.send(ClientCredentials(req).wrap(Extras::Nothing)).await?,
+        Some("client_credentials") => {
+            state
+                .send(ClientCredentials(req).wrap(Extras::ClientCredentials))
+                .await?
+        }
         // Each flow will validate the grant_type again, so we can let one case handle
         // any incorrect or unsupported options.
         _ => state.send(Token(req).wrap(Extras::Nothing)).await?,
@@ -221,6 +226,18 @@ where
                     } else {
                         OwnerConsent::Denied
                     }
+                });
+
+                op.run(self.with_solicitor(solicitor))
+            }
+            Extras::ClientCredentials => {
+                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, solicitation: Solicitation| {
+                    // For the client credentials flow, the solicitor is consulted
+                    // to ensure that the resulting access token is issued to the
+                    // correct owner. This may be the client itself, if clients
+                    // and resource owners are from the same set of entities, but
+                    // may be distinct if that is not the case.
+                    OwnerConsent::Authorized(solicitation.pre_grant().client_id.clone())
                 });
 
                 op.run(self.with_solicitor(solicitor))

@@ -6,10 +6,12 @@ use crate::code_grant::client_credentials::{
     client_credentials, Error as ClientCredentialsError, Extension,
     Endpoint as ClientCredentialsEndpoint, Request as ClientCredentialsRequest,
 };
+use crate::code_grant::error::{AccessTokenError, AccessTokenErrorType};
+use crate::code_grant::refresh::ErrorDescription;
 use crate::primitives::{registrar::Registrar, issuer::Issuer};
 use super::{
     Endpoint, InnerTemplate, OAuthError, QueryParameter, WebRequest, WebResponse,
-    is_authorization_method,
+    is_authorization_method, OwnerConsent,
 };
 
 /// Offers access tokens to authenticated third parties.
@@ -52,9 +54,6 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
 
     /// The credentials-in-body flag from the flow.
     allow_credentials_in_body: bool,
-
-    /// The refresh token flag from the flow.
-    allow_refresh_token: bool,
 }
 
 struct Invalid;
@@ -133,16 +132,55 @@ where
     /// When the registrar, authorizer, or issuer returned by the endpoint is suddenly
     /// `None` when previously it was `Some(_)`.
     pub fn execute(&mut self, mut request: R) -> Result<R::Response, E::Error> {
-        let issued = client_credentials(
+        let pending = client_credentials(
             &mut self.endpoint,
-            &WrappedRequest::new(
-                &mut request,
-                self.allow_credentials_in_body,
-                self.allow_refresh_token,
-            ),
+            &WrappedRequest::new(&mut request, self.allow_credentials_in_body),
         );
+        let pending = match pending {
+            Err(error) => {
+                return client_credentials_error(&mut self.endpoint.inner, &mut request, error)
+            }
+            Ok(pending) => pending,
+        };
 
-        let token = match issued {
+        let consent = self
+            .endpoint
+            .inner
+            .owner_solicitor()
+            .unwrap()
+            .check_consent(&mut request, pending.as_solicitation());
+
+        let owner_id = match consent {
+            OwnerConsent::Authorized(owner_id) => owner_id,
+            OwnerConsent::Error(error) => return Err(self.endpoint.inner.web_error(error)),
+            OwnerConsent::InProgress(..) => {
+                // User interaction is not permitted in the client credentials flow, so
+                // an InProgress response is invalid.
+                return Err(self.endpoint.inner.error(OAuthError::PrimitiveError));
+            }
+            OwnerConsent::Denied => {
+                let mut error = AccessTokenError::default();
+                error.set_type(AccessTokenErrorType::InvalidClient);
+                let mut json = ErrorDescription { error };
+                let mut response = self.endpoint.inner.response(
+                    &mut request,
+                    InnerTemplate::Unauthorized {
+                        error: None,
+                        access_token_error: Some(json.description()),
+                    }
+                    .into(),
+                )?;
+                response
+                    .client_error()
+                    .map_err(|err| self.endpoint.inner.web_error(err))?;
+                response
+                    .body_json(&json.to_json())
+                    .map_err(|err| self.endpoint.inner.web_error(err))?;
+                return Ok(response);
+            }
+        };
+
+        let token = match pending.issue(&mut self.endpoint, owner_id, self.allow_refresh_token) {
             Err(error) => {
                 return client_credentials_error(&mut self.endpoint.inner, &mut request, error)
             }
@@ -221,13 +259,11 @@ impl<E: Endpoint<R>, R: WebRequest> ClientCredentialsEndpoint for WrappedToken<E
 }
 
 impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
-    pub fn new(request: &'a mut R, credentials: bool, allow_refresh_token: bool) -> Self {
-        Self::new_or_fail(request, credentials, allow_refresh_token).unwrap_or_else(Self::from_err)
+    pub fn new(request: &'a mut R, credentials: bool) -> Self {
+        Self::new_or_fail(request, credentials).unwrap_or_else(Self::from_err)
     }
 
-    fn new_or_fail(
-        request: &'a mut R, credentials: bool, allow_refresh_token: bool,
-    ) -> Result<Self, FailParse<R::Error>> {
+    fn new_or_fail(request: &'a mut R, credentials: bool) -> Result<Self, FailParse<R::Error>> {
         // If there is a header, it must parse correctly.
         let authorization = match request.authheader() {
             Err(err) => return Err(FailParse::Err(err)),
@@ -241,7 +277,6 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             authorization,
             error: None,
             allow_credentials_in_body: credentials,
-            allow_refresh_token: allow_refresh_token,
         })
     }
 
@@ -252,7 +287,6 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             authorization: None,
             error: Some(err),
             allow_credentials_in_body: false,
-            allow_refresh_token: false,
         }
     }
 
@@ -315,10 +349,6 @@ impl<'a, R: WebRequest> ClientCredentialsRequest for WrappedRequest<'a, R> {
 
     fn allow_credentials_in_body(&self) -> bool {
         self.allow_credentials_in_body
-    }
-
-    fn allow_refresh_token(&self) -> bool {
-        self.allow_refresh_token
     }
 }
 

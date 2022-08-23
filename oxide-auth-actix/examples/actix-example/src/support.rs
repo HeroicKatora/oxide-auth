@@ -57,7 +57,7 @@ async fn endpoint_impl(
     let auth_result = auth_handle.await.unwrap();
 
     match auth_result {
-        Ok(()) => {HttpResponse::Found().append_header(("Location", "/")).finish()},
+        Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }
