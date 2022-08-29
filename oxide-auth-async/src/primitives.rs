@@ -34,15 +34,15 @@ pub trait Issuer {
 
     async fn refresh(&mut self, _: &str, _: Grant) -> Result<RefreshedToken, ()>;
 
-    async fn recover_token(&mut self, _: &str) -> Result<Option<Grant>, ()>;
+    async fn recover_token(&self, _: &str) -> Result<Option<Grant>, ()>;
 
-    async fn recover_refresh(&mut self, _: &str) -> Result<Option<Grant>, ()>;
+    async fn recover_refresh(&self, _: &str) -> Result<Option<Grant>, ()>;
 }
 
 #[async_trait]
 impl<T> Issuer for T
 where
-    T: issuer::Issuer + Send + ?Sized,
+    T: issuer::Issuer + Send + Sync + ?Sized,
 {
     async fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         issuer::Issuer::issue(self, grant)
@@ -52,11 +52,11 @@ where
         issuer::Issuer::refresh(self, token, grant)
     }
 
-    async fn recover_token(&mut self, token: &str) -> Result<Option<Grant>, ()> {
+    async fn recover_token(&self, token: &str) -> Result<Option<Grant>, ()> {
         issuer::Issuer::recover_token(self, token)
     }
 
-    async fn recover_refresh(&mut self, token: &str) -> Result<Option<Grant>, ()> {
+    async fn recover_refresh(&self, token: &str) -> Result<Option<Grant>, ()> {
         issuer::Issuer::recover_refresh(self, token)
     }
 }
