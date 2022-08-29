@@ -76,6 +76,17 @@ impl ClientCredentialsSetup {
 
         assert_eq!(response.status, Status::BadRequest);
     }
+
+    fn test_unauthorized<S>(&mut self, request: CraftedRequest, mut solicitor: S)
+    where
+        S: OwnerSolicitor<CraftedRequest>,
+    {
+        let response = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor)
+            .execute(request)
+            .expect("Expected non-error response");
+
+        assert_eq!(response.status, Status::Unauthorized);
+    }
 }
 
 #[test]
@@ -130,9 +141,26 @@ fn client_credentials_deny_public_client() {
 }
 
 #[test]
+fn client_credentials_deny_incorrect_credentials() {
+    let mut setup = ClientCredentialsSetup::new();
+    let basic_authorization = base64::encode(&format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
+    let wrong_credentials = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![("grant_type", "client_credentials")]
+                .iter()
+                .to_single_value_query(),
+        ),
+        auth: Some(format!("Basic {}", basic_authorization)),
+    };
+
+    setup.test_unauthorized(wrong_credentials, Allow(EXAMPLE_CLIENT_ID.to_owned()));
+}
+
+#[test]
 fn client_credentials_deny_missing_credentials() {
     let mut setup = ClientCredentialsSetup::new();
-    let public_client = CraftedRequest {
+    let missing_credentials = CraftedRequest {
         query: None,
         urlbody: Some(
             vec![
@@ -145,7 +173,7 @@ fn client_credentials_deny_missing_credentials() {
         auth: None,
     };
 
-    setup.test_bad_request(public_client, Allow(EXAMPLE_CLIENT_ID.to_owned()));
+    setup.test_bad_request(missing_credentials, Allow(EXAMPLE_CLIENT_ID.to_owned()));
 }
 
 #[test]
