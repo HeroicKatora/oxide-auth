@@ -12,7 +12,7 @@ use crate::primitives::issuer::Issuer;
 use crate::primitives::registrar::Registrar;
 use crate::primitives::scope::Scope;
 
-use crate::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow, RefreshFlow};
+use crate::endpoint::{AccessTokenFlow, AuthorizationFlow, ResourceFlow, RefreshFlow, ClientCredentialsFlow};
 use crate::endpoint::{Endpoint, Extension, OAuthError, PreGrant, Template, Scopes};
 use crate::endpoint::{OwnerConsent, OwnerSolicitor, Solicitation};
 use crate::endpoint::WebRequest;
@@ -260,6 +260,14 @@ type AccessToken<'a> = Generic<
     Vacant,
     Vacant,
 >;
+type ClientCredentials<'a, W> = Generic<
+    &'a (dyn Registrar + 'a),
+    Vacant,
+    &'a mut (dyn Issuer + 'a),
+    &'a mut (dyn OwnerSolicitor<W> + 'a),
+    Vacant,
+    Vacant,
+>;
 type Refresh<'a> =
     Generic<&'a (dyn Registrar + 'a), Vacant, &'a mut (dyn Issuer + 'a), Vacant, Vacant, Vacant>;
 type Resource<'a> = Generic<Vacant, Vacant, &'a mut (dyn Issuer + 'a), Vacant, &'a [Scope], Vacant>;
@@ -315,6 +323,36 @@ where
         authorizer,
         issuer,
         solicitor: Vacant,
+        scopes: Vacant,
+        response: Vacant,
+    });
+
+    match flow {
+        Err(_) => unreachable!(),
+        Ok(flow) => flow,
+    }
+}
+
+/// Create an ad-hoc client credentials flow.
+///
+/// Since all necessary primitives are expected in the function syntax, this is guaranteed to never
+/// fail or panic, compared to preparing one with `ClientCredentialsFlow`.
+///
+/// But this is not as versatile and extensible, so it should be used with care.  The fact that it
+/// only takes references is a conscious choice to maintain forwards portability while encouraging
+/// the transition to custom `Endpoint` implementations instead.
+pub fn client_credentials_flow<'a, W>(
+    registrar: &'a dyn Registrar, issuer: &'a mut dyn Issuer, solicitor: &'a mut dyn OwnerSolicitor<W>,
+) -> ClientCredentialsFlow<ClientCredentials<'a, W>, W>
+where
+    W: WebRequest,
+    W::Response: Default,
+{
+    let flow = ClientCredentialsFlow::prepare(Generic {
+        registrar,
+        authorizer: Vacant,
+        issuer,
+        solicitor,
         scopes: Vacant,
         response: Vacant,
     });
