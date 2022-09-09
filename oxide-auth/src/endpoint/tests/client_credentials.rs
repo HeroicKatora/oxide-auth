@@ -13,6 +13,7 @@ struct ClientCredentialsSetup {
     registrar: ClientMap,
     issuer: TokenMap<TestGenerator>,
     basic_authorization: String,
+    allow_credentials_in_body: bool,
 }
 
 impl ClientCredentialsSetup {
@@ -33,6 +34,7 @@ impl ClientCredentialsSetup {
             registrar,
             issuer,
             basic_authorization,
+            allow_credentials_in_body: false,
         }
     }
 
@@ -52,6 +54,7 @@ impl ClientCredentialsSetup {
             registrar,
             issuer,
             basic_authorization,
+            allow_credentials_in_body: false,
         }
     }
 
@@ -59,9 +62,9 @@ impl ClientCredentialsSetup {
     where
         S: OwnerSolicitor<CraftedRequest>,
     {
-        let response = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor)
-            .execute(request)
-            .expect("Expected non-error reponse");
+        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        flow.allow_credentials_in_body(self.allow_credentials_in_body);
+        let response = flow.execute(request).expect("Expected non-error reponse");
 
         assert_eq!(response.status, Status::Ok);
     }
@@ -70,9 +73,9 @@ impl ClientCredentialsSetup {
     where
         S: OwnerSolicitor<CraftedRequest>,
     {
-        let response = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor)
-            .execute(request)
-            .expect("Expected non-error response");
+        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        flow.allow_credentials_in_body(self.allow_credentials_in_body);
+        let response = flow.execute(request).expect("Expected non-error response");
 
         assert_eq!(response.status, Status::BadRequest);
     }
@@ -81,9 +84,9 @@ impl ClientCredentialsSetup {
     where
         S: OwnerSolicitor<CraftedRequest>,
     {
-        let response = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor)
-            .execute(request)
-            .expect("Expected non-error response");
+        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        flow.allow_credentials_in_body(self.allow_credentials_in_body);
+        let response = flow.execute(request).expect("Expected non-error response");
 
         assert_eq!(response.status, Status::Unauthorized);
     }
@@ -177,7 +180,7 @@ fn client_credentials_deny_missing_credentials() {
 }
 
 #[test]
-fn client_credentials_deny_unknown_client() {
+fn client_credentials_deny_unknown_client_missing_password() {
     // The client_id is not registered
     let unknown_client = CraftedRequest {
         query: None,
@@ -193,6 +196,114 @@ fn client_credentials_deny_unknown_client() {
     };
 
     ClientCredentialsSetup::new().test_bad_request(unknown_client, Allow("SomeOtherClient".to_owned()));
+}
+
+#[test]
+fn client_credentials_deny_body_missing_password() {
+    let mut setup = ClientCredentialsSetup::new();
+    setup.allow_credentials_in_body = true;
+    // The client_id is not registered
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![
+                ("grant_type", "client_credentials"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: None,
+    };
+
+    setup.test_bad_request(unknown_client, Allow(EXAMPLE_CLIENT_ID.to_owned()));
+}
+
+#[test]
+fn client_credentials_deny_unknown_client() {
+    // The client_id is not registered
+    let mut setup = ClientCredentialsSetup::new();
+    let basic_authorization = base64::encode(&format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE));
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![("grant_type", "client_credentials")]
+                .iter()
+                .to_single_value_query(),
+        ),
+        auth: Some(format!("Basic {}", basic_authorization)),
+    };
+
+    // Do not leak the information that this is unknown. It must appear as a bad login attempt.
+    setup.test_unauthorized(unknown_client, Allow("SomeOtherClient".to_owned()));
+}
+
+#[test]
+fn client_credentials_deny_body_unknown_client() {
+    let mut setup = ClientCredentialsSetup::new();
+    // The client_id is not registered
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![
+                ("grant_type", "client_credentials"),
+                ("client_id", "SomeOtherClient"),
+                ("client_secret", EXAMPLE_PASSPHRASE),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: None,
+    };
+
+    // Do not leak the information that this is unknown. It must appear as a bad login attempt.
+    setup.test_bad_request(unknown_client, Allow("SomeOtherClient".to_owned()));
+}
+
+#[test]
+fn client_body_credentials() {
+    let mut setup = ClientCredentialsSetup::new();
+    setup.allow_credentials_in_body = true;
+
+    // The client_id is not registered
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![
+                ("grant_type", "client_credentials"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("client_secret", EXAMPLE_PASSPHRASE),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: None,
+    };
+
+    setup.test_success(unknown_client, Allow(EXAMPLE_OWNER_ID.to_owned()));
+}
+
+#[test]
+fn client_duplicate_credentials_deniend() {
+    let mut setup = ClientCredentialsSetup::new();
+    setup.allow_credentials_in_body = true;
+
+    // Both body and authorization header is not allowed.
+    let unknown_client = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![
+                ("grant_type", "client_credentials"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("client_secret", EXAMPLE_PASSPHRASE),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: Some(setup.basic_authorization.clone()),
+    };
+
+    setup.test_bad_request(unknown_client, Allow(EXAMPLE_OWNER_ID.to_owned()));
 }
 
 #[test]
