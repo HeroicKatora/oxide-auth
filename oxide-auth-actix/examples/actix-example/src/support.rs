@@ -16,7 +16,7 @@ use actix_web::{
 pub fn dummy_client() -> dev::Server {
     let client = Client::new(ClientConfig {
         client_id: "LocalClient".into(),
-        client_secret: None,
+        client_secret: Some("SecretSecret".to_owned()),
         protected_url: "http://localhost:8020/".into(),
         token_url: "http://localhost:8020/token".into(),
         refresh_url: "http://localhost:8020/refresh".into(),
@@ -57,7 +57,7 @@ async fn endpoint_impl(
     let auth_result = auth_handle.await.unwrap();
 
     match auth_result {
-        Ok(()) => {HttpResponse::Found().append_header(("Location", "/")).finish()},
+        Ok(()) => HttpResponse::Found().append_header(("Location", "/")).finish(),
         Err(err) => HttpResponse::InternalServerError().body(format!("{}", err)),
     }
 }

@@ -280,7 +280,7 @@ impl AccessToken {
                     ..
                 },
                 Input::Authenticated,
-            ) => Self::authencicated(client, code, redirect_uri),
+            ) => Self::authenticated(client, code, redirect_uri),
             (
                 AccessTokenState::Recover {
                     client, redirect_uri, ..
@@ -368,7 +368,7 @@ impl AccessToken {
         })
     }
 
-    fn authencicated(client: String, code: String, redirect_uri: url::Url) -> AccessTokenState {
+    fn authenticated(client: String, code: String, redirect_uri: url::Url) -> AccessTokenState {
         AccessTokenState::Recover {
             client,
             code,
@@ -563,13 +563,13 @@ pub struct PrimitiveError {
 /// addition this enforces backend specific behaviour for obtaining or handling the access error.
 #[derive(Clone)]
 pub struct ErrorDescription {
-    error: AccessTokenError,
+    pub(crate) error: AccessTokenError,
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
 /// Represents an access token, a refresh token and the associated scope for serialization.
-pub struct BearerToken(IssuedToken, String);
+pub struct BearerToken(pub(crate) IssuedToken, pub(crate) String);
 
 impl Error {
     /// Create invalid error type
@@ -579,7 +579,7 @@ impl Error {
         })
     }
 
-    fn invalid_with(with_type: AccessTokenErrorType) -> Self {
+    pub(crate) fn invalid_with(with_type: AccessTokenErrorType) -> Self {
         Error::Invalid(ErrorDescription {
             error: {
                 let mut error = AccessTokenError::default();
@@ -617,7 +617,7 @@ impl Error {
 }
 
 impl PrimitiveError {
-    fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         PrimitiveError {
             grant: None,
             extensions: None,

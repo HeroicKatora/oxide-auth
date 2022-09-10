@@ -217,7 +217,7 @@ pub enum Error {
 /// this module.
 #[derive(Clone, Debug)]
 pub struct ErrorDescription {
-    error: AccessTokenError,
+    pub(crate) error: AccessTokenError,
 }
 
 type Result<T> = std::result::Result<T, Error>;

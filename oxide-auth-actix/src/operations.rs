@@ -1,6 +1,8 @@
 use crate::{OAuthRequest, OAuthResponse, OAuthOperation, WebError};
 use oxide_auth::{
-    endpoint::{AccessTokenFlow, AuthorizationFlow, Endpoint, RefreshFlow, ResourceFlow},
+    endpoint::{
+        AccessTokenFlow, AuthorizationFlow, Endpoint, RefreshFlow, ResourceFlow, ClientCredentialsFlow,
+    },
     primitives::grant::Grant,
 };
 
@@ -35,6 +37,24 @@ impl OAuthOperation for Token {
         WebError: From<E::Error>,
     {
         AccessTokenFlow::prepare(endpoint)?
+            .execute(self.0)
+            .map_err(WebError::from)
+    }
+}
+
+/// Client Credentials related operations
+pub struct ClientCredentials(pub OAuthRequest);
+
+impl OAuthOperation for ClientCredentials {
+    type Item = OAuthResponse;
+    type Error = WebError;
+
+    fn run<E>(self, endpoint: E) -> Result<Self::Item, Self::Error>
+    where
+        E: Endpoint<OAuthRequest>,
+        WebError: From<E::Error>,
+    {
+        ClientCredentialsFlow::prepare(endpoint)?
             .execute(self.0)
             .map_err(WebError::from)
     }
