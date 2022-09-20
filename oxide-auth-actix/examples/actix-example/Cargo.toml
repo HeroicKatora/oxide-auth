@@ -5,9 +5,9 @@ authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 edition = "2018"
 
 [dependencies]
-actix = "0.12"
-actix-web = "4.0.1"
-env_logger = "0.7"
+actix = "0.13"
+actix-web = "4.2.1"
+env_logger = "0.9"
 futures = "0.3"
 oxide-auth = { version = "0.5.0", path = "./../../../oxide-auth" }
 oxide-auth-actix = { version = "0.2.0", path = "./../../" }
