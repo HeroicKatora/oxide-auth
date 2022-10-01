@@ -2,6 +2,15 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.5.3 (2022-Sep-25)
+
+Feature release:
+- Adds the module `client_credentials` and related flow.
+
+Bug fixes:
+- Dependency on `chrono` no longer enables the deprecated features that would
+  expose deprecated surface API which is unsound.
+
 # v0.5.2 (2022-Jul-10)
 
 Maintenance release:
