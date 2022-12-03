@@ -1,10 +1,8 @@
 use oxide_auth::frontends::dev::{NormalizedParameter, QueryParameter, WebRequest};
 use axum::{
     async_trait,
-    body::HttpBody,
-    BoxError,
-    extract::{Query, Form, FromRequest, RequestParts},
-    http::header,
+    extract::{Query, Form, FromRequest, FromRequestParts},
+    http::{header, request::Parts, Request}, body::HttpBody, BoxError,
 };
 use crate::{OAuthResponse, WebError};
 use std::borrow::Cow;
@@ -83,25 +81,16 @@ impl WebRequest for OAuthRequest {
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for OAuthRequest
+impl<S, B> FromRequest<S, B> for OAuthRequest
 where
-    B: HttpBody + Send,
+    B: HttpBody + Send + 'static,
     B::Data: Send,
     B::Error: Into<BoxError>,
+    S: Send + Sync,
 {
     type Rejection = WebError;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let query = Query::from_request(req)
-            .await
-            .ok()
-            .map(|q: Query<NormalizedParameter>| q.0);
-
-        let body = Form::from_request(req)
-            .await
-            .ok()
-            .map(|b: Form<NormalizedParameter>| b.0);
-
+    async fn from_request(req: Request<B>, state: &S) -> Result<Self, Self::Rejection> {
         let mut all_auth = req.headers().get_all(header::AUTHORIZATION).iter();
         let optional = all_auth.next();
 
@@ -111,21 +100,31 @@ where
             optional.and_then(|hv| hv.to_str().ok().map(str::to_owned))
         };
 
+        let (mut parts, body) = req.into_parts();
+        let query = Query::from_request_parts(&mut parts, state)
+            .await
+            .ok()
+            .map(|q: Query<NormalizedParameter>| q.0);
+
+        let req = Request::from_parts(parts, body);
+        let body = Form::from_request(req, state)
+            .await
+            .ok()
+            .map(|b: Form<NormalizedParameter>| b.0);
+            
         Ok(Self { auth, query, body })
     }
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for OAuthResource
+impl<S> FromRequestParts<S> for OAuthResource
 where
-    B: HttpBody + Send,
-    B::Data: Send,
-    B::Error: Into<BoxError>,
+    S: Send + Sync
 {
     type Rejection = WebError;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let mut all_auth = req.headers().get_all(header::AUTHORIZATION).iter();
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let mut all_auth = parts.headers.get_all(header::AUTHORIZATION).iter();
         let optional = all_auth.next();
 
         let auth = if all_auth.next().is_some() {
