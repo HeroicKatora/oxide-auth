@@ -12,5 +12,5 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.5"
+axum = "0.6.1"
 oxide-auth = { version = "0.5", path = "../oxide-auth" }
