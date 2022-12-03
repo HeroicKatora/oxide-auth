@@ -104,7 +104,7 @@ impl AccessTokenSetup {
             extensions: Extensions::new(),
         };
 
-        let authtoken = smol::run(authorizer.authorize(authrequest)).unwrap();
+        let authtoken = smol::block_on(authorizer.authorize(authrequest)).unwrap();
         registrar.register_client(client);
 
         let basic_authorization =
@@ -139,7 +139,7 @@ impl AccessTokenSetup {
             extensions: Extensions::new(),
         };
 
-        let authtoken = smol::run(authorizer.authorize(authrequest)).unwrap();
+        let authtoken = smol::block_on(authorizer.authorize(authrequest)).unwrap();
         registrar.register_client(client);
 
         let basic_authorization =
@@ -177,7 +177,7 @@ impl AccessTokenSetup {
             &mut self.issuer,
         ))
         .unwrap();
-        match smol::run(access_token_flow.execute(request)) {
+        match smol::block_on(access_token_flow.execute(request)) {
             Ok(ref response) => Self::assert_json_error_set(response),
             resp => panic!("Expected non-error reponse, got {:?}", resp),
         }
@@ -191,7 +191,7 @@ impl AccessTokenSetup {
         ))
         .unwrap();
         let response =
-            smol::run(access_token_flow.execute(request)).expect("Expected non-error reponse");
+            smol::block_on(access_token_flow.execute(request)).expect("Expected non-error reponse");
 
         self.assert_ok_access_token(response);
     }
@@ -204,7 +204,7 @@ impl AccessTokenSetup {
         ))
         .unwrap();
         flow.allow_credentials_in_body(true);
-        let response = smol::run(flow.execute(request)).expect("Expected non-error response");
+        let response = smol::block_on(flow.execute(request)).expect("Expected non-error response");
         self.assert_ok_access_token(response);
     }
 
@@ -288,7 +288,7 @@ fn access_equivalent_url() {
         extensions: Extensions::new(),
     };
 
-    let authtoken = smol::run(setup.authorizer.authorize(authrequest.clone())).unwrap();
+    let authtoken = smol::block_on(setup.authorizer.authorize(authrequest.clone())).unwrap();
     setup.test_success(CraftedRequest {
         query: None,
         urlbody: Some(
@@ -304,7 +304,7 @@ fn access_equivalent_url() {
         auth: None,
     });
 
-    let authtoken = smol::run(setup.authorizer.authorize(authrequest)).unwrap();
+    let authtoken = smol::block_on(setup.authorizer.authorize(authrequest)).unwrap();
     setup.test_success(CraftedRequest {
         query: None,
         urlbody: Some(

@@ -94,7 +94,7 @@ impl AuthorizationSetup {
             &mut solicitor,
         ))
         .unwrap();
-        let response = smol::run(authorization_flow.execute(request)).expect("Should not error");
+        let response = smol::block_on(authorization_flow.execute(request)).expect("Should not error");
 
         assert_eq!(response.status, Status::Redirect);
 
@@ -112,7 +112,7 @@ impl AuthorizationSetup {
             &mut solicitor,
         ))
         .unwrap();
-        match smol::run(authorization_flow.execute(request)) {
+        match smol::block_on(authorization_flow.execute(request)) {
             Ok(ref resp) if resp.location.is_some() => panic!("Redirect without client id {:?}", resp),
             Ok(resp) => panic!("Response without client id {:?}", resp),
             Err(_) => (),
@@ -129,7 +129,7 @@ impl AuthorizationSetup {
             &mut pagehandler,
         ))
         .unwrap();
-        let response = smol::run(authorization_flow.execute(request));
+        let response = smol::block_on(authorization_flow.execute(request));
 
         let response = match response {
             Err(resp) => panic!("Expected redirect with error set: {:?}", resp),
