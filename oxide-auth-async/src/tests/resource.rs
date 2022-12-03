@@ -68,7 +68,7 @@ impl ResourceSetup {
         // Ensure that valid tokens are 16 bytes long, so we can craft an invalid one
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
-        let authtoken = smol::run(issuer.issue(Grant {
+        let authtoken = smol::block_on(issuer.issue(Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
             owner_id: EXAMPLE_OWNER_ID.to_string(),
             redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
@@ -78,7 +78,7 @@ impl ResourceSetup {
         }))
         .unwrap();
 
-        let wrong_scope_token = smol::run(issuer.issue(Grant {
+        let wrong_scope_token = smol::block_on(issuer.issue(Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
             owner_id: EXAMPLE_OWNER_ID.to_string(),
             redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
@@ -88,7 +88,7 @@ impl ResourceSetup {
         }))
         .unwrap();
 
-        let small_scope_token = smol::run(issuer.issue(Grant {
+        let small_scope_token = smol::block_on(issuer.issue(Grant {
             client_id: EXAMPLE_CLIENT_ID.to_string(),
             owner_id: EXAMPLE_OWNER_ID.to_string(),
             redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
@@ -111,7 +111,7 @@ impl ResourceSetup {
         let mut resource_flow =
             ResourceFlow::prepare(ResourceEndpoint::new(&mut self.issuer, &mut self.resource_scope))
                 .unwrap();
-        match smol::run(resource_flow.execute(request)) {
+        match smol::block_on(resource_flow.execute(request)) {
             Ok(_) => (),
             Err(ohno) => panic!("Expected an error instead of {:?}", ohno),
         }
@@ -121,7 +121,7 @@ impl ResourceSetup {
         let mut resource_flow =
             ResourceFlow::prepare(ResourceEndpoint::new(&mut self.issuer, &mut self.resource_scope))
                 .unwrap();
-        match smol::run(resource_flow.execute(request)) {
+        match smol::block_on(resource_flow.execute(request)) {
             Ok(resp) => panic!("Expected an error instead of {:?}", resp),
             Err(_) => (),
         }
