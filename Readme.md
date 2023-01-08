@@ -75,7 +75,7 @@ of completion. These are distributed as permitted by [IETF Trust License
 [rocket]: https://crates.io/crates/rocket
 [rouille]: https://crates.io/crates/rouille
 [interactive example]: oxide-auth-actix/examples/actix-example
-[CHANGES]: Changes.md
+[CHANGES]: CHANGELOG.md
 [MIGRATION]: Migration.md
 [CONTRIBUTING]: docs/CONTRIBUTING.md
 [LICENSE-MIT]: docs/LICENSE-MIT
