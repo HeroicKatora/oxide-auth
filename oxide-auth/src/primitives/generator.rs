@@ -318,7 +318,7 @@ mod time_serde {
     use chrono::{TimeZone, Utc};
 
     use serde::ser::{Serializer};
-    use serde::de::{Deserialize, Deserializer};
+    use serde::de::{Deserialize, Deserializer, Error, Unexpected, Expected};
 
     pub fn serialize<S: Serializer>(time: &Time, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_i64(time.timestamp())
@@ -326,7 +326,7 @@ mod time_serde {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Time, D::Error> {
         let as_timestamp: i64 = <i64>::deserialize(deserializer)?;
-        Ok(Utc.timestamp(as_timestamp, 0))
+        Utc.timestamp_opt(as_timestamp, 0).single().ok_or(Error::invalid_value(Unexpected::Signed(as_timestamp), &"a valid timestamp value"))
     }
 }
 
