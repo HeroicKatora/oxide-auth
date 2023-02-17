@@ -225,6 +225,7 @@ pub mod defaults {
 
 mod authorization;
 mod access_token;
+mod client_credentials;
 mod type_properties;
 mod resource;
 mod refresh;

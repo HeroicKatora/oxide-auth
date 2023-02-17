@@ -3,10 +3,12 @@ use oxide_auth::endpoint::{OAuthError, Template, WebRequest, OwnerConsent, Solic
 
 pub use crate::code_grant::access_token::{Extension as AccessTokenExtension};
 pub use crate::code_grant::authorization::Extension as AuthorizationExtension;
+pub use crate::code_grant::client_credentials::Extension as ClientCredentialsExtension;
 use crate::primitives::{Authorizer, Registrar, Issuer};
 
 pub mod authorization;
 pub mod access_token;
+pub mod client_credentials;
 pub mod refresh;
 pub mod resource;
 
@@ -77,6 +79,11 @@ pub trait Extension {
 
     /// The handler for access token extensions.
     fn access_token(&mut self) -> Option<&mut (dyn AccessTokenExtension + Send)> {
+        None
+    }
+
+    /// The handler for client credentials extensions.
+    fn client_credentials(&mut self) -> Option<&mut (dyn ClientCredentialsExtension + Send)> {
         None
     }
 }

@@ -174,7 +174,8 @@ impl AccessTokenError {
         }
     }
 
-    pub(crate) fn set_type(&mut self, new_type: AccessTokenErrorType) {
+    /// Set a new error code.
+    pub fn set_type(&mut self, new_type: AccessTokenErrorType) {
         self.error = new_type;
     }
 
