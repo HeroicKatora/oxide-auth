@@ -532,6 +532,11 @@ impl Error {
 }
 
 impl ErrorDescription {
+    /// Create a new description from an access token error
+    pub fn new(error: AccessTokenError) -> Self {
+        Self { error }
+    }
+
     /// Get a handle to the description the client will receive.
     pub fn description(&mut self) -> &mut AccessTokenError {
         &mut self.error

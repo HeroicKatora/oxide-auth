@@ -505,3 +505,213 @@ pub mod authorization {
         }
     }
 }
+
+pub mod client_credentials {
+    use std::borrow::Cow;
+
+    use async_trait::async_trait;
+    use chrono::{Utc, Duration};
+    use oxide_auth::{
+        code_grant::{
+            accesstoken::{BearerToken, PrimitiveError},
+            client_credentials::{
+                ClientCredentials, Error, Input, Output,
+                Request as TokenRequest,
+            },
+        },
+        endpoint::{PreGrant, Scope, Solicitation},
+        primitives::{
+            grant::{Extensions, Grant}, registrar::{BoundClient, ClientUrl, RegistrarError},
+        },
+    };
+
+    /// A system of addons provided additional data.
+    ///
+    /// An endpoint not having any extension may use `&mut ()` as the result of system.
+    #[async_trait]
+    pub trait Extension {
+        /// Inspect the request to produce extension data.
+        async fn extend(&mut self, request: &(dyn TokenRequest + Sync)) -> std::result::Result<Extensions, ()>;
+    }
+
+    #[async_trait]
+    impl Extension for () {
+        async fn extend(&mut self, _: &(dyn TokenRequest + Sync)) -> std::result::Result<Extensions, ()> {
+            Ok(Extensions::new())
+        }
+    }
+
+    /// Required functionality to respond to client credentials requests.
+    ///
+    /// Each method will only be invoked exactly once when processing a correct and authorized request,
+    /// and potentially less than once when the request is faulty.  These methods should be implemented
+    /// by internally using `primitives`, as it is implemented in the `frontend` module.
+    pub trait Endpoint {
+        /// Get the client corresponding to some id.
+        fn registrar(&self) -> &(dyn crate::primitives::Registrar + Sync);
+
+        /// Return the issuer instance to create the client credentials.
+        fn issuer(&mut self) -> &mut (dyn crate::primitives::Issuer + Send);
+
+        /// The system of used extension, extending responses.
+        ///
+        /// It is possible to use `&mut ()`.
+        fn extension(&mut self) -> &mut (dyn Extension + Send);
+    }
+
+    /// Represents a valid, currently pending client credentials not bound to an owner.
+    ///
+    /// This will be passed along to the solicitor to obtain the owner ID, and then
+    /// a token will be issued. Since this is the client credentials flow, a pending
+    /// response is considered an internal error.
+    #[derive(Clone)]
+    pub struct Pending {
+        pre_grant: PreGrant,
+        extensions: Extensions,
+    }
+
+    impl Pending {
+        /// Reference this pending state as a solicitation.
+        pub fn as_solicitation(&self) -> Solicitation<'_> {
+            Solicitation::new(&self.pre_grant)
+        }
+
+        /// Inform the backend about consent from a resource owner.
+        ///
+        /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
+        /// same endpoint as was used to create the pending request.
+        pub async fn issue(
+            self, handler: &mut (dyn Endpoint + Send), owner_id: Cow<'_, str>, allow_refresh_token: bool,
+        ) -> Result<BearerToken, Error> {
+            let mut token = handler
+                .issuer()
+                .issue(Grant {
+                    owner_id: owner_id.into_owned(),
+                    client_id: self.pre_grant.client_id,
+                    redirect_uri: self.pre_grant.redirect_uri.into_url(),
+                    scope: self.pre_grant.scope.clone(),
+                    until: Utc::now() + Duration::minutes(10),
+                    extensions: self.extensions,
+                })
+                .await
+                .map_err(|()| Error::Primitive(Box::new(PrimitiveError::empty())))?;
+
+            if !allow_refresh_token {
+                token.refresh = None;
+            }
+
+            Ok(BearerToken::new(token, self.pre_grant.scope.to_string()))
+        }
+    }
+
+    pub async fn client_credentials(
+        handler: &mut (dyn Endpoint + Send + Sync), 
+        request: &(dyn TokenRequest + Sync)
+    ) -> Result<Pending, Error> {
+        enum Requested {
+            None,
+            Authenticate {
+                client: String,
+                passdata: Vec<u8>,
+            },
+            Bind {
+                client_id: String,
+            },
+            Extend,
+            Negotiate {
+                bound_client: BoundClient<'static>,
+                scope: Option<Scope>,
+            },
+        }
+
+        let mut client_credentials = ClientCredentials::new(request);
+        let mut requested = Requested::None;
+
+        loop {
+            let input = match requested {
+                Requested::None => Input::None,
+                Requested::Authenticate { client, passdata } => {
+                    handler
+                        .registrar()
+                        .check(&client, Some(passdata.as_slice()))
+                        .await
+                        .map_err(|err| match err {
+                            RegistrarError::Unspecified => Error::unauthorized("basic"),
+                            RegistrarError::PrimitiveError => Error::Primitive(Box::new(PrimitiveError {
+                                grant: None,
+                                extensions: None,
+                            })),
+                        })?;
+                    Input::Authenticated
+                }
+                Requested::Bind { client_id } => {
+                    let client_url = ClientUrl {
+                        client_id: Cow::Owned(client_id),
+                        redirect_uri: None,
+                    };
+                    let bound_client = match handler.
+                        registrar()
+                        .bound_redirect(client_url)
+                        .await {
+                            Err(RegistrarError::Unspecified) => return Err(Error::Ignore),
+                            Err(RegistrarError::PrimitiveError) => {
+                                return Err(Error::Primitive(Box::new(PrimitiveError {
+                                    grant: None,
+                                    extensions: None,
+                                })));
+                            }
+                            Ok(pre_grant) => pre_grant,
+                    };
+                    Input::Bound { bound_client }
+                }
+                Requested::Extend => {
+                    let extensions = handler
+                        .extension()
+                        .extend(request)
+                        .await
+                        .map_err(|_| Error::invalid())?;
+                    Input::Extended { extensions }
+                }
+                Requested::Negotiate { bound_client, scope } => {
+                    let pre_grant = handler
+                        .registrar()
+                        .negotiate(bound_client.clone(), scope.clone())
+                        .await
+                        .map_err(|err| match err {
+                            RegistrarError::PrimitiveError => Error::Primitive(Box::new(PrimitiveError {
+                                grant: None,
+                                extensions: None,
+                            })),
+                            RegistrarError::Unspecified => Error::Ignore,
+                        })?;
+                    Input::Negotiated { pre_grant }
+                }
+            };
+
+            requested = match client_credentials.advance(input) {
+                Output::Authenticate { client, passdata } => Requested::Authenticate {
+                    client: client.to_owned(),
+                    passdata: passdata.to_vec(),
+                },
+                Output::Binding { client_id } => Requested::Bind {
+                    client_id: client_id.to_owned(),
+                },
+                Output::Extend => Requested::Extend,
+                Output::Negotiate { bound_client, scope } => Requested::Negotiate {
+                    bound_client: bound_client.clone(),
+                    scope,
+                },
+                Output::Ok {
+                    pre_grant,
+                    extensions,
+                } => {
+                    return Ok(Pending {
+                        pre_grant: pre_grant.clone(),
+                        extensions: extensions.clone(),
+                    })
+                }
+                Output::Err(e) => return Err(*e),
+            };
+        }
+    }
+}

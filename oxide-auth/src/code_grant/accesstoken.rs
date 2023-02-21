@@ -617,7 +617,8 @@ impl Error {
 }
 
 impl PrimitiveError {
-    pub(crate) fn empty() -> Self {
+    /// Reset the results cache.
+    pub fn empty() -> Self {
         PrimitiveError {
             grant: None,
             extensions: None,
@@ -644,6 +645,11 @@ impl ErrorDescription {
 }
 
 impl BearerToken {
+    /// Given token parameters and a scope(s), create a new BearerToken.
+    pub fn new(token: IssuedToken, scope: String) -> BearerToken {
+        Self(token, scope)
+    }
+
     /// Convert the token into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(&self) -> String {

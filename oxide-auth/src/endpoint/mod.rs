@@ -121,7 +121,7 @@ pub enum ResponseStatus {
 /// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
 /// think the pros or cons should be evaluated differently.
 #[derive(Debug)]
-enum InnerTemplate<'a> {
+pub enum InnerTemplate<'a> {
     /// Authorization to access the resource has not been granted.
     Unauthorized {
         /// The underlying cause for denying access.
