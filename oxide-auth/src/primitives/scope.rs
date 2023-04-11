@@ -2,6 +2,7 @@
 use std::{cmp, fmt, str};
 
 use std::collections::HashSet;
+use std::convert::TryFrom;
 use serde::{Deserialize, Serialize};
 
 /// Scope of a given grant or resource, a set of scope-tokens separated by spaces.
@@ -94,6 +95,24 @@ impl Scope {
     /// Create an iterator over the individual scopes.
     pub fn iter(&self) -> impl Iterator<Item = &str> {
         self.tokens.iter().map(AsRef::as_ref)
+    }
+
+    /// Convert self to an iterator over the individual scopes.
+    pub fn into_iter(self) -> impl Iterator<Item = String> {
+        self.tokens.into_iter()
+    }
+}
+
+impl TryFrom<HashSet<String>> for Scope {
+    type Error = ParseScopeErr;
+
+    fn try_from(tokens: HashSet<String>) -> Result<Self, Self::Error> {
+        for token in &tokens {
+            if let Some(char) = token.chars().find(|it|Self::invalid_scope_char(*it) || it == &' ') {
+                return Err(ParseScopeErr::InvalidCharacter(char));
+            }
+        }
+        Ok(Self {tokens})
     }
 }
 
