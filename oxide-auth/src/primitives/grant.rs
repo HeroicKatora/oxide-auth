@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Iter;
 use std::rc::Rc;
 use std::sync::Arc;
+use serde_derive::{Deserialize, Serialize};
 
 /// Provides a name registry for extensions.
 pub trait GrantExtension {
@@ -24,7 +25,8 @@ pub trait GrantExtension {
 ///
 /// Some extensions have semantics where the presence alone is the stored data, so storing data
 /// is optional and storing no data is distinct from not attaching any extension instance at all.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum Value {
     /// An extension that the token owner is allowed to read and interpret.
     Public(Option<String>),
@@ -39,7 +41,7 @@ pub enum Value {
 ///
 /// This also serves as a clean interface for both frontend and backend to reliably and
 /// conveniently manipulate or query the stored data sets.
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Extensions {
     extensions: HashMap<String, Value>,
 }
@@ -48,7 +50,7 @@ pub struct Extensions {
 ///
 /// This can be stored in a database without worrying about lifetimes or shared across thread
 /// boundaries. A reference to this can be converted to a purely referential `GrantRef`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Grant {
     /// Identifies the owner of the resource.
     pub owner_id: String,
