@@ -153,7 +153,8 @@ impl RefreshTokenSetup {
     fn assert_success(&mut self, request: CraftedRequest) -> RefreshedToken {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         assert_eq!(response.status, Status::Ok);
         let body = match response.body {
             Some(Body::Json(body)) => body,
@@ -173,7 +174,8 @@ impl RefreshTokenSetup {
     fn assert_unauthenticated(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         let body = self.assert_json_body(&response);
         if response.status == Status::Unauthorized {
             assert!(response.www_authenticate.is_some());
@@ -187,7 +189,8 @@ impl RefreshTokenSetup {
     fn assert_invalid(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         let body = self.assert_json_body(&response);
         assert_eq!(response.status, Status::BadRequest);
 
@@ -199,7 +202,8 @@ impl RefreshTokenSetup {
     fn assert_invalid_grant(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         let body = self.assert_json_body(&response);
         assert_eq!(response.status, Status::BadRequest);
 
@@ -211,7 +215,8 @@ impl RefreshTokenSetup {
     fn assert_wrong_authentication(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         assert_eq!(response.status, Status::Unauthorized);
         assert!(response.www_authenticate.is_some());
 

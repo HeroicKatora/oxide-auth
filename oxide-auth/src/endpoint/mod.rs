@@ -121,7 +121,7 @@ pub enum ResponseStatus {
 /// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
 /// think the pros or cons should be evaluated differently.
 #[derive(Debug)]
-enum InnerTemplate<'a> {
+pub enum InnerTemplate<'a> {
     /// Authorization to access the resource has not been granted.
     Unauthorized {
         /// The underlying cause for denying access.
@@ -178,8 +178,8 @@ enum InnerTemplate<'a> {
 ///
 /// [`OwnerSolicitor`]: trait.OwnerSolicitor.html
 pub struct Solicitation<'flow> {
-    pub(crate) grant: Cow<'flow, PreGrant>,
-    pub(crate) state: Option<Cow<'flow, str>>,
+    pub grant: Cow<'flow, PreGrant>,
+    pub state: Option<Cow<'flow, str>>,
 }
 
 impl<'flow> Solicitation<'flow> {
@@ -691,7 +691,7 @@ impl<'a> From<InnerTemplate<'a>> for Template<'a> {
     }
 }
 
-fn is_authorization_method<'h>(header: &'h str, method: &'static str) -> Option<&'h str> {
+pub fn is_authorization_method<'h>(header: &'h str, method: &'static str) -> Option<&'h str> {
     let header_method = header.get(..method.len())?;
     if header_method.eq_ignore_ascii_case(method) {
         Some(&header[method.len()..])

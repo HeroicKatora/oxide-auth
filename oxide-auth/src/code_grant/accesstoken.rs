@@ -563,13 +563,13 @@ pub struct PrimitiveError {
 /// addition this enforces backend specific behaviour for obtaining or handling the access error.
 #[derive(Clone)]
 pub struct ErrorDescription {
-    pub(crate) error: AccessTokenError,
+    pub error: AccessTokenError,
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
 /// Represents an access token, a refresh token and the associated scope for serialization.
-pub struct BearerToken(pub(crate) IssuedToken, pub(crate) String);
+pub struct BearerToken(pub IssuedToken, pub String);
 
 impl Error {
     /// Create invalid error type
@@ -617,7 +617,7 @@ impl Error {
 }
 
 impl PrimitiveError {
-    pub(crate) fn empty() -> Self {
+    pub fn empty() -> Self {
         PrimitiveError {
             grant: None,
             extensions: None,
