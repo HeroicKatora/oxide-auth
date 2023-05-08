@@ -44,7 +44,7 @@ pub mod refresh {
                     }
                 }
                 Requested::Authenticate { client, pass } => {
-                    let _: () = handler
+                    handler
                         .registrar()
                         .check(&client, pass.as_deref())
                         .await

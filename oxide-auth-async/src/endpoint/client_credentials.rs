@@ -10,7 +10,7 @@ use oxide_auth::{
     code_grant::{
         accesstoken::ErrorDescription,
         client_credentials::{
-            Error as TokenError, Request as TokenRequest, Error as ClientCredentialsError,
+            Request as TokenRequest, Error as ClientCredentialsError,
             Request as ClientCredentialsRequest,
         },
         error::{AccessTokenError, AccessTokenErrorType},

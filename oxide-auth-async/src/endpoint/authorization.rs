@@ -65,7 +65,7 @@ where
     inner: AuthorizationPartialInner<'a, E, R>,
 
     /// TODO: offer this in the public api instead of dropping the request.
-    _with_request: Option<Box<dyn FnOnce(R) -> () + Send>>,
+    _with_request: Option<Box<dyn FnOnce(R) + Send>>,
 }
 
 /// Result type from processing an authentication request.

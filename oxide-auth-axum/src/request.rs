@@ -2,7 +2,9 @@ use oxide_auth::frontends::dev::{NormalizedParameter, QueryParameter, WebRequest
 use axum::{
     async_trait,
     extract::{Query, Form, FromRequest, FromRequestParts},
-    http::{header, request::Parts, Request}, body::HttpBody, BoxError,
+    http::{header, request::Parts, Request},
+    body::HttpBody,
+    BoxError,
 };
 use crate::{OAuthResponse, WebError};
 use std::borrow::Cow;
@@ -111,7 +113,7 @@ where
             .await
             .ok()
             .map(|b: Form<NormalizedParameter>| b.0);
-            
+
         Ok(Self { auth, query, body })
     }
 }
@@ -119,7 +121,7 @@ where
 #[async_trait]
 impl<S> FromRequestParts<S> for OAuthResource
 where
-    S: Send + Sync
+    S: Send + Sync,
 {
     type Rejection = WebError;
 
