@@ -328,7 +328,7 @@ where
     }
 }
 
-impl<'a, R> AuthorizationRequest for WrappedRequest<R>
+impl<R> AuthorizationRequest for WrappedRequest<R>
 where
     R: WebRequest,
 {

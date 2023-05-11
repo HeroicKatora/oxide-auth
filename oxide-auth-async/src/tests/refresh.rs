@@ -15,9 +15,7 @@ use crate::{
 
 use std::collections::HashMap;
 
-
 use chrono::{Utc, Duration};
-
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
 use super::{defaults::*, resource::ResourceEndpoint};

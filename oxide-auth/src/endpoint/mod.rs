@@ -178,8 +178,8 @@ pub enum InnerTemplate<'a> {
 ///
 /// [`OwnerSolicitor`]: trait.OwnerSolicitor.html
 pub struct Solicitation<'flow> {
-    pub grant: Cow<'flow, PreGrant>,
-    pub state: Option<Cow<'flow, str>>,
+    pub(crate) grant: Cow<'flow, PreGrant>,
+    pub(crate) state: Option<Cow<'flow, str>>,
 }
 
 impl<'flow> Solicitation<'flow> {

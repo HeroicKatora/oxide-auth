@@ -9,10 +9,7 @@ use oxide_auth::{
     },
     code_grant::{
         accesstoken::ErrorDescription,
-        client_credentials::{
-            Request as TokenRequest, Error as ClientCredentialsError,
-            Request as ClientCredentialsRequest,
-        },
+        client_credentials::{Error as ClientCredentialsError, Request as ClientCredentialsRequest},
         error::{AccessTokenError, AccessTokenErrorType},
     },
 };
@@ -176,7 +173,7 @@ where
             OwnerConsent::Denied => {
                 let mut error = AccessTokenError::default();
                 error.set_type(AccessTokenErrorType::InvalidClient);
-                let mut json = ErrorDescription { error };
+                let mut json = ErrorDescription::new(error);
                 let mut response = self.endpoint.inner.response(
                     &mut request,
                     InnerTemplate::Unauthorized {

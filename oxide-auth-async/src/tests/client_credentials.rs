@@ -222,23 +222,23 @@ fn client_credentials_deny_public_client() {
     };
 
     setup.test_bad_request(public_client, Deny);
+}
 
-    #[test]
-    fn client_credentials_deny_incorrect_credentials() {
-        let mut setup = ClientCredentialsSetup::new();
-        let basic_authorization = base64::encode(format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
-        let wrong_credentials = CraftedRequest {
-            query: None,
-            urlbody: Some(
-                vec![("grant_type", "client_credentials")]
-                    .iter()
-                    .to_single_value_query(),
-            ),
-            auth: Some(format!("Basic {}", basic_authorization)),
-        };
+#[test]
+fn client_credentials_deny_incorrect_credentials() {
+    let mut setup = ClientCredentialsSetup::new();
+    let basic_authorization = base64::encode(format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
+    let wrong_credentials = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![("grant_type", "client_credentials")]
+                .iter()
+                .to_single_value_query(),
+        ),
+        auth: Some(format!("Basic {}", basic_authorization)),
+    };
 
-        setup.test_unauthorized(wrong_credentials, Allow(EXAMPLE_CLIENT_ID.to_owned()));
-    }
+    setup.test_unauthorized(wrong_credentials, Allow(EXAMPLE_CLIENT_ID.to_owned()));
 }
 
 #[test]

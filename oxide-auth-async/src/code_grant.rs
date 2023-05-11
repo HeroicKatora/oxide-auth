@@ -198,10 +198,7 @@ pub mod client_credentials {
     impl Pending {
         /// Reference this pending state as a solicitation.
         pub fn as_solicitation(&self) -> Solicitation<'_> {
-            Solicitation {
-                grant: Cow::Borrowed(&self.pre_grant),
-                state: None,
-            }
+            Solicitation::new(&self.pre_grant)
         }
 
         /// Inform the backend about consent from a resource owner.
@@ -211,13 +208,15 @@ pub mod client_credentials {
         pub async fn issue(
             self, handler: &mut dyn Endpoint, owner_id: String, allow_refresh_token: bool,
         ) -> Result<BearerToken, Error> {
+            let pre_grant = self.pre_grant.clone();
+
             let mut token = handler
                 .issuer()
                 .issue(Grant {
                     owner_id,
-                    client_id: self.pre_grant.client_id,
-                    redirect_uri: self.pre_grant.redirect_uri.into_url(),
-                    scope: self.pre_grant.scope.clone(),
+                    client_id: pre_grant.client_id,
+                    redirect_uri: pre_grant.redirect_uri.into_url(),
+                    scope: pre_grant.scope.clone(),
                     until: Utc::now() + Duration::minutes(10),
                     extensions: self.extensions,
                 })
@@ -228,7 +227,7 @@ pub mod client_credentials {
                 token.refresh = None;
             }
 
-            Ok(BearerToken(token, self.pre_grant.scope.to_string()))
+            Ok(token.convert_bearer_token(self.pre_grant))
         }
     }
 

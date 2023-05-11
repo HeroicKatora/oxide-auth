@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{Duration, Utc};
 
+use crate::{endpoint::PreGrant, code_grant::accesstoken::BearerToken};
 use super::Time;
 use super::grant::Grant;
 use super::generator::{TagGrant, TaggedAssertion, Assertion};
@@ -232,6 +233,11 @@ impl IssuedToken {
     /// This returns `false` if `refresh` is `None` and `true` otherwise.
     pub fn refreshable(&self) -> bool {
         self.refresh.is_some()
+    }
+
+    /// Convert this issued token to an access bearer token given a grant
+    pub fn convert_bearer_token(self, pre_grant: PreGrant) -> BearerToken {
+        BearerToken(self, pre_grant.scope)
     }
 }
 

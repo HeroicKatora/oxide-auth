@@ -44,8 +44,7 @@ struct CraftedResponse {
 }
 
 /// An enum containing the necessary HTTP status codes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-#[derive(Default)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Default)]
 enum Status {
     /// Http status code 200.
     #[default]
@@ -210,8 +209,6 @@ where
             .collect()
     }
 }
-
-
 
 pub mod defaults {
     pub const EXAMPLE_CLIENT_ID: &str = "ClientId";
