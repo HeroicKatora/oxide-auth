@@ -4,8 +4,7 @@ use std::marker::PhantomData;
 
 use oxide_auth::{
     endpoint::{
-        NormalizedParameter, QueryParameter, WebResponse, WebRequest, InnerTemplate,
-        is_authorization_method,
+        NormalizedParameter, QueryParameter, WebResponse, WebRequest, Template, is_authorization_method,
     },
     code_grant::{
         accesstoken::ErrorDescription,
@@ -176,12 +175,9 @@ where
                 let mut json = ErrorDescription::new(error);
                 let mut response = self.endpoint.inner.response(
                     &mut request,
-                    InnerTemplate::Unauthorized {
-                        error: None,
-                        access_token_error: Some(json.description()),
-                    }
-                    .into(),
+                    Template::new_unauthorized(None, Some(json.description())).into(),
                 )?;
+
                 response
                     .client_error()
                     .map_err(|err| self.endpoint.inner.web_error(err))?;
@@ -205,7 +201,7 @@ where
         let mut response = self
             .endpoint
             .inner
-            .response(&mut request, InnerTemplate::Ok.into())?;
+            .response(&mut request, Template::new_ok().into())?;
         response
             .body_json(&token.to_json())
             .map_err(|err| self.endpoint.inner.web_error(err))?;
@@ -219,13 +215,9 @@ fn client_credentials_error<E: Endpoint<R>, R: WebRequest>(
     Ok(match error {
         ClientCredentialsError::Ignore => return Err(endpoint.error(OAuthError::DenySilently)),
         ClientCredentialsError::Invalid(mut json) => {
-            let mut response = endpoint.response(
-                request,
-                InnerTemplate::BadRequest {
-                    access_token_error: Some(json.description()),
-                }
-                .into(),
-            )?;
+            let mut response =
+                endpoint.response(request, Template::new_bad(Some(json.description())).into())?;
+
             response.client_error().map_err(|err| endpoint.web_error(err))?;
             response
                 .body_json(&json.to_json())
@@ -235,12 +227,9 @@ fn client_credentials_error<E: Endpoint<R>, R: WebRequest>(
         ClientCredentialsError::Unauthorized(mut json, scheme) => {
             let mut response = endpoint.response(
                 request,
-                InnerTemplate::Unauthorized {
-                    error: None,
-                    access_token_error: Some(json.description()),
-                }
-                .into(),
+                Template::new_unauthorized(None, Some(json.description())).into(),
             )?;
+
             response
                 .unauthorized(&scheme)
                 .map_err(|err| endpoint.web_error(err))?;

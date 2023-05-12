@@ -121,12 +121,14 @@ pub enum ResponseStatus {
 /// not derive this until this has shown unlikely but strongly requested. Please open an issue if you
 /// think the pros or cons should be evaluated differently.
 #[derive(Debug)]
-pub enum InnerTemplate<'a> {
+#[non_exhaustive]
+enum InnerTemplate<'a> {
     /// Authorization to access the resource has not been granted.
     Unauthorized {
         /// The underlying cause for denying access.
         ///
         /// The http authorization header is to be set according to this field.
+        #[allow(dead_code)]
         error: Option<ResourceError>,
 
         /// Information on an access token error.
@@ -691,6 +693,7 @@ impl<'a> From<InnerTemplate<'a>> for Template<'a> {
     }
 }
 
+/// Check if the header is an authorization method
 pub fn is_authorization_method<'h>(header: &'h str, method: &'static str) -> Option<&'h str> {
     let header_method = header.get(..method.len())?;
     if header_method.eq_ignore_ascii_case(method) {

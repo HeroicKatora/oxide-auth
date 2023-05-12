@@ -174,6 +174,7 @@ impl AccessTokenError {
         }
     }
 
+    /// Set error type
     pub fn set_type(&mut self, new_type: AccessTokenErrorType) {
         self.error = new_type;
     }

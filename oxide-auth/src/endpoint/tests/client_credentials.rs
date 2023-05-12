@@ -5,7 +5,7 @@ use crate::endpoint::{OwnerSolicitor};
 
 use crate::frontends::simple::endpoint::client_credentials_flow;
 
-use super::{CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery};
+use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::{Allow, Deny};
 use super::defaults::*;
 
