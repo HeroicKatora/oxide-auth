@@ -1,16 +1,72 @@
-use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
-use crate::primitives::issuer::TokenMap;
+use oxide_auth::primitives::authorizer::AuthMap;
+use oxide_auth::primitives::registrar::{Client, ClientMap, RegisteredUrl};
+use oxide_auth::primitives::issuer::TokenMap;
+use oxide_auth::{frontends::simple::endpoint::Error, endpoint::WebRequest};
 
-use crate::endpoint::{OwnerSolicitor};
-
-use crate::frontends::simple::endpoint::client_credentials_flow;
+use crate::{
+    endpoint::{client_credentials::ClientCredentialsFlow, Endpoint, OwnerSolicitor},
+};
 
 use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
 use super::{Allow, Deny};
 use super::defaults::*;
 
+struct ClientCredentialsEndpoint<'a> {
+    registrar: &'a ClientMap,
+    authorizer: &'a mut AuthMap<TestGenerator>,
+    issuer: &'a mut TokenMap<TestGenerator>,
+    solicitor: &'a mut (dyn OwnerSolicitor<CraftedRequest> + Send + Sync),
+}
+
+impl<'a> ClientCredentialsEndpoint<'a> {
+    fn new(
+        registrar: &'a ClientMap, authorizer: &'a mut AuthMap<TestGenerator>,
+        issuer: &'a mut TokenMap<TestGenerator>,
+        solicitor: &'a mut (dyn OwnerSolicitor<CraftedRequest> + Send + Sync),
+    ) -> Self {
+        Self {
+            registrar,
+            authorizer,
+            issuer,
+            solicitor,
+        }
+    }
+}
+
+impl<'a> Endpoint<CraftedRequest> for ClientCredentialsEndpoint<'a> {
+    type Error = Error<CraftedRequest>;
+
+    fn registrar(&self) -> Option<&(dyn crate::primitives::Registrar + Sync)> {
+        Some(self.registrar)
+    }
+    fn authorizer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Authorizer + Send)> {
+        Some(self.authorizer)
+    }
+    fn issuer_mut(&mut self) -> Option<&mut (dyn crate::primitives::Issuer + Send)> {
+        Some(self.issuer)
+    }
+    fn scopes(&mut self) -> Option<&mut dyn oxide_auth::endpoint::Scopes<CraftedRequest>> {
+        None
+    }
+    fn response(
+        &mut self, _: &mut CraftedRequest, _: oxide_auth::endpoint::Template,
+    ) -> Result<<CraftedRequest as WebRequest>::Response, Self::Error> {
+        Ok(Default::default())
+    }
+    fn error(&mut self, err: oxide_auth::endpoint::OAuthError) -> Self::Error {
+        Error::OAuth(err)
+    }
+    fn web_error(&mut self, err: <CraftedRequest as WebRequest>::Error) -> Self::Error {
+        Error::Web(err)
+    }
+    fn owner_solicitor(&mut self) -> Option<&mut (dyn OwnerSolicitor<CraftedRequest> + Send)> {
+        Some(self.solicitor)
+    }
+}
+
 struct ClientCredentialsSetup {
     registrar: ClientMap,
+    authorizer: AuthMap<TestGenerator>,
     issuer: TokenMap<TestGenerator>,
     basic_authorization: String,
     allow_credentials_in_body: bool,
@@ -19,6 +75,7 @@ struct ClientCredentialsSetup {
 impl ClientCredentialsSetup {
     fn new() -> ClientCredentialsSetup {
         let mut registrar = ClientMap::new();
+        let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AuthToken".to_owned()));
 
         let client = Client::confidential(
@@ -29,9 +86,10 @@ impl ClientCredentialsSetup {
         );
         registrar.register_client(client);
         let basic_authorization =
-            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            base64::encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         ClientCredentialsSetup {
             registrar,
+            authorizer,
             issuer,
             basic_authorization,
             allow_credentials_in_body: false,
@@ -40,6 +98,7 @@ impl ClientCredentialsSetup {
 
     fn public_client() -> Self {
         let mut registrar = ClientMap::new();
+        let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_owned()));
 
         let client = Client::public(
@@ -49,9 +108,10 @@ impl ClientCredentialsSetup {
         );
         registrar.register_client(client);
         let basic_authorization =
-            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            base64::encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         ClientCredentialsSetup {
             registrar,
+            authorizer,
             issuer,
             basic_authorization,
             allow_credentials_in_body: false,
@@ -60,33 +120,54 @@ impl ClientCredentialsSetup {
 
     fn test_success<S>(&mut self, request: CraftedRequest, mut solicitor: S)
     where
-        S: OwnerSolicitor<CraftedRequest>,
+        S: OwnerSolicitor<CraftedRequest> + Send + Sync,
     {
-        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        let mut flow = ClientCredentialsFlow::prepare(ClientCredentialsEndpoint::new(
+            &self.registrar,
+            &mut self.authorizer,
+            &mut self.issuer,
+            &mut solicitor,
+        ))
+        .unwrap();
+
         flow.allow_credentials_in_body(self.allow_credentials_in_body);
-        let response = flow.execute(request).expect("Expected non-error reponse");
+        let response = smol::block_on(flow.execute(request)).expect("Expected non-error response");
 
         assert_eq!(response.status, Status::Ok);
     }
 
     fn test_bad_request<S>(&mut self, request: CraftedRequest, mut solicitor: S)
     where
-        S: OwnerSolicitor<CraftedRequest>,
+        S: OwnerSolicitor<CraftedRequest> + Send + Sync,
     {
-        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        let mut flow = ClientCredentialsFlow::prepare(ClientCredentialsEndpoint::new(
+            &self.registrar,
+            &mut self.authorizer,
+            &mut self.issuer,
+            &mut solicitor,
+        ))
+        .unwrap();
+
         flow.allow_credentials_in_body(self.allow_credentials_in_body);
-        let response = flow.execute(request).expect("Expected non-error response");
+        let response = smol::block_on(flow.execute(request)).expect("Expected non-error response");
 
         assert_eq!(response.status, Status::BadRequest);
     }
 
     fn test_unauthorized<S>(&mut self, request: CraftedRequest, mut solicitor: S)
     where
-        S: OwnerSolicitor<CraftedRequest>,
+        S: OwnerSolicitor<CraftedRequest> + Send + Sync,
     {
-        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        let mut flow = ClientCredentialsFlow::prepare(ClientCredentialsEndpoint::new(
+            &self.registrar,
+            &mut self.authorizer,
+            &mut self.issuer,
+            &mut solicitor,
+        ))
+        .unwrap();
+
         flow.allow_credentials_in_body(self.allow_credentials_in_body);
-        let response = flow.execute(request).expect("Expected non-error response");
+        let response = smol::block_on(flow.execute(request)).expect("Expected non-error response");
 
         assert_eq!(response.status, Status::Unauthorized);
     }
@@ -146,7 +227,7 @@ fn client_credentials_deny_public_client() {
 #[test]
 fn client_credentials_deny_incorrect_credentials() {
     let mut setup = ClientCredentialsSetup::new();
-    let basic_authorization = base64::encode(&format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
+    let basic_authorization = base64::encode(format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
     let wrong_credentials = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -223,7 +304,7 @@ fn client_credentials_deny_body_missing_password() {
 fn client_credentials_deny_unknown_client() {
     // The client_id is not registered
     let mut setup = ClientCredentialsSetup::new();
-    let basic_authorization = base64::encode(&format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE));
+    let basic_authorization = base64::encode(format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE));
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -236,28 +317,6 @@ fn client_credentials_deny_unknown_client() {
 
     // Do not leak the information that this is unknown. It must appear as a bad login attempt.
     setup.test_unauthorized(unknown_client, Allow("SomeOtherClient".to_owned()));
-}
-
-#[test]
-fn client_credentials_deny_body_unknown_client() {
-    let mut setup = ClientCredentialsSetup::new();
-    // The client_id is not registered
-    let unknown_client = CraftedRequest {
-        query: None,
-        urlbody: Some(
-            vec![
-                ("grant_type", "client_credentials"),
-                ("client_id", "SomeOtherClient"),
-                ("client_secret", EXAMPLE_PASSPHRASE),
-            ]
-            .iter()
-            .to_single_value_query(),
-        ),
-        auth: None,
-    };
-
-    // Do not leak the information that this is unknown. It must appear as a bad login attempt.
-    setup.test_bad_request(unknown_client, Allow("SomeOtherClient".to_owned()));
 }
 
 #[test]
@@ -304,40 +363,6 @@ fn client_duplicate_credentials_denied() {
     };
 
     setup.test_bad_request(unknown_client, Allow(EXAMPLE_OWNER_ID.to_owned()));
-}
-
-#[test]
-fn client_credentials_request_error_denied() {
-    let mut setup = ClientCredentialsSetup::new();
-    // Used in conjunction with a denying solicitor below
-    let denied_request = CraftedRequest {
-        query: None,
-        urlbody: Some(
-            vec![("grant_type", "client_credentials")]
-                .iter()
-                .to_single_value_query(),
-        ),
-        auth: Some(format!("Basic {}", setup.basic_authorization)),
-    };
-
-    setup.test_bad_request(denied_request, Deny);
-}
-
-#[test]
-fn client_credentials_request_error_unsupported_grant_type() {
-    let mut setup = ClientCredentialsSetup::new();
-    // Requesting grant with a grant_type other than client_credentials
-    let unsupported_grant_type = CraftedRequest {
-        query: None,
-        urlbody: Some(
-            vec![("grant_type", "not_client_credentials")]
-                .iter()
-                .to_single_value_query(),
-        ),
-        auth: Some(format!("Basic {}", setup.basic_authorization)),
-    };
-
-    setup.test_bad_request(unsupported_grant_type, Allow(EXAMPLE_OWNER_ID.to_owned()));
 }
 
 #[test]

@@ -12,6 +12,7 @@ use crate::primitives::authorizer::Authorizer;
 use crate::primitives::issuer::{IssuedToken, Issuer};
 use crate::primitives::grant::{Extensions, Grant};
 use crate::primitives::registrar::{Registrar, RegistrarError};
+use crate::primitives::scope::Scope;
 
 /// Token Response
 #[derive(Deserialize, Serialize)]
@@ -406,7 +407,7 @@ impl AccessToken {
     }
 
     fn finish(grant: Box<Grant>, token: IssuedToken) -> BearerToken {
-        BearerToken(token, grant.scope.to_string())
+        BearerToken(token, grant.scope.clone())
     }
 }
 
@@ -569,7 +570,7 @@ pub struct ErrorDescription {
 type Result<T> = std::result::Result<T, Error>;
 
 /// Represents an access token, a refresh token and the associated scope for serialization.
-pub struct BearerToken(pub(crate) IssuedToken, pub(crate) String);
+pub struct BearerToken(pub(crate) IssuedToken, pub(crate) Scope);
 
 impl Error {
     /// Create invalid error type
@@ -617,7 +618,8 @@ impl Error {
 }
 
 impl PrimitiveError {
-    pub(crate) fn empty() -> Self {
+    /// Create a default empty error
+    pub fn empty() -> Self {
         PrimitiveError {
             grant: None,
             extensions: None,
@@ -626,6 +628,11 @@ impl PrimitiveError {
 }
 
 impl ErrorDescription {
+    /// Create this from an access token error
+    pub fn new(error: AccessTokenError) -> Self {
+        Self { error }
+    }
+
     /// Convert the error into a json string, viable for being sent over a network with
     /// `application/json` encoding.
     pub fn to_json(&self) -> String {
@@ -653,7 +660,7 @@ impl BearerToken {
             refresh_token: self.0.refresh.clone(),
             token_type: Some("bearer".to_owned()),
             expires_in: Some(remaining.num_seconds()),
-            scope: Some(self.1.clone()),
+            scope: Some(self.1.to_string()),
             error: None,
         };
 
@@ -675,7 +682,7 @@ mod tests {
                 until: Utc::now(),
                 token_type: TokenType::Bearer,
             },
-            "scope".into(),
+            "scope".parse().unwrap(),
         );
 
         let json = token.to_json();
@@ -692,7 +699,7 @@ mod tests {
     fn no_refresh_encoding() {
         let token = BearerToken(
             IssuedToken::without_refresh("access".into(), Utc::now()),
-            "scope".into(),
+            "scope".parse().unwrap(),
         );
 
         let json = token.to_json();

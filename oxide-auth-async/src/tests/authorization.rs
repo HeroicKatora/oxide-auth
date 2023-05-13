@@ -89,7 +89,7 @@ impl AuthorizationSetup {
     fn test_success(&mut self, request: CraftedRequest) {
         let mut solicitor = Allow(EXAMPLE_OWNER_ID.to_string());
         let mut authorization_flow = AuthorizationFlow::prepare(AuthorizationEndpoint::new(
-            &mut self.registrar,
+            &self.registrar,
             &mut self.authorizer,
             &mut solicitor,
         ))
@@ -99,7 +99,7 @@ impl AuthorizationSetup {
         assert_eq!(response.status, Status::Redirect);
 
         match response.location {
-            Some(ref url) if url.as_str().find("error").is_none() => (),
+            Some(ref url) if !url.as_str().contains("error") => (),
             other => panic!("Expected successful redirect: {:?}", other),
         }
     }
@@ -107,7 +107,7 @@ impl AuthorizationSetup {
     fn test_silent_error(&mut self, request: CraftedRequest) {
         let mut solicitor = Allow(EXAMPLE_OWNER_ID.to_string());
         let mut authorization_flow = AuthorizationFlow::prepare(AuthorizationEndpoint::new(
-            &mut self.registrar,
+            &self.registrar,
             &mut self.authorizer,
             &mut solicitor,
         ))
@@ -124,7 +124,7 @@ impl AuthorizationSetup {
         P: OwnerSolicitor<CraftedRequest>,
     {
         let mut authorization_flow = AuthorizationFlow::prepare(AuthorizationEndpoint::new(
-            &mut self.registrar,
+            &self.registrar,
             &mut self.authorizer,
             &mut pagehandler,
         ))
@@ -142,10 +142,7 @@ impl AuthorizationSetup {
                     .query_pairs()
                     .collect::<HashMap<_, _>>()
                     .get("error")
-                    .is_some() =>
-            {
-                ()
-            }
+                    .is_some() => {}
             other => panic!("Expected location with error set description: {:?}", other),
         }
     }

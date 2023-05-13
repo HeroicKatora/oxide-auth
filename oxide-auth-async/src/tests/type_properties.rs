@@ -9,6 +9,7 @@ fn require_futures_have_send_bounds() {
     require_send(|pending, handler| {
         code_grant::authorization::Pending::authorize(pending, handler, "".into())
     });
+    require_send(code_grant::client_credentials::client_credentials);
     require_send(code_grant::refresh::refresh);
     require_send(code_grant::resource::protect);
 }

@@ -326,7 +326,7 @@ mod time_serde {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Time, D::Error> {
         let as_timestamp: i64 = <i64>::deserialize(deserializer)?;
-        Ok(Utc.timestamp(as_timestamp, 0))
+        Ok(Utc.timestamp_opt(as_timestamp, 0).unwrap())
     }
 }
 

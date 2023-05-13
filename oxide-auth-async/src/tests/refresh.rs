@@ -15,9 +15,7 @@ use crate::{
 
 use std::collections::HashMap;
 
-use base64;
 use chrono::{Utc, Duration};
-use serde_json;
 
 use super::{Body, CraftedRequest, CraftedResponse, Status, ToSingleValueQuery};
 use super::{defaults::*, resource::ResourceEndpoint};
@@ -103,7 +101,7 @@ impl RefreshTokenSetup {
         let refresh_token = issued.refresh.clone().unwrap();
 
         let basic_authorization =
-            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            base64::encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         let basic_authorization = format!("Basic {}", basic_authorization);
 
         RefreshTokenSetup {
@@ -153,7 +151,8 @@ impl RefreshTokenSetup {
     fn assert_success(&mut self, request: CraftedRequest) -> RefreshedToken {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         assert_eq!(response.status, Status::Ok);
         let body = match response.body {
             Some(Body::Json(body)) => body,
@@ -173,7 +172,8 @@ impl RefreshTokenSetup {
     fn assert_unauthenticated(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         let body = self.assert_json_body(&response);
         if response.status == Status::Unauthorized {
             assert!(response.www_authenticate.is_some());
@@ -187,7 +187,8 @@ impl RefreshTokenSetup {
     fn assert_invalid(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         let body = self.assert_json_body(&response);
         assert_eq!(response.status, Status::BadRequest);
 
@@ -199,7 +200,8 @@ impl RefreshTokenSetup {
     fn assert_invalid_grant(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         let body = self.assert_json_body(&response);
         assert_eq!(response.status, Status::BadRequest);
 
@@ -211,7 +213,8 @@ impl RefreshTokenSetup {
     fn assert_wrong_authentication(&mut self, request: CraftedRequest) {
         let mut refresh_flow =
             RefreshFlow::prepare(RefreshTokenEndpoint::new(&self.registrar, &mut self.issuer)).unwrap();
-        let response = smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
+        let response =
+            smol::block_on(refresh_flow.execute(request)).expect("Expected non-failed reponse");
         assert_eq!(response.status, Status::Unauthorized);
         assert!(response.www_authenticate.is_some());
 
@@ -297,14 +300,14 @@ fn access_valid_private() {
 fn public_private_invalid_grant() {
     let mut setup = RefreshTokenSetup::public_client();
     let client = Client::confidential(
-        "PrivateClient".into(),
+        "PrivateClient",
         RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
         EXAMPLE_SCOPE.parse().unwrap(),
         EXAMPLE_PASSPHRASE.as_bytes(),
     );
     setup.registrar.register_client(client);
 
-    let basic_authorization = base64::encode(&format!("{}:{}", "PrivateClient", EXAMPLE_PASSPHRASE));
+    let basic_authorization = base64::encode(format!("{}:{}", "PrivateClient", EXAMPLE_PASSPHRASE));
     let basic_authorization = format!("Basic {}", basic_authorization);
 
     let authenticated = CraftedRequest {

@@ -121,9 +121,8 @@ impl ResourceSetup {
         let mut resource_flow =
             ResourceFlow::prepare(ResourceEndpoint::new(&mut self.issuer, &mut self.resource_scope))
                 .unwrap();
-        match smol::block_on(resource_flow.execute(request)) {
-            Ok(resp) => panic!("Expected an error instead of {:?}", resp),
-            Err(_) => (),
+        if let Ok(resp) = smol::block_on(resource_flow.execute(request)) {
+            panic!("Expected an error instead of {:?}", resp);
         }
     }
 }

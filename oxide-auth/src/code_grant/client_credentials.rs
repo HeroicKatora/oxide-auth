@@ -414,7 +414,7 @@ impl Pending {
             token.refresh = None;
         }
 
-        Ok(BearerToken(token, self.pre_grant.scope.to_string()))
+        Ok(BearerToken(token, self.pre_grant.scope.clone()))
     }
 }
 
