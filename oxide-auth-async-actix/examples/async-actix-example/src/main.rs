@@ -1,3 +1,4 @@
+mod endpoint;
 mod support;
 
 use actix::{Actor, Addr, Context, Handler, ResponseFuture};
@@ -9,17 +10,15 @@ use actix_web::{
 use oxide_auth::{
     endpoint::{OwnerConsent, Solicitation, QueryParameter},
     frontends::simple::endpoint::{FnSolicitor, Vacant},
-    primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
 };
-use oxide_auth_async::{
-    endpoint::{Endpoint, OwnerSolicitor},
-    frontends::simple::{ErrorInto, Generic},
-};
+use oxide_auth_async::endpoint::OwnerSolicitor;
 use oxide_auth_async_actix::{
     Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResource, OAuthResponse, Refresh,
     Resource, Token, WebError,
 };
 use std::thread;
+
+use endpoint::DbEndpoint;
 
 static DENY_TEXT: &str = "<html>
 This page should be accessed via an oauth token from the client in the example. Click
@@ -29,14 +28,7 @@ here</a> to begin the authorization process.
 ";
 
 struct State {
-    endpoint: Generic<
-        ClientMap,
-        AuthMap<RandomGenerator>,
-        TokenMap<RandomGenerator>,
-        Vacant,
-        Vec<Scope>,
-        fn() -> OAuthResponse,
-    >,
+    endpoint: DbEndpoint,
 }
 
 enum Extras {
@@ -111,7 +103,7 @@ pub async fn main() -> std::io::Result<()> {
     // Start, then open in browser, don't care about this finishing.
     rt::spawn(start_browser());
 
-    let state = State::preconfigured().start();
+    let state = State::preconfigured().await.start();
 
     // Create the main server instance
     let server = HttpServer::new(move || {
@@ -138,55 +130,17 @@ pub async fn main() -> std::io::Result<()> {
 }
 
 impl State {
-    pub fn preconfigured() -> Self {
+    pub async fn preconfigured() -> Self {
         State {
-            endpoint: Generic {
-                // A registrar with one pre-registered client
-                registrar: vec![Client::confidential(
-                    "LocalClient",
-                    "http://localhost:8021/endpoint"
-                        .parse::<url::Url>()
-                        .unwrap()
-                        .into(),
-                    "default-scope".parse().unwrap(),
-                    "SecretSecret".as_bytes(),
-                )]
-                .into_iter()
-                .collect(),
-                // Authorization tokens are 16 byte random keys to a memory hash map.
-                authorizer: AuthMap::new(RandomGenerator::new(16)),
-                // Bearer tokens are also random generated but 256-bit tokens, since they live longer
-                // and this example is somewhat paranoid.
-                //
-                // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can
-                // be read and parsed by anyone, but not maliciously created. However, they can not be
-                // revoked and thus don't offer even longer lived refresh tokens.
-                issuer: TokenMap::new(RandomGenerator::new(16)),
-
-                solicitor: Vacant,
-
-                // A single scope that will guard resources for this endpoint
-                scopes: vec!["default-scope".parse().unwrap()],
-
-                response: OAuthResponse::ok,
-            },
+            endpoint: DbEndpoint::create().await.unwrap(),
         }
     }
 
-    pub fn with_solicitor<'a, S: Send + Sync>(
-        &'a mut self, solicitor: S,
-    ) -> impl Endpoint<OAuthRequest, Error = WebError> + 'a
+    pub fn with_solicitor<'a, S: Send + Sync>(&'a mut self, solicitor: S) -> DbEndpoint
     where
-        S: OwnerSolicitor<OAuthRequest> + 'static,
+        S: OwnerSolicitor<OAuthRequest> + Send + Sync + 'static,
     {
-        ErrorInto::new(Generic {
-            authorizer: &mut self.endpoint.authorizer,
-            registrar: &mut self.endpoint.registrar,
-            issuer: &mut self.endpoint.issuer,
-            solicitor,
-            scopes: &mut self.endpoint.scopes,
-            response: OAuthResponse::ok,
-        })
+        self.endpoint.with_solicitor(solicitor)
     }
 }
 
@@ -206,8 +160,6 @@ where
         match ex {
             Extras::AuthGet => {
                 let solicitor = FnSolicitor(move |_: &mut OAuthRequest, pre_grant: Solicitation| {
-                    // This will display a page to the user asking for his permission to proceed. The submitted form
-                    // will then trigger the other authorization handler which actually completes the flow.
                     OwnerConsent::InProgress(
                         OAuthResponse::ok()
                             .content_type("text/html")
@@ -229,7 +181,14 @@ where
 
                 op.run(self.with_solicitor(solicitor))
             }
-            _ => op.run(&mut self.endpoint),
+            Extras::ClientCredentials => {
+                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, solicitation: Solicitation| {
+                    OwnerConsent::Authorized(solicitation.pre_grant().client_id.clone())
+                });
+
+                op.run(self.with_solicitor(solicitor))
+            }
+            _ => op.run(self.with_solicitor(Vacant)),
         }
     }
 }
