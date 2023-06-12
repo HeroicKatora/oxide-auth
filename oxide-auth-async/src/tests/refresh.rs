@@ -297,6 +297,15 @@ fn access_valid_private() {
 }
 
 #[test]
+fn assert_send() {
+    let mut setup = RefreshTokenSetup::public_client();
+    let endpoint = RefreshTokenEndpoint::new(&setup.registrar, &mut setup.issuer);
+    let mut flow = RefreshFlow::prepare(endpoint).unwrap();
+
+    super::assert_send(&flow.execute(CraftedRequest::default()));
+}
+
+#[test]
 fn public_private_invalid_grant() {
     let mut setup = RefreshTokenSetup::public_client();
     let client = Client::confidential(

@@ -149,6 +149,16 @@ impl AuthorizationSetup {
 }
 
 #[test]
+fn assert_send() {
+    let mut setup = AuthorizationSetup::new();
+    let mut solicitor = Deny;
+    let endpoint = AuthorizationEndpoint::new(&setup.registrar, &mut setup.authorizer, &mut solicitor);
+    let mut flow = AuthorizationFlow::prepare(endpoint).unwrap();
+
+    super::assert_send(&flow.execute(CraftedRequest::default()));
+}
+
+#[test]
 fn auth_success() {
     let success = CraftedRequest {
         query: Some(

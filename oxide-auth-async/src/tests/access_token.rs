@@ -602,6 +602,15 @@ fn access_request_wrong_grant_type() {
 }
 
 #[test]
+fn assert_send() {
+    let mut setup = AccessTokenSetup::public_client();
+    let endpoint = AccessTokenEndpoint::new(&setup.registrar, &mut setup.authorizer, &mut setup.issuer);
+    let mut flow = AccessTokenFlow::prepare(endpoint).unwrap();
+
+    super::assert_send(&flow.execute(CraftedRequest::default()));
+}
+
+#[test]
 fn private_in_body() {
     let mut setup = AccessTokenSetup::private_client();
 

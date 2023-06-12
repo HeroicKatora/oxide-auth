@@ -140,6 +140,15 @@ fn resource_success() {
 }
 
 #[test]
+fn assert_send() {
+    let mut setup = ResourceSetup::new();
+    let endpoint = ResourceEndpoint::new(&mut setup.issuer, &mut setup.resource_scope);
+    let mut flow = ResourceFlow::prepare(endpoint).unwrap();
+
+    super::assert_send(&flow.execute(CraftedRequest::default()));
+}
+
+#[test]
 fn resource_no_authorization() {
     // Does not have any authorization
     let no_authorization = CraftedRequest {
