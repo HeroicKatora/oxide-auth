@@ -206,7 +206,7 @@ pub mod client_credentials {
         /// Use negotiated parameters to authorize a client for an owner. The endpoint SHOULD be the
         /// same endpoint as was used to create the pending request.
         pub async fn issue(
-            self, handler: &mut dyn Endpoint, owner_id: String, allow_refresh_token: bool,
+            self, handler: &mut (dyn Endpoint + Send), owner_id: String, allow_refresh_token: bool,
         ) -> Result<BearerToken, Error> {
             let pre_grant = self.pre_grant.clone();
 

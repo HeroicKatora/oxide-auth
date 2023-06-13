@@ -210,6 +210,8 @@ where
     }
 }
 
+fn assert_send<T: Send>(_val: &T) {}
+
 pub mod defaults {
     pub const EXAMPLE_CLIENT_ID: &str = "ClientId";
     pub const EXAMPLE_OWNER_ID: &str = "Owner";

@@ -174,6 +174,21 @@ impl ClientCredentialsSetup {
 }
 
 #[test]
+fn assert_send() {
+    let mut setup = ClientCredentialsSetup::new();
+    let mut solicitor = Deny;
+    let endpoint = ClientCredentialsEndpoint::new(
+        &setup.registrar,
+        &mut setup.authorizer,
+        &mut setup.issuer,
+        &mut solicitor,
+    );
+
+    let mut flow = ClientCredentialsFlow::prepare(endpoint).unwrap();
+    super::assert_send(&flow.execute(CraftedRequest::default()));
+}
+
+#[test]
 fn client_credentials_success() {
     let mut setup = ClientCredentialsSetup::new();
     let success = CraftedRequest {
