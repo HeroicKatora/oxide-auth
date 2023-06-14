@@ -1,5 +1,5 @@
 //! Defines the Scope type and parsing/formatting according to the rfc.
-use std::{cmp, fmt, str};
+use std::{cmp, fmt, str, error};
 
 use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
@@ -111,6 +111,8 @@ pub enum ParseScopeErr {
     /// In particular, the characters '\x22' (`"`) and '\x5c' (`\`)  are not allowed.
     InvalidCharacter(char),
 }
+
+impl error::Error for ParseScopeErr {}
 
 impl str::FromStr for Scope {
     type Err = ParseScopeErr;
