@@ -12,8 +12,13 @@ use crate::primitives::grant::{Extensions, GrantExtension};
 /// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
 /// other types.
 pub struct AddonList {
-    authorization: Vec<Arc<dyn AuthorizationAddon + Send + Sync + 'static>>,
-    access_token: Vec<Arc<dyn AccessTokenAddon + Send + Sync + 'static>>,
+    /// Extension to be applied on authorize. This field is `pub` for `oxide-auth-async` be able to
+    /// implement async version of some traits.
+    pub authorization: Vec<Arc<dyn AuthorizationAddon + Send + Sync + 'static>>,
+
+    /// Extension to be applied on get token. This field is `pub` for `oxide-auth-async` be able to
+    /// implement async version of some traits.
+    pub access_token: Vec<Arc<dyn AccessTokenAddon + Send + Sync + 'static>>,
 }
 
 impl AddonList {
