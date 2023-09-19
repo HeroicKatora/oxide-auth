@@ -11,8 +11,13 @@ use super::AddonList;
 /// overwritten. Therefore, this is mainly useful for other endpoints that did not implement
 /// extensions by themselves such as `frontends::simple::endpoint::Generic`.
 pub struct Extended<Inner, Extension> {
-    inner: Inner,
-    addons: Extension,
+    /// Endpoint being extended. This field is `pub` for `oxide-auth-async` be able to implement
+    /// async version of some traits.
+    pub inner: Inner,
+
+    /// Extensions of the endpoint. This field is `pub` for `oxide-auth-async` be able to implement
+    /// async version of some traits.
+    pub addons: Extension,
 }
 
 impl<Inner> Extended<Inner, AddonList> {
