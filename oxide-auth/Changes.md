@@ -2,6 +2,23 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.5.4 (2023-Sep-23)
+
+Feature release:
+- Implement `std::error::Error` on `ParseScopeErr`
+- Expose constructors for `PrimitiveError` and `ErrorDescription` from
+  `code_grant::accesstoken`, as well as `AccessTokenError::set_type`. These
+  allow custom error states for extensions and alternative state machine
+  implementations (such as `oxide-auth-async`).
+- Make `endpoint::is_authorization_method` public. This helper securely
+  deconstructs an Authorization header value into the passphrase data.
+- Expose fields of `Extended` and `AddonList`, two utility implementations of
+  the `Endpoint` trait, to allow alternatives to the trait to be implemented
+  for them as well (such as `oxide-auth-async`).
+- Add `IssuedToken::convert_bearer_token` as a public conversion of a
+  `PreGrant` into a proper `BearerToken`.
+
+
 # v0.5.3 (2022-Sep-25)
 
 Feature release:
