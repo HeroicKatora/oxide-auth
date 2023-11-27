@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, rc::Rc, sync::Arc, borrow::Cow};
 
 use base64::{encode, decode};
 use hmac::{digest::CtOutput, Mac, Hmac};
@@ -16,6 +16,40 @@ use crate::{
 
 use super::TagGrant;
 
+#[derive(Deserialize, Serialize)]
+enum TokenReprInner<'a> {
+    Counted(u64, SerdeAssertionGrant),
+    Tagged(u64, Cow<'a, str>, SerdeAssertionGrant),
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(transparent)]
+/// Opaque representation of a token
+pub struct TokenRepr<'a>(#[serde(borrow)] TokenReprInner<'a>);
+
+impl<'a> From<TokenReprInner<'a>> for TokenRepr<'a> {
+    fn from(value: TokenReprInner<'a>) -> Self {
+        Self(value)
+    }
+}
+
+/// Encoder for the components for the assertion grant
+///
+/// The types both implement serde's `Deserialize` and `Serialize` traits.
+/// Simply turn them into a byte vector and decode them from a byte slice.
+pub trait Encoder {
+    /// Encode an assert grant
+    fn encode_assert_grant(&self, value: AssertGrant) -> Result<Vec<u8>, ()>;
+
+    /// Decode an assert grant
+    fn decode_assert_grant(&self, value: &[u8]) -> Result<AssertGrant, ()>;
+
+    /// Encode a token
+    fn encode_token(&self, value: TokenRepr<'_>) -> Result<Vec<u8>, ()>;
+    /// Decode a token
+    fn decode_token<'a>(&self, value: &'a [u8]) -> Result<TokenRepr<'a>, ()>;
+}
+
 /// Generates tokens by signing its specifics with a private key.
 ///
 /// Tokens produced by the generator include a serialized version of the grant followed by an HMAC
@@ -25,8 +59,9 @@ use super::TagGrant;
 /// The actual generator is given by a `TaggedAssertion` from `Assertion::tag` which enables
 /// signing the same grant for different uses, i.e. separating authorization from bearer grants and
 /// refresh tokens.
-pub struct Assertion {
+pub struct Assertion<E> {
     hasher: Hmac<sha2::Sha256>,
+    encoder: E,
 }
 
 /// The cryptographic suite ensuring integrity of tokens.
@@ -65,12 +100,16 @@ struct SerdeAssertionGrant {
 }
 
 #[derive(Serialize, Deserialize)]
-struct AssertGrant(Vec<u8>, Vec<u8>);
+/// The raw grant that has contains owner details, the signature, etc.
+pub struct AssertGrant(Vec<u8>, Vec<u8>);
 
 /// Binds a tag to the data. The signature will be unique for data as well as the tag.
-pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
+pub struct TaggedAssertion<'a, E>(&'a Assertion<E>, &'a str);
 
-impl Assertion {
+impl<E> Assertion<E>
+where
+    E: Encoder,
+{
     /// Construct an assertion from a custom secret.
     ///
     /// If the key material mismatches the key length required by the selected hash algorithm then
@@ -82,41 +121,46 @@ impl Assertion {
     ///
     /// Currently, the implementation lacks the ability to really make use of another hasing mechanism than
     /// hmac + sha256.
-    pub fn new(kind: AssertionKind, key: &[u8]) -> Self {
+    pub fn new(kind: AssertionKind, key: &[u8], encoder: E) -> Self {
         match kind {
             AssertionKind::HmacSha256 => Assertion {
                 hasher: Hmac::<sha2::Sha256>::new_from_slice(key).unwrap(),
+                encoder,
             },
         }
     }
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
-    pub fn ephemeral() -> Self {
+    pub fn ephemeral(encoder: E) -> Self {
         // TODO Extract KeySize from currently selected hasher
         let mut rand_bytes: [u8; 32] = [0; 32];
         thread_rng().fill_bytes(&mut rand_bytes);
         Assertion {
             hasher: Hmac::<sha2::Sha256>::new_from_slice(&rand_bytes).unwrap(),
+            encoder,
         }
     }
 
     /// Get a reference to generator for the given tag.
-    pub fn tag<'a>(&'a self, tag: &'a str) -> TaggedAssertion<'a> {
+    pub fn tag<'a>(&'a self, tag: &'a str) -> TaggedAssertion<'a, E> {
         TaggedAssertion(self, tag)
     }
 
     fn extract(&self, token: &str) -> Result<(Grant, String), ()> {
         let decoded = decode(token).map_err(|_| ())?;
-        let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
+        let assertion = self.encoder.decode_assert_grant(&decoded)?;
 
         let mut hasher = self.hasher.clone();
         hasher.update(&assertion.0);
         hasher.verify_slice(assertion.1.as_slice()).map_err(|_| ())?;
 
-        let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String) =
-            rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
+        let TokenRepr(TokenReprInner::Tagged(_, tag, serde_grant)) =
+            self.encoder.decode_token(&assertion.0)?
+        else {
+            return Err(());
+        };
 
-        Ok((serde_grant.grant(), tag))
+        Ok((serde_grant.grant(), tag.into_owned()))
     }
 
     fn signature(&self, data: &[u8]) -> CtOutput<hmac::Hmac<sha2::Sha256>> {
@@ -127,22 +171,32 @@ impl Assertion {
 
     fn counted_signature(&self, counter: u64, grant: &Grant) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
-        let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
+        let tosign = self
+            .encoder
+            .encode_token(TokenReprInner::Counted(counter, serde_grant).into())?;
         let signature = self.signature(&tosign);
+
         Ok(base64::encode(signature.into_bytes()))
     }
 
     fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
-        let tosign = rmp_serde::to_vec(&(counter, serde_grant, tag)).unwrap();
+
+        let tosign = self
+            .encoder
+            .encode_token(TokenReprInner::Tagged(counter, Cow::Borrowed(tag), serde_grant).into())?;
+
         let signature = self.signature(&tosign);
         let assert = AssertGrant(tosign, signature.into_bytes().to_vec());
 
-        Ok(encode(rmp_serde::to_vec(&assert).unwrap()))
+        Ok(encode(self.encoder.encode_assert_grant(assert).unwrap()))
     }
 }
 
-impl<'a> TaggedAssertion<'a> {
+impl<'a, E> TaggedAssertion<'a, E>
+where
+    E: Encoder,
+{
     /// Sign the grant for this usage.
     ///
     /// This commits to a token that can be used–according to the usage tag–while the endpoint can
@@ -165,25 +219,37 @@ impl<'a> TaggedAssertion<'a> {
     }
 }
 
-impl TagGrant for Assertion {
+impl<E> TagGrant for Assertion<E>
+where
+    E: Encoder,
+{
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
     }
 }
 
-impl<'a> TagGrant for &'a Assertion {
+impl<'a, E> TagGrant for &'a Assertion<E>
+where
+    E: Encoder,
+{
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
     }
 }
 
-impl TagGrant for Rc<Assertion> {
+impl<E> TagGrant for Rc<Assertion<E>>
+where
+    E: Encoder,
+{
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
     }
 }
 
-impl TagGrant for Arc<Assertion> {
+impl<E> TagGrant for Arc<Assertion<E>>
+where
+    E: Encoder,
+{
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
     }
@@ -265,6 +331,7 @@ impl SerdeAssertionGrant {
         for (name, content) in self.public_extensions.into_iter() {
             extensions.set_raw(name, Value::public(content))
         }
+
         Grant {
             owner_id: self.owner_id,
             client_id: self.client_id,

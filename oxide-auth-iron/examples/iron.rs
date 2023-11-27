@@ -24,7 +24,7 @@ mod support;
 struct EndpointState {
     registrar: Mutex<ClientMap>,
     authorizer: Mutex<AuthMap<RandomGenerator>>,
-    issuer: Mutex<TokenSigner>,
+    issuer: Mutex<TokenSigner<support::RmpTokenEncoder>>,
 }
 
 fn main_router() -> impl Handler + 'static {
@@ -158,7 +158,7 @@ here</a> to begin the authorization process.
         EndpointState {
             registrar: Mutex::new(registrar),
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
-            issuer: Mutex::new(TokenSigner::ephemeral()),
+            issuer: Mutex::new(TokenSigner::ephemeral(support::RmpTokenEncoder)),
         }
     }
 

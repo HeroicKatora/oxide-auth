@@ -18,10 +18,8 @@ use std::sync::Arc;
 use base64::encode;
 use rand::{rngs::OsRng, RngCore};
 
-#[cfg(feature = "assertion-grant")]
-pub use self::assertion_grant::{Assertion, AssertionKind, TaggedAssertion};
+pub use self::assertion_grant::{Assertion, AssertGrant, AssertionKind, TaggedAssertion, TokenRepr, Encoder};
 
-#[cfg(feature = "assertion-grant")]
 mod assertion_grant;
 
 /// Generic token for a specific grant.
@@ -110,16 +108,38 @@ impl TagGrant for Arc<RandomGenerator> {
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
+
+    struct RmpTokenEncoder;
+
+    impl Encoder for RmpTokenEncoder {
+        fn decode_token<'a>(&self, value: &'a [u8]) -> Result<TokenRepr<'a>, ()> {
+            rmp_serde::from_slice(value).map_err(|_| ())
+        }
+
+        fn encode_token(&self, value: TokenRepr<'_>) -> Result<Vec<u8>, ()> {
+            rmp_serde::to_vec(&value).map_err(|_| ())
+        }
+
+        fn decode_assert_grant(&self, value: &[u8]) -> Result<assertion_grant::AssertGrant, ()> {
+            rmp_serde::from_slice(value).map_err(|_| ())
+        }
+
+        fn encode_assert_grant(&self, value: assertion_grant::AssertGrant) -> Result<Vec<u8>, ()> {
+            rmp_serde::to_vec(&value).map_err(|_| ())
+        }
+    }
 
     #[test]
     #[allow(dead_code, unused)]
-    #[cfg(feature = "assertion-grant")]
     fn assert_send_sync_static() {
         fn uses<T: Send + Sync + 'static>(arg: T) {}
         let _ = uses(RandomGenerator::new(16));
         let fake_key = [0u8; 16];
-        let _ = uses(Assertion::new(AssertionKind::HmacSha256, &fake_key));
+        let _ = uses(Assertion::new(
+            AssertionKind::HmacSha256,
+            &fake_key,
+            RmpTokenEncoder,
+        ));
     }
 }
