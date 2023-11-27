@@ -18,7 +18,7 @@ use std::sync::Arc;
 use base64::encode;
 use rand::{rngs::OsRng, RngCore};
 
-pub use self::assertion_grant::{Assertion, AssertGrant, AssertionKind, TaggedAssertion, TokenRepr, Encoder};
+pub use self::assertion_grant::{Assertion, AssertionKind, TaggedAssertion, DataRepr, Encoder};
 
 mod assertion_grant;
 
@@ -113,19 +113,11 @@ mod tests {
     struct RmpTokenEncoder;
 
     impl Encoder for RmpTokenEncoder {
-        fn decode_token<'a>(&self, value: &'a [u8]) -> Result<TokenRepr<'a>, ()> {
+        fn decode(&self, value: &[u8]) -> Result<DataRepr, ()> {
             rmp_serde::from_slice(value).map_err(|_| ())
         }
 
-        fn encode_token(&self, value: TokenRepr<'_>) -> Result<Vec<u8>, ()> {
-            rmp_serde::to_vec(&value).map_err(|_| ())
-        }
-
-        fn decode_assert_grant(&self, value: &[u8]) -> Result<assertion_grant::AssertGrant, ()> {
-            rmp_serde::from_slice(value).map_err(|_| ())
-        }
-
-        fn encode_assert_grant(&self, value: assertion_grant::AssertGrant) -> Result<Vec<u8>, ()> {
+        fn encode(&self, value: DataRepr) -> Result<Vec<u8>, ()> {
             rmp_serde::to_vec(&value).map_err(|_| ())
         }
     }

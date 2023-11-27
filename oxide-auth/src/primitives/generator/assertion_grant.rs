@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc, borrow::Cow};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use base64::{encode, decode};
 use hmac::{digest::CtOutput, Mac, Hmac};
@@ -17,18 +17,22 @@ use crate::{
 use super::TagGrant;
 
 #[derive(Deserialize, Serialize)]
-enum TokenReprInner<'a> {
+enum DataReprInner {
+    AssertGrant(Vec<u8>, Vec<u8>),
     Counted(u64, SerdeAssertionGrant),
-    Tagged(u64, Cow<'a, str>, SerdeAssertionGrant),
+    Tagged(u64, String, SerdeAssertionGrant),
 }
 
 #[derive(Deserialize, Serialize)]
 #[serde(transparent)]
 /// Opaque representation of a token
-pub struct TokenRepr<'a>(#[serde(borrow)] TokenReprInner<'a>);
+///
+/// Note: This representation is *internal* and *unstable*
+/// We reserve the right to break the internal representation *at any point*, so please do not rely on it.
+pub struct DataRepr(DataReprInner);
 
-impl<'a> From<TokenReprInner<'a>> for TokenRepr<'a> {
-    fn from(value: TokenReprInner<'a>) -> Self {
+impl From<DataReprInner> for DataRepr {
+    fn from(value: DataReprInner) -> Self {
         Self(value)
     }
 }
@@ -38,16 +42,10 @@ impl<'a> From<TokenReprInner<'a>> for TokenRepr<'a> {
 /// The types both implement serde's `Deserialize` and `Serialize` traits.
 /// Simply turn them into a byte vector and decode them from a byte slice.
 pub trait Encoder {
-    /// Encode an assert grant
-    fn encode_assert_grant(&self, value: AssertGrant) -> Result<Vec<u8>, ()>;
-
-    /// Decode an assert grant
-    fn decode_assert_grant(&self, value: &[u8]) -> Result<AssertGrant, ()>;
-
-    /// Encode a token
-    fn encode_token(&self, value: TokenRepr<'_>) -> Result<Vec<u8>, ()>;
-    /// Decode a token
-    fn decode_token<'a>(&self, value: &'a [u8]) -> Result<TokenRepr<'a>, ()>;
+    /// Encode some data
+    fn encode(&self, value: DataRepr) -> Result<Vec<u8>, ()>;
+    /// Decode some data
+    fn decode(&self, value: &[u8]) -> Result<DataRepr, ()>;
 }
 
 /// Generates tokens by signing its specifics with a private key.
@@ -99,10 +97,6 @@ struct SerdeAssertionGrant {
     public_extensions: HashMap<String, Option<String>>,
 }
 
-#[derive(Serialize, Deserialize)]
-/// The raw grant that has contains owner details, the signature, etc.
-pub struct AssertGrant(Vec<u8>, Vec<u8>);
-
 /// Binds a tag to the data. The signature will be unique for data as well as the tag.
 pub struct TaggedAssertion<'a, E>(&'a Assertion<E>, &'a str);
 
@@ -148,19 +142,20 @@ where
 
     fn extract(&self, token: &str) -> Result<(Grant, String), ()> {
         let decoded = decode(token).map_err(|_| ())?;
-        let assertion = self.encoder.decode_assert_grant(&decoded)?;
-
-        let mut hasher = self.hasher.clone();
-        hasher.update(&assertion.0);
-        hasher.verify_slice(assertion.1.as_slice()).map_err(|_| ())?;
-
-        let TokenRepr(TokenReprInner::Tagged(_, tag, serde_grant)) =
-            self.encoder.decode_token(&assertion.0)?
+        let DataRepr(DataReprInner::AssertGrant(payload, signature)) = self.encoder.decode(&decoded)?
         else {
             return Err(());
         };
 
-        Ok((serde_grant.grant(), tag.into_owned()))
+        let mut hasher = self.hasher.clone();
+        hasher.update(&payload);
+        hasher.verify_slice(signature.as_slice()).map_err(|_| ())?;
+
+        let DataRepr(DataReprInner::Tagged(_, tag, serde_grant)) = self.encoder.decode(&payload)? else {
+            return Err(());
+        };
+
+        Ok((serde_grant.grant(), tag))
     }
 
     fn signature(&self, data: &[u8]) -> CtOutput<hmac::Hmac<sha2::Sha256>> {
@@ -173,7 +168,7 @@ where
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = self
             .encoder
-            .encode_token(TokenReprInner::Counted(counter, serde_grant).into())?;
+            .encode(DataReprInner::Counted(counter, serde_grant).into())?;
         let signature = self.signature(&tosign);
 
         Ok(base64::encode(signature.into_bytes()))
@@ -184,12 +179,12 @@ where
 
         let tosign = self
             .encoder
-            .encode_token(TokenReprInner::Tagged(counter, Cow::Borrowed(tag), serde_grant).into())?;
+            .encode(DataReprInner::Tagged(counter, tag.to_string(), serde_grant).into())?;
 
         let signature = self.signature(&tosign);
-        let assert = AssertGrant(tosign, signature.into_bytes().to_vec());
+        let assert = DataReprInner::AssertGrant(tosign, signature.into_bytes().to_vec());
 
-        Ok(encode(self.encoder.encode_assert_grant(assert).unwrap()))
+        Ok(encode(self.encoder.encode(assert.into()).unwrap()))
     }
 }
 

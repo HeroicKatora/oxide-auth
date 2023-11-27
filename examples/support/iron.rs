@@ -14,24 +14,16 @@ use iron::{headers, modifiers, IronResult, Request, Response};
 use iron::middleware::Handler;
 use iron::status::Status;
 use reqwest::header;
-use oxide_auth::primitives::generator::{Encoder, TokenRepr, AssertGrant};
+use oxide_auth::primitives::generator::{Encoder, DataRepr};
 
 pub struct RmpTokenEncoder;
 
 impl Encoder for RmpTokenEncoder {
-    fn encode_assert_grant(&self, value: AssertGrant) -> Result<Vec<u8>, ()> {
+    fn encode(&self, value: DataRepr) -> Result<Vec<u8>, ()> {
         rmp_serde::to_vec(&value).map_err(|_| ())
     }
 
-    fn encode_token(&self, value: TokenRepr<'_>) -> Result<Vec<u8>, ()> {
-        rmp_serde::to_vec(&value).map_err(|_| ())
-    }
-
-    fn decode_assert_grant(&self, value: &[u8]) -> Result<AssertGrant, ()> {
-        rmp_serde::from_slice(value).map_err(|_| ())
-    }
-
-    fn decode_token<'a>(&self, value: &'a [u8]) -> Result<TokenRepr<'a>, ()> {
+    fn decode(&self, value: &[u8]) -> Result<DataRepr, ()> {
         rmp_serde::from_slice(value).map_err(|_| ())
     }
 }

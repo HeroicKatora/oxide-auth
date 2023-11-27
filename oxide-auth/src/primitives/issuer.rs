@@ -577,26 +577,18 @@ impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
 /// Tests for issuer implementations, including those provided here.
 pub mod tests {
     use super::*;
-    use crate::primitives::{grant::Extensions, generator::TokenRepr};
-    use crate::primitives::generator::{RandomGenerator, AssertGrant};
+    use crate::primitives::{grant::Extensions, generator::DataRepr};
+    use crate::primitives::generator::RandomGenerator;
     use chrono::{Duration, Utc};
 
     pub struct RmpTokenEncoder;
 
     impl Encoder for RmpTokenEncoder {
-        fn encode_assert_grant(&self, value: AssertGrant) -> Result<Vec<u8>, ()> {
+        fn encode(&self, value: DataRepr) -> Result<Vec<u8>, ()> {
             rmp_serde::to_vec(&value).map_err(|_| ())
         }
 
-        fn encode_token(&self, value: TokenRepr<'_>) -> Result<Vec<u8>, ()> {
-            rmp_serde::to_vec(&value).map_err(|_| ())
-        }
-
-        fn decode_assert_grant(&self, value: &[u8]) -> Result<AssertGrant, ()> {
-            rmp_serde::from_slice(value).map_err(|_| ())
-        }
-
-        fn decode_token<'a>(&self, value: &'a [u8]) -> Result<TokenRepr<'a>, ()> {
+        fn decode(&self, value: &[u8]) -> Result<DataRepr, ()> {
             rmp_serde::from_slice(value).map_err(|_| ())
         }
     }
