@@ -73,7 +73,7 @@ impl Extend<Client> for DBRegistrar {
         I: IntoIterator<Item = Client>,
     {
         iter.into_iter().for_each(|client| {
-            self.register_client(client);
+            let _ = self.register_client(client);
         })
     }
 }
@@ -196,7 +196,7 @@ mod tests {
             "client:".parse().unwrap(),
         )
         .unwrap();
-        db_registrar.register_client(client);
+        let _ = db_registrar.register_client(client);
 
         assert_eq!(
             db_registrar
@@ -256,7 +256,7 @@ mod tests {
             "default".parse().unwrap(),
         );
 
-        oauth_service.register_client(public_client);
+        let _ = oauth_service.register_client(public_client);
         oauth_service
             .check(public_id, None)
             .expect("Authorization of public client has changed");
@@ -272,7 +272,7 @@ mod tests {
             private_passphrase,
         );
 
-        oauth_service.register_client(private_client);
+        let _ = oauth_service.register_client(private_client);
 
         oauth_service
             .check(private_id, Some(private_passphrase))

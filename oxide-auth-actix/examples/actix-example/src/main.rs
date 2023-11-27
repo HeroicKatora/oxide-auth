@@ -9,7 +9,10 @@ use actix_web::{
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, Solicitation, QueryParameter},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
-    primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
+    primitives::{
+        prelude::{AuthMap, Client, ClientMap, RandomGenerator, Scope, TokenMap},
+        registrar::Argon2,
+    },
 };
 use oxide_auth_actix::{
     Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResource, OAuthResponse, Refresh,
@@ -140,20 +143,21 @@ pub async fn main() -> std::io::Result<()> {
 
 impl State {
     pub fn preconfigured() -> Self {
+        let mut registrar = ClientMap::new(Argon2::default());
+        registrar.extend([Client::confidential(
+            "LocalClient",
+            "http://localhost:8021/endpoint"
+                .parse::<url::Url>()
+                .unwrap()
+                .into(),
+            "default-scope".parse().unwrap(),
+            "SecretSecret".as_bytes(),
+        )]);
+
         State {
             endpoint: Generic {
                 // A registrar with one pre-registered client
-                registrar: vec![Client::confidential(
-                    "LocalClient",
-                    "http://localhost:8021/endpoint"
-                        .parse::<url::Url>()
-                        .unwrap()
-                        .into(),
-                    "default-scope".parse().unwrap(),
-                    "SecretSecret".as_bytes(),
-                )]
-                .into_iter()
-                .collect(),
+                registrar,
                 // Authorization tokens are 16 byte random keys to a memory hash map.
                 authorizer: AuthMap::new(RandomGenerator::new(16)),
                 // Bearer tokens are also random generated but 256-bit tokens, since they live longer

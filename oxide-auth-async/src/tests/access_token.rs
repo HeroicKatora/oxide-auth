@@ -17,7 +17,9 @@ use std::collections::HashMap;
 
 use chrono::{Utc, Duration};
 
-use super::{Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery};
+use super::{
+    Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery, NoopPasswordPolicy,
+};
 use super::defaults::*;
 
 struct AccessTokenSetup {
@@ -82,7 +84,7 @@ impl<'a> Endpoint<CraftedRequest> for AccessTokenEndpoint<'a> {
 
 impl AccessTokenSetup {
     fn private_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
@@ -118,7 +120,7 @@ impl AccessTokenSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 

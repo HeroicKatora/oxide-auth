@@ -14,6 +14,7 @@ use iron::middleware::Handler;
 use oxide_auth::endpoint::{OwnerConsent, Solicitation};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
+use oxide_auth::primitives::registrar::Argon2;
 use oxide_auth_iron::{OAuthRequest, OAuthResponse, OAuthError};
 
 #[rustfmt::skip]
@@ -144,19 +145,18 @@ here</a> to begin the authorization process.
 ";
 
     fn preconfigured() -> Self {
+        let mut registrar = ClientMap::new(Argon2::default());
+        registrar.extend([Client::public(
+            "LocalClient",
+            "http://localhost:8021/endpoint"
+                .parse::<url::Url>()
+                .unwrap()
+                .into(),
+            "default-scope".parse().unwrap(),
+        )]);
+
         EndpointState {
-            registrar: Mutex::new(
-                vec![Client::public(
-                    "LocalClient",
-                    "http://localhost:8021/endpoint"
-                        .parse::<url::Url>()
-                        .unwrap()
-                        .into(),
-                    "default-scope".parse().unwrap(),
-                )]
-                .into_iter()
-                .collect(),
-            ),
+            registrar: Mutex::new(registrar),
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
             issuer: Mutex::new(TokenSigner::ephemeral()),
         }

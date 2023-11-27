@@ -12,6 +12,7 @@ use oxide_auth::endpoint::{
     AuthorizationFlow, AccessTokenFlow, OwnerConsent, RefreshFlow, ResourceFlow, Solicitation,
 };
 use oxide_auth::primitives::prelude::*;
+use oxide_auth::primitives::registrar::Argon2;
 use oxide_auth_rouille::{Request, Response as OAuthResponse};
 use oxide_auth_rouille::{FnSolicitor, GenericEndpoint};
 use rouille::{Response, ResponseBody, Server};
@@ -20,7 +21,7 @@ use rouille::{Response, ResponseBody, Server};
 pub fn main() {
     // Stores clients in a simple in-memory hash map.
     let registrar = {
-        let mut clients = ClientMap::new();
+        let mut clients = ClientMap::new(Argon2::default());
         // Register a dummy client instance
         let client = Client::public(
             "LocalClient", // Client id

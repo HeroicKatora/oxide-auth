@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use oxide_auth::endpoint::{OwnerConsent, Solicitation};
 use oxide_auth::frontends::simple::endpoint::{FnSolicitor, Generic, Vacant};
 use oxide_auth::primitives::prelude::*;
-use oxide_auth::primitives::registrar::RegisteredUrl;
+use oxide_auth::primitives::registrar::{RegisteredUrl, Argon2};
 use oxide_auth_rocket::{OAuthResponse, OAuthRequest, OAuthFailure};
 
 use rocket::{Data, State, Response, http};
@@ -121,18 +121,15 @@ fn main() {
 
 impl MyState {
     pub fn preconfigured() -> Self {
+        let mut registrar = ClientMap::new(Argon2::default());
+        registrar.extend([Client::public(
+            "LocalClient",
+            RegisteredUrl::Semantic("http://localhost:8000/clientside/endpoint".parse().unwrap()),
+            "default-scope".parse().unwrap(),
+        )]);
+
         MyState {
-            registrar: Mutex::new(
-                vec![Client::public(
-                    "LocalClient",
-                    RegisteredUrl::Semantic(
-                        "http://localhost:8000/clientside/endpoint".parse().unwrap(),
-                    ),
-                    "default-scope".parse().unwrap(),
-                )]
-                .into_iter()
-                .collect(),
-            ),
+            registrar: Mutex::new(registrar),
             // Authorization tokens are 16 byte random keys to a memory hash map.
             authorizer: Mutex::new(AuthMap::new(RandomGenerator::new(16))),
             // Bearer tokens are also random generated but 256-bit tokens, since they live longer
