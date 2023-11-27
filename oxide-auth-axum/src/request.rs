@@ -1,10 +1,8 @@
 use oxide_auth::frontends::dev::{NormalizedParameter, QueryParameter, WebRequest};
 use axum::{
     async_trait,
-    extract::{Query, Form, FromRequest, FromRequestParts},
-    http::{header, request::Parts, Request},
-    body::HttpBody,
-    BoxError,
+    extract::{Query, Form, FromRequest, FromRequestParts, Request},
+    http::{header, request::Parts},
 };
 use crate::{OAuthResponse, WebError};
 use std::borrow::Cow;
@@ -83,16 +81,13 @@ impl WebRequest for OAuthRequest {
 }
 
 #[async_trait]
-impl<S, B> FromRequest<S, B> for OAuthRequest
+impl<S> FromRequest<S> for OAuthRequest
 where
-    B: HttpBody + Send + 'static,
-    B::Data: Send,
-    B::Error: Into<BoxError>,
     S: Send + Sync,
 {
     type Rejection = WebError;
 
-    async fn from_request(req: Request<B>, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         let mut all_auth = req.headers().get_all(header::AUTHORIZATION).iter();
         let optional = all_auth.next();
 
