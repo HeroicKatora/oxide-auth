@@ -1,5 +1,3 @@
-#![cfg(feature = "client-map")]
-
 use crate::primitives::authorizer::AuthMap;
 use crate::primitives::issuer::TokenMap;
 use crate::primitives::generator::RandomGenerator;
@@ -10,7 +8,10 @@ use crate::endpoint::{AuthorizationFlow, AccessTokenFlow, Endpoint};
 use crate::frontends::simple::extensions::{AddonList, Extended, Pkce};
 use crate::frontends::simple::endpoint::{Generic, Error, Vacant};
 
-use super::{Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
+use super::{
+    Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator, ToSingleValueQuery,
+    NoopPasswordPolicy,
+};
 use super::defaults::*;
 
 use serde_json;
@@ -32,7 +33,7 @@ impl PkceSetup {
             EXAMPLE_SCOPE.parse().unwrap(),
         );
 
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         registrar.register_client(client);
 
         let token = "ExampleAuthorizationToken".to_string();

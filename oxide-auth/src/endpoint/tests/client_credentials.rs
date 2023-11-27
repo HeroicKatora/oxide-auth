@@ -1,5 +1,3 @@
-#![cfg(feature = "client-map")]
-
 use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 use crate::primitives::issuer::TokenMap;
 
@@ -7,7 +5,7 @@ use crate::endpoint::{OwnerSolicitor};
 
 use crate::frontends::simple::endpoint::client_credentials_flow;
 
-use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
+use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery, NoopPasswordPolicy};
 use super::{Allow, Deny};
 use super::defaults::*;
 
@@ -20,7 +18,7 @@ struct ClientCredentialsSetup {
 
 impl ClientCredentialsSetup {
     fn new() -> ClientCredentialsSetup {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let issuer = TokenMap::new(TestGenerator("AuthToken".to_owned()));
 
         let client = Client::confidential(
@@ -41,7 +39,7 @@ impl ClientCredentialsSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_owned()));
 
         let client = Client::public(

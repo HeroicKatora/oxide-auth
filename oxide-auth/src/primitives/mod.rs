@@ -58,10 +58,6 @@ pub mod prelude {
     pub use super::generator::Assertion;
 
     pub use super::generator::{TagGrant, RandomGenerator};
-
-    #[cfg(feature = "client-map")]
-    pub use super::registrar::ClientMap;
-
-    pub use super::registrar::{Registrar, Client, ClientUrl, PreGrant};
+    pub use super::registrar::{ClientMap, Registrar, Client, ClientUrl, PreGrant};
     pub use super::scope::Scope;
 }

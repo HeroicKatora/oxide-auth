@@ -37,7 +37,6 @@ rmp-serde = "1.1"
 default = []
 argon2 = ["dep:rust-argon2"]
 assertion-grant = ["dep:hmac", "dep:rmp-serde"]
-client-map = ["argon2"]
 token-signer = ["assertion-grant"]
 
 [package.metadata.docs.rs]

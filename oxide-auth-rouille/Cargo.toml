@@ -13,9 +13,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 rouille = "3.0"
-oxide-auth = { version = "0.5.0", path = "../oxide-auth", features = [
-    "client-map",
-] }
+oxide-auth = { version = "0.5.0", path = "../oxide-auth" }
 serde_urlencoded = "0.7"
 url = "2"
 

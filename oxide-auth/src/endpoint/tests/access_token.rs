@@ -1,5 +1,3 @@
-#![cfg(feature = "client-map")]
-
 use crate::primitives::authorizer::{AuthMap, Authorizer};
 use crate::primitives::issuer::TokenMap;
 use crate::primitives::grant::{Grant, Extensions};
@@ -13,7 +11,9 @@ use base64;
 use chrono::{Utc, Duration};
 use serde_json;
 
-use super::{Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery};
+use super::{
+    Body, CraftedRequest, CraftedResponse, Status, TestGenerator, ToSingleValueQuery, NoopPasswordPolicy,
+};
 use super::defaults::*;
 
 struct AccessTokenSetup {
@@ -26,7 +26,7 @@ struct AccessTokenSetup {
 
 impl AccessTokenSetup {
     fn private_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 
@@ -62,7 +62,7 @@ impl AccessTokenSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
 

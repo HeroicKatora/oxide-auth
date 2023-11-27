@@ -1,5 +1,4 @@
-#![cfg(feature = "client-map")]
-
+use crate::endpoint::tests::NoopPasswordPolicy;
 use crate::primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap, TokenType};
 use crate::primitives::generator::RandomGenerator;
 use crate::primitives::grant::{Grant, Extensions};
@@ -30,7 +29,7 @@ struct RefreshTokenSetup {
 
 impl RefreshTokenSetup {
     fn private_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::confidential(
@@ -68,7 +67,7 @@ impl RefreshTokenSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::public(

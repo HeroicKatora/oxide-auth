@@ -1,11 +1,27 @@
 use crate::endpoint::*;
 use crate::primitives::generator::TagGrant;
 use crate::primitives::grant::Grant;
+use crate::primitives::registrar::{PasswordPolicy, RegistrarError};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 
 use url::Url;
+
+struct NoopPasswordPolicy;
+
+impl PasswordPolicy for NoopPasswordPolicy {
+    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), RegistrarError> {
+        let other = self.store(client_id, passphrase);
+        (other == stored).then_some(()).ok_or(RegistrarError::Unspecified)
+    }
+
+    fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
+        let mut acc = client_id.as_bytes().to_vec();
+        acc.extend_from_slice(passphrase);
+        acc
+    }
+}
 
 /// Open and simple implementation of `WebRequest`.
 #[derive(Clone, Debug, Default)]
@@ -209,8 +225,6 @@ impl Default for Status {
 }
 
 pub mod defaults {
-    #![allow(dead_code)]
-
     pub const EXAMPLE_CLIENT_ID: &str = "ClientId";
     pub const EXAMPLE_OWNER_ID: &str = "Owner";
     pub const EXAMPLE_PASSPHRASE: &str = "VGhpcyBpcyBhIHZlcnkgc2VjdXJlIHBhc3NwaHJhc2UK";

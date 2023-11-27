@@ -19,9 +19,7 @@ oxide-auth = { version = "0.5.0", path = "../oxide-auth" }
 serde_urlencoded = "0.7"
 
 [dev-dependencies]
-oxide-auth = { version = "0.5.0", path = "../oxide-auth", features = [
-    "client-map",
-] }
+oxide-auth = { version = "0.5.0", path = "../oxide-auth" }
 reqwest = { version = "0.11.10", features = ["blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
