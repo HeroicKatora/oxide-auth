@@ -1,3 +1,5 @@
+#![cfg(feature = "client-map")]
+
 use std::collections::HashMap;
 
 use crate::primitives::authorizer::AuthMap;

@@ -209,6 +209,8 @@ impl Default for Status {
 }
 
 pub mod defaults {
+    #![allow(dead_code)]
+
     pub const EXAMPLE_CLIENT_ID: &str = "ClientId";
     pub const EXAMPLE_OWNER_ID: &str = "Owner";
     pub const EXAMPLE_PASSPHRASE: &str = "VGhpcyBpcyBhIHZlcnkgc2VjdXJlIHBhc3NwaHJhc2UK";

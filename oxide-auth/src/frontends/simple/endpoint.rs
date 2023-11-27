@@ -62,7 +62,7 @@ pub enum Error<W: WebRequest> {
 /// Here is an example where a `Generic` is used to set up an endpoint that is filled with the
 /// minimal members to be useable for an [`AccessTokenFlow`].
 ///
-/// ```
+/// ```ignore
 /// # extern crate oxide_auth;
 /// # use oxide_auth::frontends::simple::endpoint::Vacant;
 /// # use oxide_auth::frontends::simple::endpoint::Generic;

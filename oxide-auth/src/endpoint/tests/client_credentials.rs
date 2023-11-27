@@ -1,3 +1,5 @@
+#![cfg(feature = "client-map")]
+
 use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 use crate::primitives::issuer::TokenMap;
 

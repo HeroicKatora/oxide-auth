@@ -1,3 +1,5 @@
+#![cfg(feature = "client-map")]
+
 use crate::primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap, TokenType};
 use crate::primitives::generator::RandomGenerator;
 use crate::primitives::grant::{Grant, Extensions};

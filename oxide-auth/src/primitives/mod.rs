@@ -8,7 +8,7 @@
 //! These should be used to build or instantiate an `Endpoint`, for example [`Generic`] or your
 //! own.
 //!
-//! ```
+//! ```ignore
 //! # extern crate oxide_auth;
 //! # use oxide_auth::frontends::simple::endpoint::Vacant;
 //! use oxide_auth::frontends::simple::endpoint::Generic;
@@ -48,8 +48,20 @@ type Time = DateTime<Utc>;
 /// Commonly used primitives for frontends and backends.
 pub mod prelude {
     pub use super::authorizer::{Authorizer, AuthMap};
-    pub use super::issuer::{IssuedToken, Issuer, TokenMap, TokenSigner};
-    pub use super::generator::{Assertion, TagGrant, RandomGenerator};
-    pub use super::registrar::{Registrar, Client, ClientUrl, ClientMap, PreGrant};
+
+    #[cfg(feature = "token-signer")]
+    pub use super::issuer::TokenSigner;
+
+    pub use super::issuer::{IssuedToken, Issuer, TokenMap};
+
+    #[cfg(feature = "assertion-grant")]
+    pub use super::generator::Assertion;
+
+    pub use super::generator::{TagGrant, RandomGenerator};
+
+    #[cfg(feature = "client-map")]
+    pub use super::registrar::ClientMap;
+
+    pub use super::registrar::{Registrar, Client, ClientUrl, PreGrant};
     pub use super::scope::Scope;
 }

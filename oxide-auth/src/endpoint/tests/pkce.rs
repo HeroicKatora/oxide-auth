@@ -1,3 +1,5 @@
+#![cfg(feature = "client-map")]
+
 use crate::primitives::authorizer::AuthMap;
 use crate::primitives::issuer::TokenMap;
 use crate::primitives::generator::RandomGenerator;

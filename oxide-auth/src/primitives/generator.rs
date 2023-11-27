@@ -67,6 +67,9 @@ impl RandomGenerator {
 }
 
 #[cfg(feature = "assertion-grant")]
+pub use self::assertion_grant::{Assertion, AssertionKind, TaggedAssertion};
+
+#[cfg(feature = "assertion-grant")]
 mod assertion_grant {
     use std::{collections::HashMap, rc::Rc, sync::Arc};
 
@@ -385,10 +388,12 @@ impl TagGrant for Arc<RandomGenerator> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]
     #[allow(dead_code, unused)]
+    #[cfg(feature = "assertion-grant")]
     fn assert_send_sync_static() {
         fn uses<T: Send + Sync + 'static>(arg: T) {}
         let _ = uses(RandomGenerator::new(16));
