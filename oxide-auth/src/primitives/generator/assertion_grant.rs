@@ -41,7 +41,7 @@ impl From<DataReprInner> for DataRepr {
 ///
 /// The types both implement serde's `Deserialize` and `Serialize` traits.
 /// Simply turn them into a byte vector and decode them from a byte slice.
-pub trait Encoder {
+pub trait Encoder: Send + Sync + 'static {
     /// Encode some data
     fn encode(&self, value: DataRepr) -> Result<Vec<u8>, ()>;
     /// Decode some data
@@ -57,9 +57,9 @@ pub trait Encoder {
 /// The actual generator is given by a `TaggedAssertion` from `Assertion::tag` which enables
 /// signing the same grant for different uses, i.e. separating authorization from bearer grants and
 /// refresh tokens.
-pub struct Assertion<E> {
+pub struct Assertion {
     hasher: Hmac<sha2::Sha256>,
-    encoder: E,
+    encoder: Arc<dyn Encoder>,
 }
 
 /// The cryptographic suite ensuring integrity of tokens.
@@ -98,12 +98,9 @@ struct SerdeAssertionGrant {
 }
 
 /// Binds a tag to the data. The signature will be unique for data as well as the tag.
-pub struct TaggedAssertion<'a, E>(&'a Assertion<E>, &'a str);
+pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
-impl<E> Assertion<E>
-where
-    E: Encoder,
-{
+impl Assertion {
     /// Construct an assertion from a custom secret.
     ///
     /// If the key material mismatches the key length required by the selected hash algorithm then
@@ -115,28 +112,34 @@ where
     ///
     /// Currently, the implementation lacks the ability to really make use of another hasing mechanism than
     /// hmac + sha256.
-    pub fn new(kind: AssertionKind, key: &[u8], encoder: E) -> Self {
+    pub fn new<E>(kind: AssertionKind, key: &[u8], encoder: E) -> Self
+    where
+        E: Encoder,
+    {
         match kind {
             AssertionKind::HmacSha256 => Assertion {
                 hasher: Hmac::<sha2::Sha256>::new_from_slice(key).unwrap(),
-                encoder,
+                encoder: Arc::new(encoder),
             },
         }
     }
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
-    pub fn ephemeral(encoder: E) -> Self {
+    pub fn ephemeral<E>(encoder: E) -> Self
+    where
+        E: Encoder,
+    {
         // TODO Extract KeySize from currently selected hasher
         let mut rand_bytes: [u8; 32] = [0; 32];
         thread_rng().fill_bytes(&mut rand_bytes);
         Assertion {
             hasher: Hmac::<sha2::Sha256>::new_from_slice(&rand_bytes).unwrap(),
-            encoder,
+            encoder: Arc::new(encoder),
         }
     }
 
     /// Get a reference to generator for the given tag.
-    pub fn tag<'a>(&'a self, tag: &'a str) -> TaggedAssertion<'a, E> {
+    pub fn tag<'a>(&'a self, tag: &'a str) -> TaggedAssertion<'a> {
         TaggedAssertion(self, tag)
     }
 
@@ -188,10 +191,7 @@ where
     }
 }
 
-impl<'a, E> TaggedAssertion<'a, E>
-where
-    E: Encoder,
-{
+impl<'a> TaggedAssertion<'a> {
     /// Sign the grant for this usage.
     ///
     /// This commits to a token that can be used–according to the usage tag–while the endpoint can
@@ -214,37 +214,25 @@ where
     }
 }
 
-impl<E> TagGrant for Assertion<E>
-where
-    E: Encoder,
-{
+impl TagGrant for Assertion {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
     }
 }
 
-impl<'a, E> TagGrant for &'a Assertion<E>
-where
-    E: Encoder,
-{
+impl<'a> TagGrant for &'a Assertion {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
     }
 }
 
-impl<E> TagGrant for Rc<Assertion<E>>
-where
-    E: Encoder,
-{
+impl TagGrant for Rc<Assertion> {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
     }
 }
 
-impl<E> TagGrant for Arc<Assertion<E>>
-where
-    E: Encoder,
-{
+impl TagGrant for Arc<Assertion> {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
         self.counted_signature(counter, grant)
     }

@@ -344,23 +344,20 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
 ///
 /// Although this token instance allows preservation of memory it also implies that tokens, once
 /// issued, are impossible to revoke.
-pub struct TokenSigner<E> {
+pub struct TokenSigner {
     duration: Option<Duration>,
-    signer: Assertion<E>,
+    signer: Assertion,
     // FIXME: make this an AtomicU64 once stable.
     counter: AtomicUsize,
     have_refresh: bool,
 }
 
-impl<E> TokenSigner<E>
-where
-    E: Encoder,
-{
+impl TokenSigner {
     /// Construct a signing instance from a private signing key.
     ///
     /// Security notice: Never use a password alone to construct the signing key. Instead, generate
     /// a new key using a utility such as `openssl rand` that you then store away securely.
-    pub fn new(secret: Assertion<E>) -> TokenSigner<E> {
+    pub fn new(secret: Assertion) -> TokenSigner {
         TokenSigner {
             duration: None,
             signer: secret,
@@ -374,7 +371,10 @@ where
     /// Useful for rapid prototyping where tokens need not be stored in a persistent database and
     /// can be invalidated at any time. This interface is provided with simplicity in mind, using
     /// the default system random generator (`ring::rand::SystemRandom`).
-    pub fn ephemeral(encoder: E) -> TokenSigner<E> {
+    pub fn ephemeral<E>(encoder: E) -> TokenSigner
+    where
+        E: Encoder,
+    {
         TokenSigner::new(Assertion::ephemeral(encoder))
     }
 
@@ -438,19 +438,16 @@ where
         Ok(IssuedToken::without_refresh(token, grant.until))
     }
 
-    fn as_token(&self) -> TaggedAssertion<E> {
+    fn as_token(&self) -> TaggedAssertion {
         self.signer.tag("token")
     }
 
-    fn as_refresh(&self) -> TaggedAssertion<E> {
+    fn as_refresh(&self) -> TaggedAssertion {
         self.signer.tag("refresh")
     }
 }
 
-impl<E> Issuer for TokenSigner<E>
-where
-    E: Encoder,
-{
+impl Issuer for TokenSigner {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         (&mut &*self).issue(grant)
     }
@@ -468,10 +465,7 @@ where
     }
 }
 
-impl<'a, E> Issuer for &'a TokenSigner<E>
-where
-    E: Encoder,
-{
+impl<'a> Issuer for &'a TokenSigner {
     fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
         if let Some(duration) = &self.duration {
             grant.until = Utc::now() + *duration;

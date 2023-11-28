@@ -24,7 +24,7 @@ mod support;
 struct EndpointState {
     registrar: Mutex<ClientMap>,
     authorizer: Mutex<AuthMap<RandomGenerator>>,
-    issuer: Mutex<TokenSigner<support::RmpTokenEncoder>>,
+    issuer: Mutex<TokenSigner>,
 }
 
 fn main_router() -> impl Handler + 'static {
