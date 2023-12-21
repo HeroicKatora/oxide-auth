@@ -600,9 +600,11 @@ pub struct Argon2 {
 
 impl PasswordPolicy for Argon2 {
     fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
-        let mut config = Config::default();
-        config.ad = client_id.as_bytes();
-        config.secret = &[];
+        let config = Config {
+            ad: client_id.as_bytes(),
+            secret: &[],
+            ..Config::rfc9106_low_mem()
+        };
 
         let mut salt = vec![0; 32];
         thread_rng()

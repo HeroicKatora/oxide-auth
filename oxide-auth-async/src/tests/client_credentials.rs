@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD, Engine};
 use oxide_auth::primitives::authorizer::AuthMap;
 use oxide_auth::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 use oxide_auth::primitives::issuer::TokenMap;
@@ -84,7 +85,7 @@ impl ClientCredentialsSetup {
         );
         registrar.register_client(client);
         let basic_authorization =
-            base64::encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            STANDARD.encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         ClientCredentialsSetup {
             registrar,
             authorizer,
@@ -106,7 +107,7 @@ impl ClientCredentialsSetup {
         );
         registrar.register_client(client);
         let basic_authorization =
-            base64::encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            STANDARD.encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         ClientCredentialsSetup {
             registrar,
             authorizer,
@@ -240,7 +241,7 @@ fn client_credentials_deny_public_client() {
 #[test]
 fn client_credentials_deny_incorrect_credentials() {
     let mut setup = ClientCredentialsSetup::new();
-    let basic_authorization = base64::encode(format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
+    let basic_authorization = STANDARD.encode(format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
     let wrong_credentials = CraftedRequest {
         query: None,
         urlbody: Some(
@@ -317,7 +318,7 @@ fn client_credentials_deny_body_missing_password() {
 fn client_credentials_deny_unknown_client() {
     // The client_id is not registered
     let mut setup = ClientCredentialsSetup::new();
-    let basic_authorization = base64::encode(format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE));
+    let basic_authorization = STANDARD.encode(format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE));
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
