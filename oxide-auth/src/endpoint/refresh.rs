@@ -2,6 +2,9 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::str::from_utf8;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+
 use crate::code_grant::refresh::{refresh, Error, Endpoint as RefreshEndpoint, Request};
 use crate::primitives::{registrar::Registrar, issuer::Issuer};
 use super::{
@@ -183,7 +186,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
                 Some(data) => data,
             };
 
-            let combined = match base64::decode(auth_data) {
+            let combined = match STANDARD.decode(auth_data) {
                 Err(_) => return Err(InitError::Malformed),
                 Ok(vec) => vec,
             };

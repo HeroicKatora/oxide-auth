@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::str::from_utf8;
 use std::marker::PhantomData;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use oxide_auth::{
     endpoint::{
         NormalizedParameter, QueryParameter, WebResponse, WebRequest, Template, is_authorization_method,
@@ -308,7 +309,7 @@ impl<R: WebRequest> WrappedRequest<R> {
                 Some(data) => data,
             };
 
-            let combined = match base64::decode(auth_data) {
+            let combined = match STANDARD.decode(auth_data) {
                 Err(_) => return Err(Invalid),
                 Ok(vec) => vec,
             };

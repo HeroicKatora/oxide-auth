@@ -18,7 +18,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use base64::{encode, decode};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use hmac::{digest::CtOutput, Mac, Hmac};
 use rand::{rngs::OsRng, RngCore, thread_rng};
 use serde::{Deserialize, Serialize};
@@ -68,7 +69,8 @@ impl RandomGenerator {
         let mut rnd = self.random;
         rnd.try_fill_bytes(result.as_mut_slice())
             .expect("Failed to generate random token");
-        encode(&result)
+
+        STANDARD.encode(result)
     }
 }
 
@@ -162,7 +164,7 @@ impl Assertion {
     }
 
     fn extract<'a>(&self, token: &'a str) -> Result<(Grant, String), ()> {
-        let decoded = decode(token).map_err(|_| ())?;
+        let decoded = STANDARD.decode(token).map_err(|_| ())?;
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
 
         let mut hasher = self.hasher.clone();
@@ -185,7 +187,7 @@ impl Assertion {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
         let signature = self.signature(&tosign);
-        Ok(base64::encode(&signature.into_bytes()))
+        Ok(STANDARD.encode(signature.into_bytes()))
     }
 
     fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
@@ -194,7 +196,7 @@ impl Assertion {
         let signature = self.signature(&tosign);
         let assert = AssertGrant(tosign, signature.into_bytes().to_vec());
 
-        Ok(encode(&rmp_serde::to_vec(&assert).unwrap()))
+        Ok(STANDARD.encode(rmp_serde::to_vec(&assert).unwrap()))
     }
 }
 
