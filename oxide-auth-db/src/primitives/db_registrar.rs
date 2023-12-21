@@ -31,7 +31,7 @@ pub trait OauthClientDBRepository {
 //                             Implementations of DB Registrars                                  //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(|| Argon2::default());
+static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(Argon2::default);
 
 impl DBRegistrar {
     /// Create an DB connection recording to features.
@@ -59,7 +59,7 @@ impl DBRegistrar {
     }
 
     // This is not an instance method because it needs to borrow the box but register needs &mut
-    fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> &'a dyn PasswordPolicy {
+    fn current_policy(policy: &Option<Box<dyn PasswordPolicy>>) -> &dyn PasswordPolicy {
         policy
             .as_ref()
             .map(|boxed| &**boxed)
@@ -73,7 +73,7 @@ impl Extend<Client> for DBRegistrar {
         I: IntoIterator<Item = Client>,
     {
         iter.into_iter().for_each(|client| {
-            self.register_client(client);
+            let _ = self.register_client(client);
         })
     }
 }
@@ -106,8 +106,8 @@ impl Registrar for DBRegistrar {
         })
     }
 
-    fn negotiate<'a>(
-        &self, bound: BoundClient<'a>, _scope: Option<Scope>,
+    fn negotiate(
+        &self, bound: BoundClient<'_>, _scope: Option<Scope>,
     ) -> Result<PreGrant, RegistrarError> {
         let client = self
             .repo
@@ -196,7 +196,7 @@ mod tests {
             "client:".parse().unwrap(),
         )
         .unwrap();
-        db_registrar.register_client(client);
+        let _ = db_registrar.register_client(client);
 
         assert_eq!(
             db_registrar
@@ -256,14 +256,13 @@ mod tests {
             "default".parse().unwrap(),
         );
 
-        oauth_service.register_client(public_client);
+        let _ = oauth_service.register_client(public_client);
         oauth_service
             .check(public_id, None)
             .expect("Authorization of public client has changed");
         oauth_service
             .check(public_id, Some(b""))
-            .err()
-            .expect("Authorization with password succeeded");
+            .expect_err("Authorization with password succeeded");
 
         let private_client = Client::confidential(
             private_id,
@@ -272,14 +271,13 @@ mod tests {
             private_passphrase,
         );
 
-        oauth_service.register_client(private_client);
+        let _ = oauth_service.register_client(private_client);
 
         oauth_service
             .check(private_id, Some(private_passphrase))
             .expect("Authorization with right password did not succeed");
         oauth_service
             .check(private_id, Some(b"Not the private passphrase"))
-            .err()
-            .expect("Authorization succeed with wrong password");
+            .expect_err("Authorization succeed with wrong password");
     }
 }

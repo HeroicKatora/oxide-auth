@@ -46,7 +46,7 @@ impl AuthorizationSetup {
         assert_eq!(response.status, Status::Redirect);
 
         match response.location {
-            Some(ref url) if url.as_str().contains("error") => (),
+            Some(ref url) if !url.as_str().contains("error") => (),
             other => panic!("Expected successful redirect: {:?}", other),
         }
     }
