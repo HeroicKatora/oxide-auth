@@ -3,14 +3,14 @@ use oxide_auth::primitives::generator::RandomGenerator;
 use oxide_auth::primitives::grant::{Grant, Extensions};
 use oxide_auth::{
     code_grant::accesstoken::TokenResponse,
-    endpoint::{WebRequest},
+    endpoint::WebRequest,
     primitives::registrar::{Client, ClientMap, RegisteredUrl},
     frontends::simple::endpoint::Error,
 };
 
 use crate::{
     endpoint::{refresh::RefreshFlow, Endpoint, resource::ResourceFlow},
-    primitives::{Issuer},
+    primitives::Issuer,
 };
 
 use std::collections::HashMap;
@@ -261,7 +261,7 @@ fn access_valid_public() {
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "refresh_token"),
                 ("refresh_token", &setup.refresh_token),
             ]
@@ -282,7 +282,7 @@ fn access_valid_private() {
     let valid_private = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "refresh_token"),
                 ("refresh_token", &setup.refresh_token),
             ]
@@ -322,7 +322,7 @@ fn public_private_invalid_grant() {
     let authenticated = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "refresh_token"),
                 ("refresh_token", &setup.refresh_token),
             ]
@@ -342,7 +342,7 @@ fn private_wrong_client_fails() {
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "refresh_token"),
                 ("refresh_token", &setup.refresh_token),
             ]
@@ -357,7 +357,7 @@ fn private_wrong_client_fails() {
     let wrong_authentication = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "refresh_token"),
                 ("refresh_token", &setup.refresh_token),
             ]
@@ -377,7 +377,7 @@ fn invalid_request() {
     let bad_base64 = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "refresh_token"),
                 ("refresh_token", &setup.refresh_token),
             ]
@@ -391,11 +391,7 @@ fn invalid_request() {
 
     let no_token = CraftedRequest {
         query: None,
-        urlbody: Some(
-            vec![("grant_type", "refresh_token")]
-                .iter()
-                .to_single_value_query(),
-        ),
+        urlbody: Some([("grant_type", "refresh_token")].iter().to_single_value_query()),
         auth: Some(setup.basic_authorization.clone()),
     };
 
@@ -409,7 +405,7 @@ fn public_invalid_token() {
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "refresh_token"),
                 ("refresh_token", "not_the_issued_token"),
             ]
@@ -429,7 +425,7 @@ fn private_invalid_token() {
     let valid_private = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "refresh_token"),
                 ("refresh_token", "not_the_issued_token"),
             ]

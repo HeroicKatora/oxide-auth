@@ -1,7 +1,7 @@
 use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 use crate::primitives::issuer::TokenMap;
 
-use crate::endpoint::{OwnerSolicitor};
+use crate::endpoint::OwnerSolicitor;
 
 use crate::frontends::simple::endpoint::client_credentials_flow;
 
@@ -29,7 +29,7 @@ impl ClientCredentialsSetup {
         );
         registrar.register_client(client);
         let basic_authorization =
-            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            base64::encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         ClientCredentialsSetup {
             registrar,
             issuer,
@@ -49,7 +49,7 @@ impl ClientCredentialsSetup {
         );
         registrar.register_client(client);
         let basic_authorization =
-            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            base64::encode(format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         ClientCredentialsSetup {
             registrar,
             issuer,
@@ -62,7 +62,7 @@ impl ClientCredentialsSetup {
     where
         S: OwnerSolicitor<CraftedRequest>,
     {
-        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        let mut flow = client_credentials_flow(&self.registrar, &mut self.issuer, &mut solicitor);
         flow.allow_credentials_in_body(self.allow_credentials_in_body);
         let response = flow.execute(request).expect("Expected non-error reponse");
 
@@ -73,7 +73,7 @@ impl ClientCredentialsSetup {
     where
         S: OwnerSolicitor<CraftedRequest>,
     {
-        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        let mut flow = client_credentials_flow(&self.registrar, &mut self.issuer, &mut solicitor);
         flow.allow_credentials_in_body(self.allow_credentials_in_body);
         let response = flow.execute(request).expect("Expected non-error response");
 
@@ -84,7 +84,7 @@ impl ClientCredentialsSetup {
     where
         S: OwnerSolicitor<CraftedRequest>,
     {
-        let mut flow = client_credentials_flow(&mut self.registrar, &mut self.issuer, &mut solicitor);
+        let mut flow = client_credentials_flow(&self.registrar, &mut self.issuer, &mut solicitor);
         flow.allow_credentials_in_body(self.allow_credentials_in_body);
         let response = flow.execute(request).expect("Expected non-error response");
 
@@ -98,7 +98,7 @@ fn client_credentials_success() {
     let success = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![("grant_type", "client_credentials")]
+            [("grant_type", "client_credentials")]
                 .iter()
                 .to_single_value_query(),
         ),
@@ -114,7 +114,7 @@ fn client_credentials_success_changed_owner() {
     let success = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![("grant_type", "client_credentials")]
+            [("grant_type", "client_credentials")]
                 .iter()
                 .to_single_value_query(),
         ),
@@ -130,7 +130,7 @@ fn client_credentials_deny_public_client() {
     let public_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "client_credentials"),
                 ("client_id", EXAMPLE_CLIENT_ID),
             ]
@@ -146,11 +146,11 @@ fn client_credentials_deny_public_client() {
 #[test]
 fn client_credentials_deny_incorrect_credentials() {
     let mut setup = ClientCredentialsSetup::new();
-    let basic_authorization = base64::encode(&format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
+    let basic_authorization = base64::encode(format!("{}:the wrong passphrase", EXAMPLE_CLIENT_ID));
     let wrong_credentials = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![("grant_type", "client_credentials")]
+            [("grant_type", "client_credentials")]
                 .iter()
                 .to_single_value_query(),
         ),
@@ -166,7 +166,7 @@ fn client_credentials_deny_missing_credentials() {
     let missing_credentials = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "client_credentials"),
                 ("client_id", EXAMPLE_CLIENT_ID),
             ]
@@ -185,7 +185,7 @@ fn client_credentials_deny_unknown_client_missing_password() {
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "client_credentials"),
                 ("client_id", "SomeOtherClient"),
             ]
@@ -206,7 +206,7 @@ fn client_credentials_deny_body_missing_password() {
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "client_credentials"),
                 ("client_id", EXAMPLE_CLIENT_ID),
             ]
@@ -223,11 +223,11 @@ fn client_credentials_deny_body_missing_password() {
 fn client_credentials_deny_unknown_client() {
     // The client_id is not registered
     let mut setup = ClientCredentialsSetup::new();
-    let basic_authorization = base64::encode(&format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE));
+    let basic_authorization = base64::encode(format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE));
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![("grant_type", "client_credentials")]
+            [("grant_type", "client_credentials")]
                 .iter()
                 .to_single_value_query(),
         ),
@@ -245,7 +245,7 @@ fn client_credentials_deny_body_unknown_client() {
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "client_credentials"),
                 ("client_id", "SomeOtherClient"),
                 ("client_secret", EXAMPLE_PASSPHRASE),
@@ -269,7 +269,7 @@ fn client_body_credentials() {
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "client_credentials"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("client_secret", EXAMPLE_PASSPHRASE),
@@ -292,7 +292,7 @@ fn client_duplicate_credentials_denied() {
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "client_credentials"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("client_secret", EXAMPLE_PASSPHRASE),
@@ -313,7 +313,7 @@ fn client_credentials_request_error_denied() {
     let denied_request = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![("grant_type", "client_credentials")]
+            [("grant_type", "client_credentials")]
                 .iter()
                 .to_single_value_query(),
         ),
@@ -330,7 +330,7 @@ fn client_credentials_request_error_unsupported_grant_type() {
     let unsupported_grant_type = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![("grant_type", "not_client_credentials")]
+            [("grant_type", "not_client_credentials")]
                 .iter()
                 .to_single_value_query(),
         ),
@@ -347,7 +347,7 @@ fn client_credentials_request_error_malformed_scope() {
     let malformed_scope = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "client_credentials"),
                 ("scope", "\"no quotes (0x22) allowed\""),
             ]

@@ -161,7 +161,7 @@ impl Assertion {
         TaggedAssertion(self, tag)
     }
 
-    fn extract<'a>(&self, token: &'a str) -> Result<(Grant, String), ()> {
+    fn extract(&self, token: &str) -> Result<(Grant, String), ()> {
         let decoded = decode(token).map_err(|_| ())?;
         let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
 
@@ -185,7 +185,7 @@ impl Assertion {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
         let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
         let signature = self.signature(&tosign);
-        Ok(base64::encode(&signature.into_bytes()))
+        Ok(base64::encode(signature.into_bytes()))
     }
 
     fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
@@ -194,7 +194,7 @@ impl Assertion {
         let signature = self.signature(&tosign);
         let assert = AssertGrant(tosign, signature.into_bytes().to_vec());
 
-        Ok(encode(&rmp_serde::to_vec(&assert).unwrap()))
+        Ok(encode(rmp_serde::to_vec(&assert).unwrap()))
     }
 }
 
@@ -214,7 +214,7 @@ impl<'a> TaggedAssertion<'a> {
     ///
     /// Result in an Err if either the signature is invalid or if the tag does not match the
     /// expected usage tag given to this assertion.
-    pub fn extract<'b>(&self, token: &'b str) -> Result<Grant, ()> {
+    pub fn extract(&self, token: &str) -> Result<Grant, ()> {
         self.0
             .extract(token)
             .and_then(|(token, tag)| if tag == self.1 { Ok(token) } else { Err(()) })
@@ -223,13 +223,13 @@ impl<'a> TaggedAssertion<'a> {
 
 impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for Box<T> {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
-        (&mut **self).tag(counter, grant)
+        (**self).tag(counter, grant)
     }
 }
 
 impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for &'a mut T {
     fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
-        (&mut **self).tag(counter, grant)
+        (**self).tag(counter, grant)
     }
 }
 
@@ -284,7 +284,7 @@ impl TagGrant for Arc<Assertion> {
 mod scope_serde {
     use crate::primitives::scope::Scope;
 
-    use serde::ser::{Serializer};
+    use serde::ser::Serializer;
     use serde::de::{Deserialize, Deserializer, Error};
 
     pub fn serialize<S: Serializer>(scope: &Scope, serializer: S) -> Result<S::Ok, S::Error> {
@@ -300,11 +300,11 @@ mod scope_serde {
 mod url_serde {
     use super::Url;
 
-    use serde::ser::{Serializer};
+    use serde::ser::Serializer;
     use serde::de::{Deserialize, Deserializer, Error};
 
     pub fn serialize<S: Serializer>(url: &Url, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&url.to_string())
+        serializer.serialize_str(url.as_str())
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {
@@ -317,7 +317,7 @@ mod time_serde {
     use super::Time;
     use chrono::{TimeZone, Utc};
 
-    use serde::ser::{Serializer};
+    use serde::ser::Serializer;
     use serde::de::{Deserialize, Deserializer};
 
     pub fn serialize<S: Serializer>(time: &Time, serializer: S) -> Result<S::Ok, S::Error> {
@@ -376,8 +376,8 @@ mod tests {
     #[allow(dead_code, unused)]
     fn assert_send_sync_static() {
         fn uses<T: Send + Sync + 'static>(arg: T) {}
-        let _ = uses(RandomGenerator::new(16));
+        uses(RandomGenerator::new(16));
         let fake_key = [0u8; 16];
-        let _ = uses(Assertion::new(AssertionKind::HmacSha256, &fake_key));
+        uses(Assertion::new(AssertionKind::HmacSha256, &fake_key));
     }
 }

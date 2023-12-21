@@ -218,7 +218,7 @@ fn access_valid_public() {
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("code", &setup.authtoken),
@@ -240,7 +240,7 @@ fn access_valid_private() {
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -290,7 +290,7 @@ fn access_equivalent_url() {
     setup.test_success(CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("client_id", CLIENT_ID),
                 ("code", &authtoken),
@@ -306,7 +306,7 @@ fn access_equivalent_url() {
     setup.test_success(CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("client_id", CLIENT_ID),
                 ("code", &authtoken),
@@ -326,7 +326,7 @@ fn access_request_unknown_client() {
     let unknown_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -350,7 +350,7 @@ fn access_request_wrong_authentication() {
     let wrong_authentication = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -371,7 +371,7 @@ fn access_request_wrong_password() {
     let wrong_password = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -395,7 +395,7 @@ fn access_request_empty_password() {
     let empty_password = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -416,7 +416,7 @@ fn access_request_multiple_client_indications() {
     let multiple_client_indications = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("code", &setup.authtoken),
@@ -438,7 +438,7 @@ fn access_request_public_authorization() {
     let public_authorization = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -459,7 +459,7 @@ fn access_request_public_missing_client() {
     let public_missing_client = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -480,7 +480,7 @@ fn access_request_invalid_basic() {
     let invalid_basic = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -501,7 +501,7 @@ fn access_request_wrong_redirection() {
     let wrong_redirection = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", "https://wrong.client.example/endpoint"),
@@ -522,7 +522,7 @@ fn access_request_invalid_redirection() {
     let invalid_redirection = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", "\\://"),
@@ -543,7 +543,7 @@ fn access_request_no_code() {
     let no_code = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
             ]
@@ -559,7 +559,7 @@ fn access_request_no_code() {
 #[test]
 fn access_request_multiple_codes() {
     let mut setup = AccessTokenSetup::private_client();
-    let mut urlbody = vec![
+    let mut urlbody = [
         ("grant_type", "authorization_code"),
         ("code", &setup.authtoken),
         ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -587,7 +587,7 @@ fn access_request_wrong_grant_type() {
     let wrong_grant_type = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "another_grant_type"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -617,7 +617,7 @@ fn private_in_body() {
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -640,7 +640,7 @@ fn unwanted_private_in_body_fails() {
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -664,7 +664,7 @@ fn private_duplicate_authentication() {
     let valid_public = CraftedRequest {
         query: None,
         urlbody: Some(
-            vec![
+            [
                 ("grant_type", "authorization_code"),
                 ("code", &setup.authtoken),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),

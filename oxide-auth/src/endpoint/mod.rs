@@ -47,7 +47,7 @@ pub use crate::primitives::issuer::Issuer;
 pub use crate::primitives::registrar::Registrar;
 pub use crate::primitives::scope::Scope;
 
-use crate::code_grant::resource::{Error as ResourceError};
+use crate::code_grant::resource::Error as ResourceError;
 use crate::code_grant::error::{AuthorizationError, AccessTokenError};
 
 use url::Url;
@@ -209,10 +209,7 @@ impl<'flow> Solicitation<'flow> {
     /// This will need to be provided to the response back to the client so it must be preserved
     /// across a redirect or a consent screen presented by the user agent.
     pub fn state(&self) -> Option<&str> {
-        match self.state {
-            None => None,
-            Some(ref state) => Some(&state),
-        }
+        self.state.as_deref()
     }
 
     /// Create a new solicitation request from a pre grant.
