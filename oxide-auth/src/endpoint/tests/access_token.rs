@@ -7,7 +7,8 @@ use crate::frontends::simple::endpoint::access_token_flow;
 
 use std::collections::HashMap;
 
-use base64;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use chrono::{Utc, Duration};
 use serde_json;
 
@@ -50,7 +51,7 @@ impl AccessTokenSetup {
         registrar.register_client(client);
 
         let basic_authorization =
-            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            STANDARD.encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
 
         AccessTokenSetup {
             registrar,
@@ -85,7 +86,7 @@ impl AccessTokenSetup {
         registrar.register_client(client);
 
         let basic_authorization =
-            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            STANDARD.encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
 
         AccessTokenSetup {
             registrar,
@@ -286,7 +287,7 @@ fn access_request_unknown_client() {
         ),
         auth: Some(
             "Basic ".to_string()
-                + &base64::encode(&format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE)),
+                + &STANDARD.encode(&format!("{}:{}", "SomeOtherClient", EXAMPLE_PASSPHRASE)),
         ),
     };
 
@@ -331,7 +332,7 @@ fn access_request_wrong_password() {
         ),
         auth: Some(
             "Basic ".to_string()
-                + &base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, "NotTheRightPassphrase")),
+                + &STANDARD.encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, "NotTheRightPassphrase")),
         ),
     };
 
@@ -353,7 +354,7 @@ fn access_request_empty_password() {
             .iter()
             .to_single_value_query(),
         ),
-        auth: Some("Basic ".to_string() + &base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, ""))),
+        auth: Some("Basic ".to_string() + &STANDARD.encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, ""))),
     };
 
     setup.test_simple_error(empty_password);

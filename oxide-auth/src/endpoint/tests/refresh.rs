@@ -6,7 +6,8 @@ use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use std::collections::HashMap;
 
-use base64;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use chrono::{Utc, Duration};
 use serde_json;
 
@@ -54,7 +55,7 @@ impl RefreshTokenSetup {
         let refresh_token = issued.refresh.clone().unwrap();
 
         let basic_authorization =
-            base64::encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
+            STANDARD.encode(&format!("{}:{}", EXAMPLE_CLIENT_ID, EXAMPLE_PASSPHRASE));
         let basic_authorization = format!("Basic {}", basic_authorization);
 
         RefreshTokenSetup {
@@ -255,7 +256,7 @@ fn public_private_invalid_grant() {
     );
     setup.registrar.register_client(client);
 
-    let basic_authorization = base64::encode(&format!("{}:{}", "PrivateClient", EXAMPLE_PASSPHRASE));
+    let basic_authorization = STANDARD.encode(&format!("{}:{}", "PrivateClient", EXAMPLE_PASSPHRASE));
     let basic_authorization = format!("Basic {}", basic_authorization);
 
     let authenticated = CraftedRequest {
@@ -303,7 +304,7 @@ fn private_wrong_client_fails() {
             .iter()
             .to_single_value_query(),
         ),
-        auth: Some(format!("Basic {}", base64::encode("Wrong:AndWrong"))),
+        auth: Some(format!("Basic {}", STANDARD.encode("Wrong:AndWrong"))),
     };
 
     setup.assert_wrong_authentication(wrong_authentication);

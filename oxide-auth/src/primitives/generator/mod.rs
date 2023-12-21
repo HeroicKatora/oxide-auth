@@ -15,7 +15,7 @@ use super::grant::Grant;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use base64::encode;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use rand::{rngs::OsRng, RngCore};
 
 pub use self::assertion_grant::{Assertion, AssertionKind, TaggedAssertion, DataRepr, Encoder};
@@ -66,7 +66,7 @@ impl RandomGenerator {
         let mut rnd = self.random;
         rnd.try_fill_bytes(result.as_mut_slice())
             .expect("Failed to generate random token");
-        encode(&result)
+        STANDARD.encode(&result)
     }
 }
 

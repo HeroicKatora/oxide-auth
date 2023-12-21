@@ -1,6 +1,6 @@
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 
-use base64::{encode, decode};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use hmac::{digest::CtOutput, Mac, Hmac};
 use rand::{RngCore, thread_rng};
 use serde::{Deserialize, Serialize};
@@ -144,7 +144,7 @@ impl Assertion {
     }
 
     fn extract(&self, token: &str) -> Result<(Grant, String), ()> {
-        let decoded = decode(token).map_err(|_| ())?;
+        let decoded = STANDARD.decode(token).map_err(|_| ())?;
         let DataRepr(DataReprInner::AssertGrant(payload, signature)) = self.encoder.decode(&decoded)?
         else {
             return Err(());
@@ -174,7 +174,7 @@ impl Assertion {
             .encode(DataReprInner::Counted(counter, serde_grant).into())?;
         let signature = self.signature(&tosign);
 
-        Ok(base64::encode(signature.into_bytes()))
+        Ok(STANDARD.encode(signature.into_bytes()))
     }
 
     fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
@@ -187,7 +187,7 @@ impl Assertion {
         let signature = self.signature(&tosign);
         let assert = DataReprInner::AssertGrant(tosign, signature.into_bytes().to_vec());
 
-        Ok(encode(self.encoder.encode(assert.into()).unwrap()))
+        Ok(STANDARD.encode(self.encoder.encode(assert.into()).unwrap()))
     }
 }
 
