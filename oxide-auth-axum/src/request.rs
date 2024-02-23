@@ -133,3 +133,10 @@ where
         Ok(Self { auth })
     }
 }
+
+impl OAuthResource {
+    /// Fetch the authorization header from the request
+    pub fn authorization_header(&self) -> Option<&str> {
+        self.auth.as_deref()
+    }
+}
