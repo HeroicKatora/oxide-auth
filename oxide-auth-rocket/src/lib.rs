@@ -6,9 +6,9 @@ mod failure;
 use std::io::Cursor;
 use std::marker::PhantomData;
 
-use rocket::{Data, Request, Response};
-use rocket::http::{ContentType, Status};
-use rocket::http::hyper::header;
+use rocket::data::ToByteUnit;
+use rocket::{Data, Request, Response, uri};
+use rocket::http::{ContentType, Status, Header};
 use rocket::request::FromRequest;
 use rocket::response::{self, Responder};
 use rocket::outcome::Outcome;
@@ -31,7 +31,7 @@ pub struct OAuthRequest<'r> {
 /// Response type for Rocket OAuth requests
 ///
 /// A simple wrapper type around a simple `rocket::Response<'r>` that implements `WebResponse`.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct OAuthResponse<'r>(Response<'r>);
 
 /// Request error at the http layer.
@@ -58,9 +58,11 @@ impl<'r> OAuthRequest<'r> {
     /// Create the request data from request headers.
     ///
     /// Some oauth methods need additionally the body data which you can attach later.
-    pub fn new<'a>(request: &'a Request<'r>) -> Self {
-        let query = request.uri().query().unwrap_or("");
-        let query = match serde_urlencoded::from_str(query) {
+    pub fn new(request: &Request<'_>) -> Self {
+        let default_query_uri = uri!("?b");
+        let default_query = default_query_uri.query().unwrap();
+        let query = request.uri().query().unwrap_or(default_query);
+        let query = match serde_urlencoded::from_str(&query.to_string()) {
             Ok(query) => Ok(query),
             Err(_) => Err(WebError::Encoding),
         };
@@ -94,12 +96,13 @@ impl<'r> OAuthRequest<'r> {
     /// simplify the implementation of primitives and handlers, this type is the central request
     /// type for both these use cases. When you forget to provide the body to a request, the oauth
     /// system will return an error the moment the request is used.
-    pub fn add_body(&mut self, data: Data) {
+    pub async fn add_body(&mut self, data: Data<'_>) {
         // Nothing to do if we already have a body, or already generated an error. This includes
         // the case where the content type does not indicate a form, as the error is silent until a
         // body is explicitely requested.
         if let Ok(None) = self.body {
-            match serde_urlencoded::from_reader(data.open()) {
+            let data = data.open(2.mebibytes()).into_string().await;
+            match serde_urlencoded::from_str(&data.unwrap()) {
                 Ok(query) => self.body = Ok(Some(query)),
                 Err(_) => self.body = Err(WebError::Encoding),
             }
@@ -153,7 +156,7 @@ impl<'r> WebResponse for OAuthResponse<'r> {
 
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.0.set_status(Status::Found);
-        self.0.set_header(header::Location(url.into()));
+        self.0.set_header(Header::new("location", url.to_string()));
         Ok(())
     }
 
@@ -169,45 +172,40 @@ impl<'r> WebResponse for OAuthResponse<'r> {
     }
 
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
-        self.0.set_sized_body(Cursor::new(text.to_owned()));
+        self.0.set_sized_body(text.len(), Cursor::new(text.to_owned()));
         self.0.set_header(ContentType::Plain);
         Ok(())
     }
 
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
-        self.0.set_sized_body(Cursor::new(data.to_owned()));
+        self.0.set_sized_body(data.len(), Cursor::new(data.to_owned()));
         self.0.set_header(ContentType::JSON);
         Ok(())
     }
 }
 
-impl<'a, 'r> FromRequest<'a, 'r> for OAuthRequest<'r> {
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for OAuthRequest<'r> {
     type Error = NoError;
 
-    fn from_request(request: &'a Request<'r>) -> Outcome<Self, (Status, Self::Error), ()> {
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, (Status, Self::Error), ()> {
         Outcome::Success(Self::new(request))
     }
 }
 
-impl<'r> Responder<'r> for OAuthResponse<'r> {
-    fn respond_to(self, _: &Request) -> response::Result<'r> {
+impl<'r, 'o: 'r> Responder<'r, 'o> for OAuthResponse<'o> {
+    fn respond_to(self, _: &Request) -> response::Result<'o> {
         Ok(self.0)
     }
 }
 
-impl<'r> Responder<'r> for WebError {
-    fn respond_to(self, _: &Request) -> response::Result<'r> {
+impl<'r> Responder<'r, 'static> for WebError {
+    fn respond_to(self, _: &Request) -> response::Result<'static> {
         match self {
             WebError::Encoding => Err(Status::BadRequest),
             WebError::NotAForm => Err(Status::BadRequest),
             WebError::BodyNeeded => Err(Status::InternalServerError),
         }
-    }
-}
-
-impl<'r> Default for OAuthResponse<'r> {
-    fn default() -> Self {
-        OAuthResponse(Default::default())
     }
 }
 

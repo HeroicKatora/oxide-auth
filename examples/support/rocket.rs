@@ -5,23 +5,24 @@ mod generic;
 
 use self::generic::{Client, ClientConfig, ClientError};
 
-use rocket::{Rocket, State};
-use rocket::fairing::{Fairing, Info, Kind};
+use rocket::{Rocket, State, Build};
+use rocket::fairing::{Fairing, Info, Kind, Result};
 use rocket::http::Status;
 use rocket::response::{Redirect, content::Html, status::Custom};
 
 pub use self::generic::consent_page_html;
 pub struct ClientFairing;
 
+#[rocket::async_trait]
 impl Fairing for ClientFairing {
     fn info(&self) -> Info {
         Info {
             name: "Simple oauth client implementation",
-            kind: Kind::Attach,
+            kind: Kind::Ignite,
         }
     }
 
-    fn on_attach(&self, rocket: Rocket) -> Result<Rocket, Rocket> {
+    async fn on_ignite(&self, rocket: Rocket<Build>) -> Result {
         let config = ClientConfig {
             client_id: "LocalClient".into(),
             protected_url: "http://localhost:8000/".into(),
@@ -37,7 +38,7 @@ impl Fairing for ClientFairing {
 }
 
 #[get("/endpoint?<code>&<error>")]
-fn oauth_endpoint<'r>(code: Option<String>, error: Option<String>, state: State<Client>)
+fn oauth_endpoint<'r>(code: Option<String>, error: Option<String>, state: &State<Client>)
     -> Result<Redirect, Custom<String>> 
 {
     if let Some(error) = error {
@@ -48,6 +49,7 @@ fn oauth_endpoint<'r>(code: Option<String>, error: Option<String>, state: State<
     let code = code
         .ok_or_else(|| Custom(Status::BadRequest, 
             "Endpoint hit without an authorization code".into()))?;
+
     state.authorize(&code)
         .map_err(internal_error)?;
 
@@ -55,7 +57,7 @@ fn oauth_endpoint<'r>(code: Option<String>, error: Option<String>, state: State<
 }
 
 #[get("/")]
-fn client_view(state: State<Client>) -> Result<Html<String>, Custom<String>> {
+fn client_view(state: &State<Client>) -> Result<Html<String>, Custom<String>> {
     let protected_page = state
         .retrieve_protected_page()
         .map_err(internal_error)?;
@@ -78,14 +80,14 @@ fn client_view(state: State<Client>) -> Result<Html<String>, Custom<String>> {
 }
 
 #[post("/refresh")]
-fn refresh(state: State<Client>) -> Result<Redirect, Custom<String>> {
+fn refresh(state: &State<Client>) -> Result<Redirect, Custom<String>> {
     state.refresh()
         .map_err(internal_error)
         .map(|()| Redirect::found("/clientside"))
 }
 
 #[get("/debug")]
-fn client_debug(state: State<Client>) -> Html<String> {
+fn client_debug(state: &State<Client>) -> Html<String> {
     Html(state.as_html())
 }
 
