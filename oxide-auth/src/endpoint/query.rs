@@ -220,7 +220,7 @@ where
     fn normalize(&self) -> NormalizedParameter {
         let mut params = NormalizedParameter::default();
         self.iter()
-            .map(|&(ref key, ref val)| {
+            .map(|(key, val)| {
                 (
                     Cow::Owned(key.borrow().to_string()),
                     Cow::Owned(val.borrow().to_string()),
@@ -259,7 +259,7 @@ unsafe impl UniqueValue for str {
 
 unsafe impl UniqueValue for String {
     fn get_unique(&self) -> Option<&str> {
-        Some(&self)
+        Some(self)
     }
 }
 
@@ -289,7 +289,7 @@ unsafe impl<V: UniqueValue> UniqueValue for [V] {
         if self.len() > 1 {
             None
         } else {
-            self.get(0).and_then(V::get_unique)
+            self.first().and_then(V::get_unique)
         }
     }
 }
@@ -317,7 +317,7 @@ unsafe impl<V: UniqueValue> UniqueValue for Vec<V> {
         if self.len() > 1 {
             None
         } else {
-            self.get(0).and_then(V::get_unique)
+            self.first().and_then(V::get_unique)
         }
     }
 }
