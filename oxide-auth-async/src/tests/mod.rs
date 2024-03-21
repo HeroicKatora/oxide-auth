@@ -2,13 +2,31 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use oxide_auth::{
-    primitives::generator::TagGrant,
+    primitives::{
+        generator::TagGrant,
+        registrar::{PasswordPolicy, RegistrarError},
+    },
     endpoint::{WebRequest, WebResponse, OwnerConsent, QueryParameter, Solicitation},
     primitives::grant::Grant,
 };
 use url::Url;
 
 use crate::endpoint::OwnerSolicitor;
+
+struct NoopPasswordPolicy;
+
+impl PasswordPolicy for NoopPasswordPolicy {
+    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), RegistrarError> {
+        let other = self.store(client_id, passphrase);
+        (other == stored).then_some(()).ok_or(RegistrarError::Unspecified)
+    }
+
+    fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
+        let mut acc = client_id.as_bytes().to_vec();
+        acc.extend_from_slice(passphrase);
+        acc
+    }
+}
 
 /// Open and simple implementation of `WebRequest`.
 #[derive(Clone, Debug, Default)]

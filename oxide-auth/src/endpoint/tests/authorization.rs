@@ -7,7 +7,7 @@ use crate::endpoint::{OwnerSolicitor};
 
 use crate::frontends::simple::endpoint::authorization_flow;
 
-use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
+use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery, NoopPasswordPolicy};
 use super::{Allow, Deny};
 use super::defaults::*;
 
@@ -18,7 +18,7 @@ struct AuthorizationSetup {
 
 impl AuthorizationSetup {
     fn new() -> AuthorizationSetup {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
 
         let client = Client::confidential(

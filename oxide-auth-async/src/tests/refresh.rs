@@ -9,6 +9,7 @@ use oxide_auth::{
     frontends::simple::endpoint::Error,
 };
 
+use crate::tests::NoopPasswordPolicy;
 use crate::{
     endpoint::{refresh::RefreshFlow, Endpoint, resource::ResourceFlow},
     primitives::{Issuer},
@@ -77,7 +78,7 @@ struct RefreshTokenSetup {
 
 impl RefreshTokenSetup {
     fn private_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::confidential(
@@ -115,7 +116,7 @@ impl RefreshTokenSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::public(

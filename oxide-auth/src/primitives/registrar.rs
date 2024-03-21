@@ -5,17 +5,13 @@
 //! consistency in the permissions granted and urls registered.
 use super::scope::Scope;
 
+use std::collections::HashMap;
 use std::borrow::Cow;
 use std::cmp;
-use std::collections::HashMap;
 use std::fmt;
-use std::iter::{Extend, FromIterator};
 use std::rc::Rc;
 use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 
-use argon2::{self, Config};
-use once_cell::sync::Lazy;
-use rand::{RngCore, thread_rng};
 use serde::{Deserialize, Serialize};
 use url::{Url, ParseError as ParseUrlError};
 
@@ -283,13 +279,6 @@ pub enum ClientType {
         /// Byte data encoding the password authentication under the used policy.
         passdata: Vec<u8>,
     },
-}
-
-/// A very simple, in-memory hash map of client ids to Client entries.
-#[derive(Default)]
-pub struct ClientMap {
-    clients: HashMap<String, EncodedClient>,
-    password_policy: Option<Box<dyn PasswordPolicy>>,
 }
 
 impl fmt::Debug for ClientType {
@@ -592,36 +581,49 @@ pub trait PasswordPolicy: Send + Sync {
     fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), RegistrarError>;
 }
 
-/// Store passwords using `Argon2` to derive the stored value.
-#[derive(Clone, Debug, Default)]
-pub struct Argon2 {
-    _private: (),
-}
+#[cfg(feature = "argon2")]
+pub use self::argon2::Argon2;
 
-impl PasswordPolicy for Argon2 {
-    fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
-        let config = Config {
-            ad: client_id.as_bytes(),
-            secret: &[],
-            ..Config::rfc9106_low_mem()
-        };
+#[cfg(feature = "argon2")]
+mod argon2 {
+    use argon2::Config;
+    use rand::{thread_rng, RngCore};
 
-        let mut salt = vec![0; 32];
-        thread_rng()
-            .try_fill_bytes(salt.as_mut_slice())
-            .expect("Failed to generate password salt");
+    use super::{PasswordPolicy, RegistrarError};
 
-        let encoded = argon2::hash_encoded(passphrase, &salt, &config);
-        encoded.unwrap().as_bytes().to_vec()
+    /// Store passwords using `Argon2` to derive the stored value.
+    #[derive(Clone, Debug, Default)]
+    pub struct Argon2 {
+        _private: (),
     }
 
-    fn check(&self, client_id: &str, passphrase: &[u8], stored: &[u8]) -> Result<(), RegistrarError> {
-        let hash = String::from_utf8(stored.to_vec()).map_err(|_| RegistrarError::PrimitiveError)?;
-        let valid = argon2::verify_encoded_ext(&hash, passphrase, &[], client_id.as_bytes())
-            .map_err(|_| RegistrarError::PrimitiveError)?;
-        match valid {
-            true => Ok(()),
-            false => Err(RegistrarError::Unspecified),
+    impl PasswordPolicy for Argon2 {
+        fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
+            let config = Config {
+                ad: client_id.as_bytes(),
+                secret: &[],
+                ..Config::rfc9106_low_mem()
+            };
+
+            let mut salt = vec![0; 32];
+            thread_rng()
+                .try_fill_bytes(salt.as_mut_slice())
+                .expect("Failed to generate password salt");
+
+            let encoded = argon2::hash_encoded(passphrase, &salt, &config);
+            encoded.unwrap().as_bytes().to_vec()
+        }
+
+        fn check(
+            &self, client_id: &str, passphrase: &[u8], stored: &[u8],
+        ) -> Result<(), RegistrarError> {
+            let hash = String::from_utf8(stored.to_vec()).map_err(|_| RegistrarError::PrimitiveError)?;
+            let valid = argon2::verify_encoded_ext(&hash, passphrase, &[], client_id.as_bytes())
+                .map_err(|_| RegistrarError::PrimitiveError)?;
+            match valid {
+                true => Ok(()),
+                false => Err(RegistrarError::Unspecified),
+            }
         }
     }
 }
@@ -630,32 +632,30 @@ impl PasswordPolicy for Argon2 {
 //                             Standard Implementations of Registrars                            //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-static DEFAULT_PASSWORD_POLICY: Lazy<Argon2> = Lazy::new(Argon2::default);
+/// A very simple, in-memory hash map of client ids to Client entries.
+pub struct ClientMap {
+    clients: HashMap<String, EncodedClient>,
+    password_policy: Box<dyn PasswordPolicy>,
+}
 
 impl ClientMap {
     /// Create an empty map without any clients in it.
-    pub fn new() -> ClientMap {
-        ClientMap::default()
+    pub fn new<P: PasswordPolicy + 'static>(password_policy: P) -> ClientMap {
+        ClientMap {
+            clients: HashMap::default(),
+            password_policy: Box::new(password_policy),
+        }
     }
 
     /// Insert or update the client record.
     pub fn register_client(&mut self, client: Client) {
-        let password_policy = Self::current_policy(&self.password_policy);
         self.clients
-            .insert(client.client_id.clone(), client.encode(password_policy));
+            .insert(client.client_id.clone(), client.encode(&*self.password_policy));
     }
 
     /// Change how passwords are encoded while stored.
     pub fn set_password_policy<P: PasswordPolicy + 'static>(&mut self, new_policy: P) {
-        self.password_policy = Some(Box::new(new_policy))
-    }
-
-    // This is not an instance method because it needs to borrow the box but register needs &mut
-    fn current_policy<'a>(policy: &'a Option<Box<dyn PasswordPolicy>>) -> &'a dyn PasswordPolicy {
-        policy
-            .as_ref()
-            .map(|boxed| &**boxed)
-            .unwrap_or(&*DEFAULT_PASSWORD_POLICY)
+        self.password_policy = Box::new(new_policy)
     }
 }
 
@@ -668,14 +668,58 @@ impl Extend<Client> for ClientMap {
     }
 }
 
-impl FromIterator<Client> for ClientMap {
-    fn from_iter<I>(iter: I) -> Self
-    where
-        I: IntoIterator<Item = Client>,
-    {
-        let mut into = ClientMap::new();
-        into.extend(iter);
-        into
+impl Registrar for ClientMap {
+    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
+        let client = match self.clients.get(bound.client_id.as_ref()) {
+            None => return Err(RegistrarError::Unspecified),
+            Some(stored) => stored,
+        };
+
+        // Perform exact matching as motivated in the rfc
+        let registered_url = match bound.redirect_uri {
+            None => client.redirect_uri.clone(),
+            Some(ref url) => {
+                let original = std::iter::once(&client.redirect_uri);
+                let alternatives = client.additional_redirect_uris.iter();
+                if let Some(registered) = original
+                    .chain(alternatives)
+                    .find(|&registered| *registered == *url.as_ref())
+                {
+                    registered.clone()
+                } else {
+                    return Err(RegistrarError::Unspecified);
+                }
+            }
+        };
+
+        Ok(BoundClient {
+            client_id: bound.client_id,
+            redirect_uri: Cow::Owned(registered_url),
+        })
+    }
+
+    /// Always overrides the scope with a default scope.
+    fn negotiate(&self, bound: BoundClient, _scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
+        let client = self
+            .clients
+            .get(bound.client_id.as_ref())
+            .expect("Bound client appears to not have been constructed with this registrar");
+        Ok(PreGrant {
+            client_id: bound.client_id.into_owned(),
+            redirect_uri: bound.redirect_uri.into_owned(),
+            scope: client.default_scope.clone(),
+        })
+    }
+
+    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
+        self.clients
+            .get(client_id)
+            .ok_or(RegistrarError::Unspecified)
+            .and_then(|client| {
+                RegisteredClient::new(client, &*self.password_policy).check_authentication(passphrase)
+            })?;
+
+        Ok(())
     }
 }
 
@@ -777,68 +821,29 @@ impl<'s, R: Registrar + ?Sized + 's> Registrar for RwLockWriteGuard<'s, R> {
     }
 }
 
-impl Registrar for ClientMap {
-    fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
-        let client = match self.clients.get(bound.client_id.as_ref()) {
-            None => return Err(RegistrarError::Unspecified),
-            Some(stored) => stored,
-        };
-
-        // Perform exact matching as motivated in the rfc
-        let registered_url = match bound.redirect_uri {
-            None => client.redirect_uri.clone(),
-            Some(ref url) => {
-                let original = std::iter::once(&client.redirect_uri);
-                let alternatives = client.additional_redirect_uris.iter();
-                if let Some(registered) = original
-                    .chain(alternatives)
-                    .find(|&registered| *registered == *url.as_ref())
-                {
-                    registered.clone()
-                } else {
-                    return Err(RegistrarError::Unspecified);
-                }
-            }
-        };
-
-        Ok(BoundClient {
-            client_id: bound.client_id,
-            redirect_uri: Cow::Owned(registered_url),
-        })
-    }
-
-    /// Always overrides the scope with a default scope.
-    fn negotiate(&self, bound: BoundClient, _scope: Option<Scope>) -> Result<PreGrant, RegistrarError> {
-        let client = self
-            .clients
-            .get(bound.client_id.as_ref())
-            .expect("Bound client appears to not have been constructed with this registrar");
-        Ok(PreGrant {
-            client_id: bound.client_id.into_owned(),
-            redirect_uri: bound.redirect_uri.into_owned(),
-            scope: client.default_scope.clone(),
-        })
-    }
-
-    fn check(&self, client_id: &str, passphrase: Option<&[u8]>) -> Result<(), RegistrarError> {
-        let password_policy = Self::current_policy(&self.password_policy);
-
-        self.clients
-            .get(client_id)
-            .ok_or(RegistrarError::Unspecified)
-            .and_then(|client| {
-                RegisteredClient::new(client, password_policy).check_authentication(passphrase)
-            })?;
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    struct NoopPasswordPolicy;
+
+    impl PasswordPolicy for NoopPasswordPolicy {
+        fn check(
+            &self, client_id: &str, passphrase: &[u8], stored: &[u8],
+        ) -> Result<(), RegistrarError> {
+            let other = self.store(client_id, passphrase);
+            (other == stored).then_some(()).ok_or(RegistrarError::Unspecified)
+        }
+
+        fn store(&self, client_id: &str, passphrase: &[u8]) -> Vec<u8> {
+            let mut acc = client_id.as_bytes().to_vec();
+            acc.extend_from_slice(passphrase);
+            acc
+        }
+    }
+
     /// A test suite for registrars which support simple registrations of arbitrary clients
+    #[allow(dead_code)]
     pub fn simple_test_suite<Reg, RegFn>(registrar: &mut Reg, register: RegFn)
     where
         Reg: Registrar,
@@ -889,6 +894,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "argon2")]
     fn public_client() {
         let policy = Argon2::default();
         let client = Client::public(
@@ -906,6 +912,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "argon2")]
     fn confidential_client() {
         let policy = Argon2::default();
         let pass = b"AB3fAj6GJpdxmEVeNCyPoA==";
@@ -932,7 +939,7 @@ mod tests {
         let default_scope = "default".parse().unwrap();
         let client = Client::public(client_id, redirect_uri.into(), default_scope)
             .with_additional_redirect_uris(additional_redirect_uris);
-        let mut client_map = ClientMap::new();
+        let mut client_map = ClientMap::new(NoopPasswordPolicy);
         client_map.register_client(client);
 
         assert_eq!(
@@ -967,7 +974,7 @@ mod tests {
 
     #[test]
     fn client_map() {
-        let mut client_map = ClientMap::new();
+        let mut client_map = ClientMap::new(NoopPasswordPolicy);
         simple_test_suite(&mut client_map, ClientMap::register_client);
     }
 

@@ -115,7 +115,7 @@ pub mod tests {
     use super::*;
     use chrono::Utc;
     use crate::primitives::grant::Extensions;
-    use crate::primitives::generator::{Assertion, AssertionKind, RandomGenerator};
+    use crate::primitives::generator::RandomGenerator;
 
     /// Tests some invariants that should be upheld by all authorizers.
     ///
@@ -161,7 +161,10 @@ pub mod tests {
     }
 
     #[test]
+    #[cfg(feature = "assertion-grant")]
     fn signing_test_suite() {
+        use crate::primitives::generator::{Assertion, AssertionKind};
+
         let assertion = Assertion::new(
             AssertionKind::HmacSha256,
             b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s=",

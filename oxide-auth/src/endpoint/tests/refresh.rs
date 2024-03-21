@@ -1,3 +1,4 @@
+use crate::endpoint::tests::NoopPasswordPolicy;
 use crate::primitives::issuer::{Issuer, IssuedToken, RefreshedToken, TokenMap, TokenType};
 use crate::primitives::generator::RandomGenerator;
 use crate::primitives::grant::{Grant, Extensions};
@@ -5,7 +6,7 @@ use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use std::collections::HashMap;
 
-use base64::{self, Engine};
+use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use chrono::{Utc, Duration};
 use serde_json;
@@ -29,7 +30,7 @@ struct RefreshTokenSetup {
 
 impl RefreshTokenSetup {
     fn private_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::confidential(
@@ -67,7 +68,7 @@ impl RefreshTokenSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let mut issuer = TokenMap::new(RandomGenerator::new(16));
 
         let client = Client::public(

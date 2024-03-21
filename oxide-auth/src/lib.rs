@@ -63,6 +63,8 @@
 //! [`Issuer`]: primitives/issuer/trait.Issuer.html
 //! [`OwnerSolicitor`]: endpoint/trait.OwnerSolicitor.html
 //! [`Scopes`]: endpoint/trait.Scopes.html
+
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![warn(missing_docs)]
 
 pub mod code_grant;

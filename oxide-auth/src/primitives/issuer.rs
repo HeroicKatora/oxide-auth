@@ -3,16 +3,19 @@
 //! Internally similar to the authorization module, tokens generated here live longer and can be
 //! renewed. There exist two fundamental implementation as well, one utilizing in memory hash maps
 //! while the other uses cryptographic signing.
+
 use std::collections::HashMap;
-use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{
+    Arc, MutexGuard, RwLockWriteGuard,
+    atomic::{Ordering, AtomicUsize},
+};
 
 use chrono::{Duration, Utc};
 
 use crate::{endpoint::PreGrant, code_grant::accesstoken::BearerToken};
 use super::Time;
 use super::grant::Grant;
-use super::generator::{TagGrant, TaggedAssertion, Assertion};
+use super::generator::{Assertion, TagGrant, Encoder, TaggedAssertion};
 
 /// Issuers create bearer tokens.
 ///
@@ -368,8 +371,11 @@ impl TokenSigner {
     /// Useful for rapid prototyping where tokens need not be stored in a persistent database and
     /// can be invalidated at any time. This interface is provided with simplicity in mind, using
     /// the default system random generator (`ring::rand::SystemRandom`).
-    pub fn ephemeral() -> TokenSigner {
-        TokenSigner::new(Assertion::ephemeral())
+    pub fn ephemeral<E>(encoder: E) -> TokenSigner
+    where
+        E: Encoder,
+    {
+        TokenSigner::new(Assertion::ephemeral(encoder))
     }
 
     /// Set the validity of all issued grants to the specified duration.
@@ -438,6 +444,54 @@ impl TokenSigner {
 
     fn as_refresh(&self) -> TaggedAssertion {
         self.signer.tag("refresh")
+    }
+}
+
+impl Issuer for TokenSigner {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        (&mut &*self).issue(grant)
+    }
+
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
+        Err(())
+    }
+
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        (&&*self).recover_token(token)
+    }
+
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        (&&*self).recover_refresh(token)
+    }
+}
+
+impl<'a> Issuer for &'a TokenSigner {
+    fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
+        if let Some(duration) = &self.duration {
+            grant.until = Utc::now() + *duration;
+        }
+
+        if self.have_refresh {
+            self.refreshable_token(&grant)
+        } else {
+            self.unrefreshable_token(&grant)
+        }
+    }
+
+    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
+        Err(())
+    }
+
+    fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
+        Ok(self.as_token().extract(token).ok())
+    }
+
+    fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
+        if !self.have_refresh {
+            return Ok(None);
+        }
+
+        Ok(self.as_refresh().extract(token).ok())
     }
 }
 
@@ -513,61 +567,25 @@ impl<'s, I: Issuer + ?Sized> Issuer for RwLockWriteGuard<'s, I> {
     }
 }
 
-impl Issuer for TokenSigner {
-    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
-        (&mut &*self).issue(grant)
-    }
-
-    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
-        Err(())
-    }
-
-    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        (&&*self).recover_token(token)
-    }
-
-    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        (&&*self).recover_refresh(token)
-    }
-}
-
-impl<'a> Issuer for &'a TokenSigner {
-    fn issue(&mut self, mut grant: Grant) -> Result<IssuedToken, ()> {
-        if let Some(duration) = &self.duration {
-            grant.until = Utc::now() + *duration;
-        }
-
-        if self.have_refresh {
-            self.refreshable_token(&grant)
-        } else {
-            self.unrefreshable_token(&grant)
-        }
-    }
-
-    fn refresh(&mut self, _refresh: &str, _grant: Grant) -> Result<RefreshedToken, ()> {
-        Err(())
-    }
-
-    fn recover_token<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
-        Ok(self.as_token().extract(token).ok())
-    }
-
-    fn recover_refresh<'t>(&'t self, token: &'t str) -> Result<Option<Grant>, ()> {
-        if !self.have_refresh {
-            return Ok(None);
-        }
-
-        Ok(self.as_refresh().extract(token).ok())
-    }
-}
-
 #[cfg(test)]
 /// Tests for issuer implementations, including those provided here.
 pub mod tests {
     use super::*;
-    use crate::primitives::grant::Extensions;
+    use crate::primitives::{grant::Extensions, generator::DataRepr};
     use crate::primitives::generator::RandomGenerator;
     use chrono::{Duration, Utc};
+
+    pub struct RmpTokenEncoder;
+
+    impl Encoder for RmpTokenEncoder {
+        fn encode(&self, value: DataRepr) -> Result<Vec<u8>, ()> {
+            rmp_serde::to_vec(&value).map_err(|_| ())
+        }
+
+        fn decode(&self, value: &[u8]) -> Result<DataRepr, ()> {
+            rmp_serde::from_slice(value).map_err(|_| ())
+        }
+    }
 
     fn grant_template() -> Grant {
         Grant {
@@ -610,7 +628,7 @@ pub mod tests {
 
     #[test]
     fn signer_test_suite() {
-        let mut signer = TokenSigner::ephemeral();
+        let mut signer = TokenSigner::ephemeral(RmpTokenEncoder);
         // Refresh tokens must be unique if generated. If they are not even generated, they are
         // obviously not unique.
         signer.generate_refresh_tokens(true);
@@ -619,7 +637,7 @@ pub mod tests {
 
     #[test]
     fn signer_no_default_refresh() {
-        let mut signer = TokenSigner::ephemeral();
+        let mut signer = TokenSigner::ephemeral(RmpTokenEncoder);
         let issued = signer.issue(grant_template());
 
         let token = issued.expect("Issuing without refresh token failed");

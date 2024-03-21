@@ -8,7 +8,7 @@ use crate::{
     endpoint::{client_credentials::ClientCredentialsFlow, Endpoint, OwnerSolicitor},
 };
 
-use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery};
+use super::{CraftedRequest, Status, TestGenerator, ToSingleValueQuery, NoopPasswordPolicy};
 use super::{Allow, Deny};
 use super::defaults::*;
 
@@ -75,7 +75,7 @@ struct ClientCredentialsSetup {
 
 impl ClientCredentialsSetup {
     fn new() -> ClientCredentialsSetup {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AuthToken".to_owned()));
 
@@ -98,7 +98,7 @@ impl ClientCredentialsSetup {
     }
 
     fn public_client() -> Self {
-        let mut registrar = ClientMap::new();
+        let mut registrar = ClientMap::new(NoopPasswordPolicy);
         let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
         let issuer = TokenMap::new(TestGenerator("AccessToken".to_owned()));
 

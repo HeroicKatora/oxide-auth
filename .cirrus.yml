@@ -15,8 +15,8 @@ stable_task:
       - CRATE: oxide-auth-db
         OXIDE_AUTH_SKIP_REDIS: yes
       - CRATE: db-example
-  build_script: cargo build -p "$CRATE" --examples
-  test_script: cargo test -p "$CRATE"
+  build_script: cargo build -p "$CRATE" --examples --all-features
+  test_script: cargo test -p "$CRATE" --all-features
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 nightly_task:
@@ -37,8 +37,8 @@ nightly_task:
       - CRATE: oxide-auth-db
         OXIDE_AUTH_SKIP_REDIS: yes
       - CRATE: db-example
-  build_script: cargo build -p "$CRATE" --examples
-  test_script: cargo test -p "$CRATE"
+  build_script: cargo build -p "$CRATE" --examples --all-features
+  test_script: cargo test -p "$CRATE" --all-features
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 release_task:

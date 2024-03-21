@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::primitives::grant::{GrantExtension, Value};
 
-use base64::{self, engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 

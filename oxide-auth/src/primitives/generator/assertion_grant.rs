@@ -1,77 +1,51 @@
-//! Generators produce string code grant and bearer tokens for a determined grant.
-//!
-//! In short, a code grant needs to encapsulate information about the owner, client, redirect_uri,
-//! scope, and lifetime of a grant. This information needs to be uniquely recoverable.
-//!
-//! Two major implementation exists:
-//!     - `RandomGenerator` depends on the entropy of the generated token to make guessing
-//!     infeasible.
-//!     - `Assertion` cryptographically verifies the integrity of a token, trading security without
-//!     persistent storage for the loss of revocability. It is thus unfit for some backends, which
-//!     is not currently expressed in the type system or with traits.
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
-use super::grant::{Value, Extensions, Grant};
-use super::{Url, Time};
-use super::scope::Scope;
-
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::Arc;
-
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use hmac::{digest::CtOutput, Mac, Hmac};
-use rand::{rngs::OsRng, RngCore, thread_rng};
+use rand::{RngCore, thread_rng};
 use serde::{Deserialize, Serialize};
-use rmp_serde;
+use url::Url;
 
-/// Generic token for a specific grant.
-///
-/// The interface may be reused for authentication codes, bearer tokens and refresh tokens.
-///
-/// ## Requirements on implementations
-///
-/// When queried without repetition (users will change the `usage` counter each time), this
-/// method MUST be indistinguishable from a random function. This should be the crypgraphic
-/// requirements for signature schemes without requiring the verification property (the
-/// function need no be deterministic). This enables two popular choices: actual signature
-/// schemes and (pseudo-)random generators that ignore all input.
-///
-/// The requirement is derived from the fact that one should not be able to derive the tag for
-/// another token from ones own. Since there may be multiple tokens for a grant, the `usage`
-/// counter makes it possible for `Authorizer` and `Issuer` implementations to differentiate
-/// between these.
-pub trait TagGrant {
-    /// For example sign the input parameters or generate a random token.
-    fn tag(&mut self, usage: u64, grant: &Grant) -> Result<String, ()>;
+use crate::{
+    primitives::{
+        grant::{Grant, Extensions, Value},
+        Time,
+    },
+    endpoint::Scope,
+};
+
+use super::TagGrant;
+
+#[derive(Deserialize, Serialize)]
+enum DataReprInner {
+    AssertGrant(Vec<u8>, Vec<u8>),
+    Counted(u64, SerdeAssertionGrant),
+    Tagged(u64, String, SerdeAssertionGrant),
 }
 
-/// Generates tokens from random bytes.
+#[derive(Deserialize, Serialize)]
+#[serde(transparent)]
+/// Opaque representation of a token
 ///
-/// Each byte is chosen randomly from the basic `rand::thread_rng`. This generator will always
-/// succeed.
-pub struct RandomGenerator {
-    random: OsRng,
-    len: usize,
+/// Note: This representation is *internal* and *unstable*
+/// We reserve the right to break the internal representation *at any point*, so please do not rely on it.
+pub struct DataRepr(DataReprInner);
+
+impl From<DataReprInner> for DataRepr {
+    fn from(value: DataReprInner) -> Self {
+        Self(value)
+    }
 }
 
-impl RandomGenerator {
-    /// Generates tokens with a specific byte length.
-    pub fn new(length: usize) -> RandomGenerator {
-        RandomGenerator {
-            random: OsRng {},
-            len: length,
-        }
-    }
-
-    fn generate(&self) -> String {
-        let mut result = vec![0; self.len];
-        let mut rnd = self.random;
-        rnd.try_fill_bytes(result.as_mut_slice())
-            .expect("Failed to generate random token");
-
-        STANDARD.encode(result)
-    }
+/// Encoder for the components for the assertion grant
+///
+/// The types both implement serde's `Deserialize` and `Serialize` traits.
+/// Simply turn them into a byte vector and decode them from a byte slice.
+pub trait Encoder: Send + Sync + 'static {
+    /// Encode some data
+    fn encode(&self, value: DataRepr) -> Result<Vec<u8>, ()>;
+    /// Decode some data
+    fn decode(&self, value: &[u8]) -> Result<DataRepr, ()>;
 }
 
 /// Generates tokens by signing its specifics with a private key.
@@ -85,6 +59,7 @@ impl RandomGenerator {
 /// refresh tokens.
 pub struct Assertion {
     hasher: Hmac<sha2::Sha256>,
+    encoder: Arc<dyn Encoder>,
 }
 
 /// The cryptographic suite ensuring integrity of tokens.
@@ -122,9 +97,6 @@ struct SerdeAssertionGrant {
     public_extensions: HashMap<String, Option<String>>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct AssertGrant(Vec<u8>, Vec<u8>);
-
 /// Binds a tag to the data. The signature will be unique for data as well as the tag.
 pub struct TaggedAssertion<'a>(&'a Assertion, &'a str);
 
@@ -140,21 +112,29 @@ impl Assertion {
     ///
     /// Currently, the implementation lacks the ability to really make use of another hasing mechanism than
     /// hmac + sha256.
-    pub fn new(kind: AssertionKind, key: &[u8]) -> Self {
+    pub fn new<E>(kind: AssertionKind, key: &[u8], encoder: E) -> Self
+    where
+        E: Encoder,
+    {
         match kind {
             AssertionKind::HmacSha256 => Assertion {
                 hasher: Hmac::<sha2::Sha256>::new_from_slice(key).unwrap(),
+                encoder: Arc::new(encoder),
             },
         }
     }
 
     /// Construct an assertion instance whose tokens are only valid for the program execution.
-    pub fn ephemeral() -> Self {
+    pub fn ephemeral<E>(encoder: E) -> Self
+    where
+        E: Encoder,
+    {
         // TODO Extract KeySize from currently selected hasher
         let mut rand_bytes: [u8; 32] = [0; 32];
         thread_rng().fill_bytes(&mut rand_bytes);
         Assertion {
             hasher: Hmac::<sha2::Sha256>::new_from_slice(&rand_bytes).unwrap(),
+            encoder: Arc::new(encoder),
         }
     }
 
@@ -163,16 +143,20 @@ impl Assertion {
         TaggedAssertion(self, tag)
     }
 
-    fn extract<'a>(&self, token: &'a str) -> Result<(Grant, String), ()> {
+    fn extract(&self, token: &str) -> Result<(Grant, String), ()> {
         let decoded = STANDARD.decode(token).map_err(|_| ())?;
-        let assertion: AssertGrant = rmp_serde::from_slice(&decoded).map_err(|_| ())?;
+        let DataRepr(DataReprInner::AssertGrant(payload, signature)) = self.encoder.decode(&decoded)?
+        else {
+            return Err(());
+        };
 
         let mut hasher = self.hasher.clone();
-        hasher.update(&assertion.0);
-        hasher.verify_slice(assertion.1.as_slice()).map_err(|_| ())?;
+        hasher.update(&payload);
+        hasher.verify_slice(signature.as_slice()).map_err(|_| ())?;
 
-        let (_, serde_grant, tag): (u64, SerdeAssertionGrant, String) =
-            rmp_serde::from_slice(&assertion.0).map_err(|_| ())?;
+        let DataRepr(DataReprInner::Tagged(_, tag, serde_grant)) = self.encoder.decode(&payload)? else {
+            return Err(());
+        };
 
         Ok((serde_grant.grant(), tag))
     }
@@ -185,18 +169,25 @@ impl Assertion {
 
     fn counted_signature(&self, counter: u64, grant: &Grant) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
-        let tosign = rmp_serde::to_vec(&(serde_grant, counter)).unwrap();
+        let tosign = self
+            .encoder
+            .encode(DataReprInner::Counted(counter, serde_grant).into())?;
         let signature = self.signature(&tosign);
+
         Ok(STANDARD.encode(signature.into_bytes()))
     }
 
     fn generate_tagged(&self, counter: u64, grant: &Grant, tag: &str) -> Result<String, ()> {
         let serde_grant = SerdeAssertionGrant::try_from(grant)?;
-        let tosign = rmp_serde::to_vec(&(counter, serde_grant, tag)).unwrap();
-        let signature = self.signature(&tosign);
-        let assert = AssertGrant(tosign, signature.into_bytes().to_vec());
 
-        Ok(STANDARD.encode(rmp_serde::to_vec(&assert).unwrap()))
+        let tosign = self
+            .encoder
+            .encode(DataReprInner::Tagged(counter, tag.to_string(), serde_grant).into())?;
+
+        let signature = self.signature(&tosign);
+        let assert = DataReprInner::AssertGrant(tosign, signature.into_bytes().to_vec());
+
+        Ok(STANDARD.encode(self.encoder.encode(assert.into()).unwrap()))
     }
 }
 
@@ -220,42 +211,6 @@ impl<'a> TaggedAssertion<'a> {
         self.0
             .extract(token)
             .and_then(|(token, tag)| if tag == self.1 { Ok(token) } else { Err(()) })
-    }
-}
-
-impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for Box<T> {
-    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
-        (&mut **self).tag(counter, grant)
-    }
-}
-
-impl<'a, T: TagGrant + ?Sized + 'a> TagGrant for &'a mut T {
-    fn tag(&mut self, counter: u64, grant: &Grant) -> Result<String, ()> {
-        (&mut **self).tag(counter, grant)
-    }
-}
-
-impl TagGrant for RandomGenerator {
-    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
-        Ok(self.generate())
-    }
-}
-
-impl<'a> TagGrant for &'a RandomGenerator {
-    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
-        Ok(self.generate())
-    }
-}
-
-impl TagGrant for Rc<RandomGenerator> {
-    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
-        Ok(self.generate())
-    }
-}
-
-impl TagGrant for Arc<RandomGenerator> {
-    fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
-        Ok(self.generate())
     }
 }
 
@@ -286,7 +241,7 @@ impl TagGrant for Arc<Assertion> {
 mod scope_serde {
     use crate::primitives::scope::Scope;
 
-    use serde::ser::{Serializer};
+    use serde::ser::Serializer;
     use serde::de::{Deserialize, Deserializer, Error};
 
     pub fn serialize<S: Serializer>(scope: &Scope, serializer: S) -> Result<S::Ok, S::Error> {
@@ -302,11 +257,11 @@ mod scope_serde {
 mod url_serde {
     use super::Url;
 
-    use serde::ser::{Serializer};
+    use serde::ser::Serializer;
     use serde::de::{Deserialize, Deserializer, Error};
 
     pub fn serialize<S: Serializer>(url: &Url, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&url.to_string())
+        serializer.serialize_str(url.as_str())
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {
@@ -319,7 +274,7 @@ mod time_serde {
     use super::Time;
     use chrono::{TimeZone, Utc};
 
-    use serde::ser::{Serializer};
+    use serde::ser::Serializer;
     use serde::de::{Deserialize, Deserializer};
 
     pub fn serialize<S: Serializer>(time: &Time, serializer: S) -> Result<S::Ok, S::Error> {
@@ -359,6 +314,7 @@ impl SerdeAssertionGrant {
         for (name, content) in self.public_extensions.into_iter() {
             extensions.set_raw(name, Value::public(content))
         }
+
         Grant {
             owner_id: self.owner_id,
             client_id: self.client_id,
@@ -367,19 +323,5 @@ impl SerdeAssertionGrant {
             until: self.until,
             extensions,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[allow(dead_code, unused)]
-    fn assert_send_sync_static() {
-        fn uses<T: Send + Sync + 'static>(arg: T) {}
-        let _ = uses(RandomGenerator::new(16));
-        let fake_key = [0u8; 16];
-        let _ = uses(Assertion::new(AssertionKind::HmacSha256, &fake_key));
     }
 }
