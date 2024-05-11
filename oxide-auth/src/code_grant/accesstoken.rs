@@ -333,9 +333,7 @@ impl AccessToken {
         let mut credentials = Credentials::None;
         if let Some((client_id, auth)) = &authorization {
             credentials.authenticate(client_id.as_ref(), auth.as_ref());
-        }
-
-        if let Some(client_id) = &client_id {
+        } else if let Some(client_id) = &client_id {
             match &client_secret {
                 Some(auth) if request.allow_credentials_in_body() => {
                     credentials.authenticate(client_id.as_ref(), auth.as_ref().as_bytes())
