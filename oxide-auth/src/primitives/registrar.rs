@@ -787,14 +787,14 @@ impl Registrar for ClientMap {
         // Perform exact matching as motivated in the rfc
         let registered_url = match bound.redirect_uri {
             None => client.redirect_uri.clone(),
-            Some(ref url) => {
+            Some(url) => {
                 let original = std::iter::once(&client.redirect_uri);
                 let alternatives = client.additional_redirect_uris.iter();
-                if let Some(registered) = original
+                if original
                     .chain(alternatives)
-                    .find(|&registered| *registered == *url.as_ref())
+                    .any(|registered| *registered == *url.as_ref())
                 {
-                    registered.clone()
+                    RegisteredUrl::Exact((*url).clone())
                 } else {
                     return Err(RegistrarError::Unspecified);
                 }
@@ -963,6 +963,60 @@ mod tests {
                 redirect_uri: Some(Cow::Borrowed(&"https://example.com/baz".parse().unwrap()))
             })
             .is_err());
+
+        assert!(client_map
+            .bound_redirect(ClientUrl {
+                client_id: Cow::from(client_id),
+                redirect_uri: Some(Cow::Borrowed(&"https://example.com:1234/foo".parse().unwrap()))
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn localhost_redirect_uris() {
+        let client_id = "ClientId";
+        let redirect_uri: Url = "http://localhost/foo".parse().unwrap();
+        let default_scope = "default".parse().unwrap();
+        let client = Client::public(
+            client_id,
+            RegisteredUrl::IgnorePortOnLocalhost(redirect_uri.into()),
+            default_scope,
+        );
+        let mut client_map = ClientMap::new();
+        client_map.register_client(client);
+
+        // ok cases
+
+        for url in &["http://localhost/foo", "http://localhost:1234/foo"] {
+            assert_eq!(
+                client_map
+                    .bound_redirect(ClientUrl {
+                        client_id: Cow::from(client_id),
+                        redirect_uri: Some(Cow::Borrowed(&url.parse().unwrap()))
+                    })
+                    .unwrap()
+                    .redirect_uri,
+                Cow::<Url>::Owned(url.parse().unwrap())
+            );
+        }
+
+        // not-ok cases
+
+        for url in &[
+            "http://localhost/bar",
+            "http://localhost:1234/bar",
+            "http://example.com/foo",
+            "http://example.com:1234/foo",
+            "http://127.0.0.1/foo",
+            "http://127.0.0.1:1234/foo",
+        ] {
+            assert!(client_map
+                .bound_redirect(ClientUrl {
+                    client_id: Cow::from(client_id),
+                    redirect_uri: Some(Cow::Borrowed(&url.parse().unwrap()))
+                })
+                .is_err());
+        }
     }
 
     #[test]
