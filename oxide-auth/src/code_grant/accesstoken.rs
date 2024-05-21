@@ -54,7 +54,7 @@ pub trait Request {
     fn code(&self) -> Option<Cow<str>>;
 
     /// User:password of a basic authorization header.
-    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)>;
+    fn authorization(&self) -> Option<(Cow<str>, Option<Cow<[u8]>>)>;
 
     /// The client_id, optional parameter for public clients.
     fn client_id(&self) -> Option<Cow<str>>;
@@ -332,7 +332,10 @@ impl AccessToken {
 
         let mut credentials = Credentials::None;
         if let Some((client_id, auth)) = &authorization {
-            credentials.authenticate(client_id.as_ref(), auth.as_ref());
+            match auth {
+                Some(auth) => credentials.authenticate(client_id.as_ref(), auth),
+                None => credentials.unauthenticated(client_id.as_ref()),
+            }
         }
 
         if let Some(client_id) = &client_id {
