@@ -5,7 +5,11 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use oxide_auth::{
     endpoint::{QueryParameter, WebRequest, OAuthError, WebResponse, Template, NormalizedParameter},
-    code_grant::accesstoken::{Error as TokenError, Request as TokenRequest},
+    code_grant::{
+        accesstoken::{
+            Error as TokenError, Request as TokenRequest, Authorization as TokenAuthorization,
+        },
+    },
 };
 
 use super::Endpoint;
@@ -60,6 +64,7 @@ pub struct WrappedRequest<R: WebRequest> {
     allow_credentials_in_body: bool,
 }
 
+#[derive(Debug)]
 struct Invalid;
 
 #[derive(Clone)]
@@ -68,8 +73,8 @@ enum FailParse<E> {
     Err(E),
 }
 
-#[derive(Clone)]
-struct Authorization(String, Vec<u8>);
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Authorization(String, Option<Vec<u8>>);
 
 impl<E, R> AccessTokenFlow<E, R>
 where
@@ -257,7 +262,8 @@ impl<R: WebRequest> WrappedRequest<R> {
             };
             let passwd = match split.next() {
                 None => return Err(Invalid),
-                Some(passwd64) => passwd64,
+                Some([]) => None,
+                Some(passwd64) => Some(passwd64),
             };
 
             let client = match from_utf8(client_bin) {
@@ -265,7 +271,7 @@ impl<R: WebRequest> WrappedRequest<R> {
                 Ok(client) => client,
             };
 
-            Authorization(client.to_string(), passwd.to_vec())
+            Authorization(client.to_string(), passwd.map(|passwd| passwd.to_vec()))
         };
 
         Ok(authorization)
@@ -281,10 +287,14 @@ impl<R: WebRequest> TokenRequest for WrappedRequest<R> {
         self.body.unique_value("code")
     }
 
-    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
-        self.authorization
-            .as_ref()
-            .map(|auth| (auth.0.as_str().into(), auth.1.as_slice().into()))
+    fn authorization(&self) -> TokenAuthorization {
+        match &self.authorization {
+            None => TokenAuthorization::None,
+            Some(Authorization(username, None)) => TokenAuthorization::Username(username.into()),
+            Some(Authorization(username, Some(password))) => {
+                TokenAuthorization::UsernamePassword(username.into(), password.into())
+            }
+        }
     }
 
     fn client_id(&self) -> Option<Cow<str>> {
@@ -311,5 +321,27 @@ impl<R: WebRequest> TokenRequest for WrappedRequest<R> {
 impl<E> From<Invalid> for FailParse<E> {
     fn from(_: Invalid) -> Self {
         FailParse::Invalid
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use oxide_auth::frontends::simple::request::Request;
+    use super::*;
+
+    #[test]
+    fn test_client_id_only() {
+        let result = WrappedRequest::<Request>::parse_header("Basic Zm9vOg==".into());
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, Authorization("foo".into(), None));
+    }
+
+    #[test]
+    fn test_client_id_and_secret() {
+        let result = WrappedRequest::<Request>::parse_header("Basic Zm9vOmJhcg==".into());
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, Authorization("foo".into(), Some("bar".into())));
     }
 }

@@ -7,6 +7,7 @@ use base64::engine::general_purpose::STANDARD;
 
 use crate::code_grant::accesstoken::{
     access_token, Error as TokenError, Extension, Endpoint as TokenEndpoint, Request as TokenRequest,
+    Authorization as TokenAuthorization,
 };
 use crate::primitives::{authorizer::Authorizer, registrar::Registrar, issuer::Issuer};
 use super::{
@@ -58,6 +59,7 @@ struct WrappedRequest<'a, R: WebRequest + 'a> {
     allow_credentials_in_body: bool,
 }
 
+#[derive(Debug)]
 struct Invalid;
 
 enum FailParse<E> {
@@ -65,7 +67,8 @@ enum FailParse<E> {
     Err(E),
 }
 
-struct Authorization(String, Vec<u8>);
+#[derive(Debug, PartialEq, Eq)]
+struct Authorization(String, Option<Vec<u8>>);
 
 impl<E, R> AccessTokenFlow<E, R>
 where
@@ -258,7 +261,8 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
             };
             let passwd = match split.next() {
                 None => return Err(Invalid),
-                Some(passwd64) => passwd64,
+                Some([]) => None,
+                Some(passwd64) => Some(passwd64),
             };
 
             let client = match from_utf8(client_bin) {
@@ -266,7 +270,7 @@ impl<'a, R: WebRequest + 'a> WrappedRequest<'a, R> {
                 Ok(client) => client,
             };
 
-            Authorization(client.to_string(), passwd.to_vec())
+            Authorization(client.to_string(), passwd.map(|passwd| passwd.to_vec()))
         };
 
         Ok(authorization)
@@ -282,10 +286,14 @@ impl<'a, R: WebRequest> TokenRequest for WrappedRequest<'a, R> {
         self.body.unique_value("code")
     }
 
-    fn authorization(&self) -> Option<(Cow<str>, Cow<[u8]>)> {
-        self.authorization
-            .as_ref()
-            .map(|auth| (auth.0.as_str().into(), auth.1.as_slice().into()))
+    fn authorization(&self) -> TokenAuthorization {
+        match &self.authorization {
+            None => TokenAuthorization::None,
+            Some(Authorization(username, None)) => TokenAuthorization::Username(username.into()),
+            Some(Authorization(username, Some(password))) => {
+                TokenAuthorization::UsernamePassword(username.into(), password.into())
+            }
+        }
     }
 
     fn client_id(&self) -> Option<Cow<str>> {
@@ -312,5 +320,28 @@ impl<'a, R: WebRequest> TokenRequest for WrappedRequest<'a, R> {
 impl<E> From<Invalid> for FailParse<E> {
     fn from(_: Invalid) -> Self {
         FailParse::Invalid
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::endpoint::accesstoken::WrappedRequest;
+    use crate::frontends::simple::request::Request;
+
+    #[test]
+    fn test_client_id_only() {
+        let result = WrappedRequest::<Request>::parse_header("Basic Zm9vOg==".into());
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, Authorization("foo".into(), None));
+    }
+
+    #[test]
+    fn test_client_id_and_secret() {
+        let result = WrappedRequest::<Request>::parse_header("Basic Zm9vOmJhcg==".into());
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, Authorization("foo".into(), Some("bar".into())));
     }
 }

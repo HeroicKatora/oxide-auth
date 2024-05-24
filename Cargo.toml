@@ -2,6 +2,7 @@
 opt-level = 2
 
 [workspace]
+resolver = "2"
 members = [
 	"oxide-auth",
 	"oxide-auth-async",

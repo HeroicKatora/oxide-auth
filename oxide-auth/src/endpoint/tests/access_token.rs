@@ -95,6 +95,40 @@ impl AccessTokenSetup {
         }
     }
 
+    fn public_client_empty_secret() -> Self {
+        let mut registrar = ClientMap::new();
+        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
+        let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
+
+        let client = Client::public(
+            EXAMPLE_CLIENT_ID,
+            RegisteredUrl::Semantic(EXAMPLE_REDIRECT_URI.parse().unwrap()),
+            EXAMPLE_SCOPE.parse().unwrap(),
+        );
+
+        let authrequest = Grant {
+            client_id: EXAMPLE_CLIENT_ID.to_string(),
+            owner_id: EXAMPLE_OWNER_ID.to_string(),
+            redirect_uri: EXAMPLE_REDIRECT_URI.parse().unwrap(),
+            scope: EXAMPLE_SCOPE.parse().unwrap(),
+            until: Utc::now() + Duration::hours(1),
+            extensions: Extensions::new(),
+        };
+
+        let authtoken = authorizer.authorize(authrequest).unwrap();
+        registrar.register_client(client);
+
+        let basic_authorization = STANDARD.encode(&format!("{}:", EXAMPLE_CLIENT_ID));
+
+        AccessTokenSetup {
+            registrar,
+            authorizer,
+            issuer,
+            authtoken,
+            basic_authorization,
+        }
+    }
+
     fn assert_json_error_set(response: &CraftedResponse) {
         match &response.body {
             Some(Body::Json(ref json)) => {
@@ -122,7 +156,7 @@ impl AccessTokenSetup {
     fn test_success(&mut self, request: CraftedRequest) {
         let response = access_token_flow(&self.registrar, &mut self.authorizer, &mut self.issuer)
             .execute(request)
-            .expect("Expected non-error reponse");
+            .expect("Expected non-error response");
 
         self.assert_ok_access_token(response);
     }
@@ -159,6 +193,50 @@ fn access_valid_public() {
     };
 
     setup.test_success(valid_public);
+}
+
+#[test]
+fn access_valid_public_empty_secret() {
+    let mut setup = AccessTokenSetup::public_client_empty_secret();
+
+    let valid_public = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_success(valid_public);
+}
+
+/// Test the outcome when the credentials are provided in both the body and the auth header
+#[test]
+fn access_valid_public_duplicate_secret() {
+    let mut setup = AccessTokenSetup::public_client_empty_secret();
+
+    let duplicate_public = CraftedRequest {
+        query: None,
+        urlbody: Some(
+            vec![
+                ("grant_type", "authorization_code"),
+                ("client_id", EXAMPLE_CLIENT_ID),
+                ("code", &setup.authtoken),
+                ("redirect_uri", EXAMPLE_REDIRECT_URI),
+            ]
+            .iter()
+            .to_single_value_query(),
+        ),
+        auth: Some("Basic ".to_string() + &setup.basic_authorization),
+    };
+
+    setup.test_simple_error(duplicate_public);
 }
 
 #[test]
