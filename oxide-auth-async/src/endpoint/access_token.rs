@@ -5,7 +5,11 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use oxide_auth::{
     endpoint::{QueryParameter, WebRequest, OAuthError, WebResponse, Template, NormalizedParameter},
-    code_grant::accesstoken::{Error as TokenError, Request as TokenRequest},
+    code_grant::{
+        accesstoken::{
+            Error as TokenError, Request as TokenRequest, Authorization as TokenAuthorization,
+        },
+    },
 };
 
 use super::Endpoint;
@@ -283,13 +287,14 @@ impl<R: WebRequest> TokenRequest for WrappedRequest<R> {
         self.body.unique_value("code")
     }
 
-    fn authorization(&self) -> Option<(Cow<str>, Option<Cow<[u8]>>)> {
-        self.authorization.as_ref().map(|auth| {
-            (
-                auth.0.as_str().into(),
-                auth.1.as_ref().map(|passwd| passwd.as_slice().into()),
-            )
-        })
+    fn authorization(&self) -> TokenAuthorization {
+        match &self.authorization {
+            None => TokenAuthorization::None,
+            Some(Authorization(username, None)) => TokenAuthorization::Username(username.into()),
+            Some(Authorization(username, Some(password))) => {
+                TokenAuthorization::UsernamePassword(username.into(), password.into())
+            }
+        }
     }
 
     fn client_id(&self) -> Option<Cow<str>> {

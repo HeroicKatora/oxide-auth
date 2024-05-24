@@ -42,6 +42,17 @@ pub struct TokenResponse {
     pub error: Option<String>,
 }
 
+/// Authorization information from the request
+#[non_exhaustive]
+pub enum Authorization<'a> {
+    /// None present
+    None,
+    /// Only a username
+    Username(Cow<'a, str>),
+    /// Username and password combination
+    UsernamePassword(Cow<'a, str>, Cow<'a, [u8]>),
+}
+
 /// Trait based retrieval of parameters necessary for access token request handling.
 pub trait Request {
     /// Received request might not be encoded correctly. This method gives implementors the chance
@@ -54,7 +65,7 @@ pub trait Request {
     fn code(&self) -> Option<Cow<str>>;
 
     /// User:password of a basic authorization header.
-    fn authorization(&self) -> Option<(Cow<str>, Option<Cow<[u8]>>)>;
+    fn authorization(&self) -> Authorization;
 
     /// The client_id, optional parameter for public clients.
     fn client_id(&self) -> Option<Cow<str>>;
@@ -331,10 +342,12 @@ impl AccessToken {
         let client_secret = request.extension("client_secret");
 
         let mut credentials = Credentials::None;
-        if let Some((client_id, auth)) = &authorization {
-            match auth {
-                Some(auth) => credentials.authenticate(client_id.as_ref(), auth),
-                None => credentials.unauthenticated(client_id.as_ref()),
+
+        match &authorization {
+            Authorization::None => {}
+            Authorization::Username(username) => credentials.unauthenticated(&username),
+            Authorization::UsernamePassword(username, password) => {
+                credentials.authenticate(&username, &password)
             }
         }
 

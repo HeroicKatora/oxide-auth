@@ -7,6 +7,7 @@ use base64::engine::general_purpose::STANDARD;
 
 use crate::code_grant::accesstoken::{
     access_token, Error as TokenError, Extension, Endpoint as TokenEndpoint, Request as TokenRequest,
+    Authorization as TokenAuthorization,
 };
 use crate::primitives::{authorizer::Authorizer, registrar::Registrar, issuer::Issuer};
 use super::{
@@ -285,13 +286,14 @@ impl<'a, R: WebRequest> TokenRequest for WrappedRequest<'a, R> {
         self.body.unique_value("code")
     }
 
-    fn authorization(&self) -> Option<(Cow<str>, Option<Cow<[u8]>>)> {
-        self.authorization.as_ref().map(|auth| {
-            (
-                auth.0.as_str().into(),
-                auth.1.as_ref().map(|auth| auth.as_slice().into()),
-            )
-        })
+    fn authorization(&self) -> TokenAuthorization {
+        match &self.authorization {
+            None => TokenAuthorization::None,
+            Some(Authorization(username, None)) => TokenAuthorization::Username(username.into()),
+            Some(Authorization(username, Some(password))) => {
+                TokenAuthorization::UsernamePassword(username.into(), password.into())
+            }
+        }
     }
 
     fn client_id(&self) -> Option<Cow<str>> {
