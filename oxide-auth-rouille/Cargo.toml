@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth-rouille"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Andreas Molzer <andreas.molzer@gmx.de>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 edition = "2018"
@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 rouille = "3.0"
-oxide-auth = { version = "0.5.0", path = "../oxide-auth" }
+oxide-auth = { version = "0.6.0", path = "../oxide-auth" }
 serde_urlencoded = "0.7"
 url = "2"
 

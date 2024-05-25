@@ -7,9 +7,9 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-oxide-auth = { version = "0.5.1", path = "../../../oxide-auth" }
-oxide-auth-actix = { version = "0.2.0", path = "./../../../oxide-auth-actix" }
-oxide-auth-db = { version = "0.2.0", path = "./../../", features = ["with-redis"] }
+oxide-auth = { version = "0.6.0", path = "../../../oxide-auth" }
+oxide-auth-actix = { version = "0.3.0", path = "./../../../oxide-auth-actix" }
+oxide-auth-db = { version = "0.3.0", path = "./../../", features = ["with-redis"] }
 
 anyhow = "1.0"
 actix = "0.13"
