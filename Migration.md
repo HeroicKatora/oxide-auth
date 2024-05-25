@@ -11,6 +11,14 @@ according migration note.
 
 This document is independent of the [release notes](Changes.md).
 
+# v0.6
+
+Action is only required if you've implemented the `accesstoken::Request` trait.
+The authorization method now uses a special enum instead of a complex `Option`
+type. The previous semantics map to the variants `None` and `UsernamePassword`.
+When consuming this non-exhaustive trait you should treat unknown authorization
+methods as authentication failure.
+
 # v0.5 – Enstatite
 
 The crate has been split into a core (`oxide-auth`) and several sub-crates for

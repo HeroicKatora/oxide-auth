@@ -2,6 +2,22 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
+# v0.6.0 (2024-Mai-05)
+
+Breaking changes:
+- The `accesstoken::Request::authorization` method had its return type changed
+  to a non-exhaustive enum.
+
+Bug fixes:
+- The `ClientMap` allows clients to choose their own ports on `localhost`
+  domains, when these are registered as `IgnorePortOnLocalhost`. It previously
+  failed to use the port provided in the request, using the registered constant
+  instead.
+- The interpretation of an authorization header has been changed. An empty
+  password portion is interpreted as a public user, as by OAuth client
+  implementations. These would previously be interpreted as an empty password
+  instead.
+
 # v0.5.4 (2023-Sep-23)
 
 Feature release:
