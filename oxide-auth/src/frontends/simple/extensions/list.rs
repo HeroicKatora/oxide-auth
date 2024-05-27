@@ -7,7 +7,7 @@ use crate::code_grant::authorization::{Extension as AuthorizationExtension, Requ
 use crate::endpoint::Extension;
 use crate::primitives::grant::{Extensions, GrantExtension};
 
-/// A simple list of loosly related authorization and access addons.
+/// A simple list of loosely related authorization and access addons.
 ///
 /// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
 /// other types.
