@@ -11,6 +11,7 @@ use crate::primitives::grant::{Extensions, GrantExtension};
 ///
 /// The owning representation of access extensions can be switched out to `Box<_>`, `Rc<_>` or
 /// other types.
+#[derive(Clone)]
 pub struct AddonList {
     /// Extension to be applied on authorize. This field is `pub` for `oxide-auth-async` be able to
     /// implement async version of some traits.
