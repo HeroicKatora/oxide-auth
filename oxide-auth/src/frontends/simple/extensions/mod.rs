@@ -3,6 +3,7 @@
 //! Note that extensions will probably return in `v0.4` but not its preview versions.
 pub use crate::code_grant::authorization::Request as AuthorizationRequest;
 pub use crate::code_grant::accesstoken::Request as AccessTokenRequest;
+pub use crate::code_grant::client_credentials::Request as ClientCredentialsRequest;
 
 mod extended;
 mod pkce;
@@ -53,6 +54,12 @@ pub trait AccessTokenAddon: GrantExtension {
     /// returned as a response to the authorization code request is provided as an additional
     /// parameter.
     fn execute(&self, request: &dyn AccessTokenRequest, code_data: Option<Value>) -> AddonResult;
+}
+
+/// An extension reacting to a client credentials request..
+pub trait ClientCredentialsAddon: GrantExtension {
+    /// Process a client credentials request, utilizing the extensions stored data if any.
+    fn execute(&self, request: &dyn ClientCredentialsRequest) -> AddonResult;
 }
 
 impl<'a, T: AuthorizationAddon + ?Sized> AuthorizationAddon for &'a T {
@@ -118,5 +125,38 @@ impl<T: AccessTokenAddon + ?Sized> AccessTokenAddon for Arc<T> {
 impl<T: AccessTokenAddon + ?Sized> AccessTokenAddon for Rc<T> {
     fn execute(&self, request: &dyn AccessTokenRequest, data: Option<Value>) -> AddonResult {
         (**self).execute(request, data)
+    }
+}
+
+impl<'a, T: ClientCredentialsAddon + ?Sized> ClientCredentialsAddon for &'a T {
+    fn execute(&self, request: &dyn ClientCredentialsRequest) -> AddonResult {
+        (**self).execute(request)
+    }
+}
+
+impl<'a, T: ClientCredentialsAddon + ?Sized> ClientCredentialsAddon for Cow<'a, T>
+where
+    T: Clone + ToOwned,
+{
+    fn execute(&self, request: &dyn ClientCredentialsRequest) -> AddonResult {
+        self.as_ref().execute(request)
+    }
+}
+
+impl<T: ClientCredentialsAddon + ?Sized> ClientCredentialsAddon for Box<T> {
+    fn execute(&self, request: &dyn ClientCredentialsRequest) -> AddonResult {
+        (**self).execute(request)
+    }
+}
+
+impl<T: ClientCredentialsAddon + ?Sized> ClientCredentialsAddon for Arc<T> {
+    fn execute(&self, request: &dyn ClientCredentialsRequest) -> AddonResult {
+        (**self).execute(request)
+    }
+}
+
+impl<T: ClientCredentialsAddon + ?Sized> ClientCredentialsAddon for Rc<T> {
+    fn execute(&self, request: &dyn ClientCredentialsRequest) -> AddonResult {
+        (**self).execute(request)
     }
 }
