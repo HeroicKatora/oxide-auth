@@ -75,6 +75,16 @@ impl Extension for AddonList {
     }
 }
 
+impl Extension for &mut AddonList {
+    fn authorization(&mut self) -> Option<&mut dyn AuthorizationExtension> {
+        Some(self)
+    }
+
+    fn access_token(&mut self) -> Option<&mut dyn AccessTokenExtension> {
+        Some(self)
+    }
+}
+
 impl AccessTokenExtension for AddonList {
     fn extend(
         &mut self, request: &dyn Request, mut data: Extensions,
@@ -96,6 +106,12 @@ impl AccessTokenExtension for AddonList {
     }
 }
 
+impl AccessTokenExtension for &mut AddonList {
+    fn extend(&mut self, request: &dyn Request, data: Extensions) -> Result<Extensions, ()> {
+        AccessTokenExtension::extend(*self, request, data)
+    }
+}
+
 impl AuthorizationExtension for AddonList {
     fn extend(&mut self, request: &dyn AuthRequest) -> Result<Extensions, ()> {
         let mut result_data = Extensions::new();
@@ -111,6 +127,12 @@ impl AuthorizationExtension for AddonList {
         }
 
         Ok(result_data)
+    }
+}
+
+impl AuthorizationExtension for &mut AddonList {
+    fn extend(&mut self, request: &dyn AuthRequest) -> Result<Extensions, ()> {
+        AuthorizationExtension::extend(*self, request)
     }
 }
 
