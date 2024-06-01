@@ -2,7 +2,20 @@ Versions follow SemVer, of course. Major milestone versions are named in
 alphabetic order and will be accompanied by notes in [the migration
 notes](Migration.md)
 
-# v0.6.0 (2024-Mai-05)
+## v0.6.1 (2024-Jun-01)
+
+More consistent handling of extension data, for the client_credentials request
+and respective endpoint and flow.
+
+Feature release:
+- Added `ClientCredentialsAddon` trait to modify the addon state during a
+  `ClientCredentialsRequest`.
+- Added `client_credentials` attribute to `AddonList`.
+- Implement `Extension::client_credentials` for `AddonList`.
+- Implement `ClientCredentialsAddon` and `Clone` for `AddonList`.
+- Implement `Extension` for `&mut AddonList`.
+
+# v0.6.0 (2024-Mai-25)
 
 Breaking changes:
 - The `accesstoken::Request::authorization` method had its return type changed
