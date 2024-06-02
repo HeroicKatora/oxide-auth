@@ -4,7 +4,7 @@ mod generic;
 
 use std::collections::HashMap;
 
-pub use self::generic::{consent_page_html, open_in_browser, Client, ClientConfig, ClientError};
+pub use self::generic::{consent_page_html, open_in_browser, Client, ClientConfig};
 
 use actix_web::{
     App, dev,
@@ -51,8 +51,7 @@ async fn endpoint_impl(
     };
 
     let auth_handle = tokio::task::spawn_blocking(move || {
-        let res = state.authorize(&code);
-        res
+        state.authorize(&code)
     });
     let auth_result = auth_handle.await.unwrap();
 
@@ -64,8 +63,7 @@ async fn endpoint_impl(
 
 async fn refresh(state: web::Data<Client>) -> impl Responder {
     let refresh_handle = tokio::task::spawn_blocking(move || {
-        let res = state.refresh();
-        res
+        state.refresh()        
     });
     let refresh_result = refresh_handle.await.unwrap();
 
@@ -79,8 +77,7 @@ async fn get_with_token(state: web::Data<Client>) -> impl Responder {
     let html = state.as_html();
 
     let protected_page_handle = tokio::task::spawn_blocking(move || {
-        let res = state.retrieve_protected_page();
-        res
+        state.retrieve_protected_page()
     });
     let protected_page_result = protected_page_handle.await.unwrap();
 

@@ -64,7 +64,7 @@ impl StringfiedEncodedClient {
         };
 
         Ok(EncodedClient {
-            client_id: (&self.client_id).parse().unwrap(),
+            client_id: self.client_id.parse().unwrap(),
             redirect_uri,
             additional_redirect_uris,
             default_scope: Scope::from_str(
@@ -151,7 +151,7 @@ impl OauthClientDBRepository for RedisDataSource {
         let mut r = self.pool.get()?;
         let client_str = r.get::<&str, String>(&(self.client_prefix.to_owned() + id))?;
         let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;
-        Ok(stringfied_client.to_encoded_client()?)
+        stringfied_client.to_encoded_client()
     }
 
     fn regist_from_encoded_client(&self, client: EncodedClient) -> anyhow::Result<()> {

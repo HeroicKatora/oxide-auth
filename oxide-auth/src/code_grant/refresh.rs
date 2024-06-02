@@ -237,7 +237,7 @@ impl Refresh {
     ///
     /// The provided `Input` needs to fulfill the *previous* `Output` request. See their
     /// documentation for more information.
-    pub fn advance<'req>(&mut self, input: Input<'req>) -> Output<'_> {
+    pub fn advance(&mut self, input: Input<'_>) -> Output<'_> {
         // Run the next state transition if we got the right input. Errors that happen will be
         // stored as a inescapable error state.
         match (self.take(), input) {
@@ -301,7 +301,7 @@ impl Refresh {
                 client: &grant.client_id,
                 pass: None,
             },
-            RefreshState::Recovering { token, .. } => Output::RecoverRefresh { token: &token },
+            RefreshState::Recovering { token, .. } => Output::RecoverRefresh { token },
             RefreshState::Issuing { token, grant, .. } => Output::Refresh {
                 token,
                 grant: grant.clone(),
@@ -358,14 +358,13 @@ pub fn refresh(handler: &mut dyn Endpoint, request: &dyn Request) -> Result<Bear
                 }
             }
             Requested::Authenticate { client, pass } => {
-                let _: () =
-                    handler
-                        .registrar()
-                        .check(&client, pass.as_deref())
-                        .map_err(|err| match err {
-                            RegistrarError::PrimitiveError => Error::Primitive,
-                            RegistrarError::Unspecified => Error::unauthorized("basic"),
-                        })?;
+                handler
+                    .registrar()
+                    .check(&client, pass.as_deref())
+                    .map_err(|err| match err {
+                        RegistrarError::PrimitiveError => Error::Primitive,
+                        RegistrarError::Unspecified => Error::unauthorized("basic"),
+                    })?;
                 Input::Authenticated {
                     scope: request.scope(),
                 }

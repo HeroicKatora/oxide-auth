@@ -42,9 +42,10 @@ pub struct Response {
 }
 
 /// An enum containing the necessary HTTP status codes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub enum Status {
     /// Http status code 200.
+    #[default]
     Ok,
 
     /// Http status code 302.
@@ -184,12 +185,6 @@ impl NoError {
     /// Since `NoError` is uninhabited, this always works but is never executed.
     pub fn into<T>(self) -> T {
         match self {}
-    }
-}
-
-impl Default for Status {
-    fn default() -> Self {
-        Status::Ok
     }
 }
 
