@@ -4,6 +4,8 @@
 mod failure;
 
 use std::io::Cursor;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncReadExt;
 use std::marker::PhantomData;
 
 use rocket::data::ByteUnit;
@@ -99,7 +101,7 @@ impl<'r> OAuthRequest<'r> {
     /// simplify the implementation of primitives and handlers, this type is the central request
     /// type for both these use cases. When you forget to provide the body to a request, the oauth
     /// system will return an error the moment the request is used.
-    pub fn add_body(&mut self, data: Data,limits: Option<ByteUnit>) {
+    pub async fn add_body(&mut self, data: Data,limits: Option<ByteUnit>) {
         // Nothing to do if we already have a body, or already generated an error. This includes
         // the case where the content type does not indicate a form, as the error is silent until a
         // body is explicitely requested.
@@ -115,7 +117,23 @@ impl<'r> OAuthRequest<'r> {
         
         if let Ok(None) = self.body {
             let limit = limits.unwrap_or(rocket::data::Limits::FORM);
-            match serde_urlencoded::from_reader(data.open(limit)) {
+            let data = data.open(limit);
+            // jtmorrisbytes:
+            // datastream has several options
+            // 
+            // we can stream the data into a file and read it from there
+            // we can convert the datastream into a vector of bytes.
+            // we can stream the stream into another vector of bytes
+            // we can also convert the datastream into a string.
+            // if we convert the datastream into a string, it will guarentee that the data is valid UTF-8
+            // 
+            // https://api.rocket.rs/v0.5/rocket/data/struct.DataStream
+            // but std::io::read is no longer implemented
+            // in favor of tokio::io::util::AsyncRead
+            // 
+            // I am going to read the data into a string, then serialize the data
+            // let string = data.into_string().await;
+            match serde_urlencoded::from(data.open(limit)) {
                 Ok(query) => self.body = Ok(Some(query)),
                 Err(_) => self.body = Err(WebError::Encoding),
             }
