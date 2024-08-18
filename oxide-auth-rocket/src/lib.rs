@@ -55,6 +55,9 @@ pub enum WebError {
 
     /// Form data was requested but the request was not a form.
     NotAForm,
+
+    /// IO Error. An error occured while attempting to perform a read/write operation
+    IOError
 }
 
 impl<'r> OAuthRequest<'r> {
@@ -116,6 +119,7 @@ impl<'r> OAuthRequest<'r> {
         
         
         if let Ok(None) = self.body {
+            // accepts the limit given to the function or uses the rocket configured default
             let limit = limits.unwrap_or(rocket::data::Limits::FORM);
             let data = data.open(limit);
             // jtmorrisbytes:
@@ -132,7 +136,12 @@ impl<'r> OAuthRequest<'r> {
             // in favor of tokio::io::util::AsyncRead
             // 
             // I am going to read the data into a string, then serialize the data
-            // let string = data.into_string().await;
+            let body_string = match data.into_string().await {
+                Ok(body_string) => body_string,
+                Err(e)
+            };
+
+
             match serde_urlencoded::from(data.open(limit)) {
                 Ok(query) => self.body = Ok(Some(query)),
                 Err(_) => self.body = Err(WebError::Encoding),
