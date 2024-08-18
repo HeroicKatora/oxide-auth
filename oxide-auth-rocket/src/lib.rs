@@ -6,6 +6,7 @@ mod failure;
 use std::io::Cursor;
 use std::marker::PhantomData;
 
+use rocket::data::ByteUnit;
 use rocket::{Data, Request, Response};
 use rocket::http::{ContentType, Status};
 use rocket::http::hyper::header;
@@ -59,7 +60,11 @@ impl<'r> OAuthRequest<'r> {
     ///
     /// Some oauth methods need additionally the body data which you can attach later.
     pub fn new<'a>(request: &'a Request<'r>) -> Self {
-        let query = request.uri().query().unwrap_or("");
+        // rocket::http::uri::Query can no longer be constructed using the following line:
+        // let query = request.uri().query().unwrap_or("");
+        // request.uri().query() -> Option<rocket::http::uri::Query<'_>>
+        // using query.as_str to preserve the original behavior
+        let query = request.uri().query().map(|query| query.as_str()).unwrap_or("");
         let query = match serde_urlencoded::from_str(query) {
             Ok(query) => Ok(query),
             Err(_) => Err(WebError::Encoding),
@@ -94,12 +99,23 @@ impl<'r> OAuthRequest<'r> {
     /// simplify the implementation of primitives and handlers, this type is the central request
     /// type for both these use cases. When you forget to provide the body to a request, the oauth
     /// system will return an error the moment the request is used.
-    pub fn add_body(&mut self, data: Data) {
+    pub fn add_body(&mut self, data: Data,limits: Option<ByteUnit>) {
         // Nothing to do if we already have a body, or already generated an error. This includes
         // the case where the content type does not indicate a form, as the error is silent until a
         // body is explicitely requested.
+
+        // jtmorrisbytes:
+        // not sure whether this is the desired behavior, but
+        // trying to prevent defining our own default here
+        // https://api.rocket.rs/v0.5/rocket/data/struct.Limits
+        // unsure whether to use FORM or DATA_FORM here. More research is required
+        // in order to get the configured limits from request.rocket().limits(),
+        // we need a reference to the request here.
+        
+        
         if let Ok(None) = self.body {
-            match serde_urlencoded::from_reader(data.open()) {
+            let limit = limits.unwrap_or(rocket::data::Limits::FORM);
+            match serde_urlencoded::from_reader(data.open(limit)) {
                 Ok(query) => self.body = Ok(Some(query)),
                 Err(_) => self.body = Err(WebError::Encoding),
             }
