@@ -101,7 +101,7 @@ impl<'r> OAuthRequest<'r> {
     /// simplify the implementation of primitives and handlers, this type is the central request
     /// type for both these use cases. When you forget to provide the body to a request, the oauth
     /// system will return an error the moment the request is used.
-    pub async fn add_body(&mut self, data: Data,limits: Option<ByteUnit>) {
+    pub async fn add_body(&mut self, data: Data<'_>,limits: Option<ByteUnit>) {
         // Nothing to do if we already have a body, or already generated an error. This includes
         // the case where the content type does not indicate a form, as the error is silent until a
         // body is explicitely requested.
