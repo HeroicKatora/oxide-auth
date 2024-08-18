@@ -56,8 +56,12 @@ pub enum WebError {
     /// Form data was requested but the request was not a form.
     NotAForm,
 
-    /// IO Error. An error occured while attempting to perform a read/write operation
-    IOError
+    /// Failed to read the datastream into a string while attemting to call add_body
+    DataStreamReadFailed,
+
+    /// reached the default or  configured maximum data size limits while reading the datastream into a string and there is still data remaining
+    ExceededDataLimits 
+
 }
 
 impl<'r> OAuthRequest<'r> {
@@ -136,13 +140,23 @@ impl<'r> OAuthRequest<'r> {
             // in favor of tokio::io::util::AsyncRead
             // 
             // I am going to read the data into a string, then serialize the data
-            let body_string = match data.into_string().await {
+
+            // try to read the data into a string. if it fails, set an error and retern early
+            let capped_string = match data.into_string().await {
                 Ok(body_string) => body_string,
-                Err(e)
+                Err(_e) => {
+                    self.body = Err(WebError::DataStreamReadFailed);
+                    return;
+                }
             };
-
-
-            match serde_urlencoded::from(data.open(limit)) {
+            if !capped_string.is_complete() {
+                // we have reached the provided or configured data limits while reading the data into the string.
+                self.body = Err(WebError::ExceededDataLimits);
+                return;
+            }
+            let data_string = capped_string.into_inner();
+            // serde_urlencoded does not have an implementation of tokio::io::AsyncRead. as such we are serializng from a string
+            match serde_urlencoded::from_str(&data_string) {
                 Ok(query) => self.body = Ok(Some(query)),
                 Err(_) => self.body = Err(WebError::Encoding),
             }
