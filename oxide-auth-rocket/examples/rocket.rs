@@ -6,7 +6,7 @@ extern crate oxide_auth_rocket;
 extern crate rocket;
 
 #[rustfmt::skip]
-#[path = "../../../examples/support/rocket.rs"]
+#[path = "../../examples/support/rocket.rs"]
 mod support;
 
 use std::io;
