@@ -17,7 +17,6 @@ edition = "2018"
 rocket = "0.5.1"
 oxide-auth = { version = "0.6.0", path = "../oxide-auth" }
 serde_urlencoded = "0.7"
-tokio = { version = "1.39.3", features = ["io-util"] }
 
 [dev-dependencies]
 reqwest = { version = "0.11.10", features = ["blocking"] }
