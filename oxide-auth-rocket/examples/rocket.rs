@@ -168,17 +168,18 @@ impl MyState {
 fn consent_form<'r>(
     _: &mut OAuthRequest<'r>, solicitation: Solicitation,
 ) -> OwnerConsent<OAuthResponse<'r>> {
+    let output = support::consent_page_html(
+        "/authorize",
+        solicitation,
+    );
     OwnerConsent::InProgress(
         Response::build()
             .status(http::Status::Ok)
             .header(http::ContentType::HTML)
-            .sized_body(io::Cursor::new(support::consent_page_html(
-                "/authorize",
-                solicitation,
-            )))
+            .sized_body(output.len(),io::Cursor::new(output)
             .finalize()
             .into(),
-    )
+    ))
 }
 
 fn consent_decision<'r>(allowed: bool, _: Solicitation) -> OwnerConsent<OAuthResponse<'r>> {
