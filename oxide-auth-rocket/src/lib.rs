@@ -4,8 +4,7 @@
 mod failure;
 
 use std::io::Cursor;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncReadExt;
+use rocket::http::Header;
 use std::marker::PhantomData;
 
 use rocket::data::ByteUnit;
@@ -210,7 +209,16 @@ impl<'r> WebResponse for OAuthResponse<'r> {
 
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.0.set_status(Status::Found);
-        self.0.set_header(header::Location(url.into()));
+
+        // jtmorrisbytes:
+
+        // set header's api changed from
+        // self.0.set_header(header::Location(url.into()));
+        // to
+        let header = Header::new(header::LOCATION.as_str(), url.to_string());
+        self.0.set_header(header);
+        // there does not appear to be a type that implements into<Header> in rocket's library for the location header.
+        // most likely because rocket expects you to return rocket::response::Redirect from handlers to perform a redirect
         Ok(())
     }
 
@@ -226,38 +234,40 @@ impl<'r> WebResponse for OAuthResponse<'r> {
     }
 
     fn body_text(&mut self, text: &str) -> Result<(), Self::Error> {
-        self.0.set_sized_body(Cursor::new(text.to_owned()));
+        self.0.set_sized_body(text.len(),Cursor::new(text.to_owned()));
         self.0.set_header(ContentType::Plain);
         Ok(())
     }
 
     fn body_json(&mut self, data: &str) -> Result<(), Self::Error> {
-        self.0.set_sized_body(Cursor::new(data.to_owned()));
+        self.0.set_sized_body(data.len(),Cursor::new(data.to_owned()));
         self.0.set_header(ContentType::JSON);
         Ok(())
     }
 }
-
-impl<'a, 'r> FromRequest<'a, 'r> for OAuthRequest<'r> {
+#[rocket::async_trait]
+impl<'r:'static> FromRequest<'r> for OAuthRequest<'r> {
     type Error = NoError;
 
-    fn from_request(request: &'a Request<'r>) -> Outcome<Self, (Status, Self::Error), ()> {
+    async fn from_request(request: &'r Request<'_>) -> rocket::request::Outcome<Self,Self::Error> {
         Outcome::Success(Self::new(request))
     }
 }
 
-impl<'r> Responder<'r> for OAuthResponse<'r> {
-    fn respond_to(self, _: &Request) -> response::Result<'r> {
+impl<'r,'o:'r> Responder<'r,'o> for OAuthResponse<'o> {
+    fn respond_to(self, _: &Request) -> response::Result<'o> {
         Ok(self.0)
     }
 }
 
-impl<'r> Responder<'r> for WebError {
-    fn respond_to(self, _: &Request) -> response::Result<'r> {
+impl<'r,'o:'r> Responder<'r,'o> for WebError {
+    fn respond_to(self, _: &Request) -> response::Result<'o> {
         match self {
             WebError::Encoding => Err(Status::BadRequest),
             WebError::NotAForm => Err(Status::BadRequest),
             WebError::BodyNeeded => Err(Status::InternalServerError),
+            WebError::DataStreamReadFailed => Err(Status::InternalServerError),
+            WebError::ExceededDataLimits => Err(Status::PayloadTooLarge)
         }
     }
 }

@@ -6,7 +6,7 @@ extern crate oxide_auth_rocket;
 extern crate rocket;
 
 #[rustfmt::skip]
-#[path = "../../examples/support/rocket.rs"]
+#[path = "../../../examples/support/rocket.rs"]
 mod support;
 
 use std::io;
@@ -18,6 +18,7 @@ use oxide_auth::primitives::prelude::*;
 use oxide_auth::primitives::registrar::RegisteredUrl;
 use oxide_auth_rocket::{OAuthResponse, OAuthRequest, OAuthFailure};
 
+use rocket::data::Limits;
 use rocket::{Data, State, Response, http};
 use rocket::http::ContentType;
 use rocket::response::Responder;
@@ -56,10 +57,12 @@ fn authorize_consent<'r>(
 }
 
 #[post("/token", data = "<body>")]
-fn token<'r>(
+async fn token<'r>(
     mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>,
+    limits: rocket::data::Limits,
 ) -> Result<OAuthResponse<'r>, OAuthFailure> {
-    oauth.add_body(body);
+    let limit = limits.get(Limits::FORM);
+    oauth.add_body(body,limit).await;
     state
         .endpoint()
         .access_token_flow()
@@ -68,10 +71,12 @@ fn token<'r>(
 }
 
 #[post("/refresh", data = "<body>")]
-fn refresh<'r>(
+async fn refresh<'r>(
     mut oauth: OAuthRequest<'r>, body: Data, state: State<MyState>,
+    limits: Limits
 ) -> Result<OAuthResponse<'r>, OAuthFailure> {
-    oauth.add_body(body);
+    let limit = Limits.get(Limits::FORM);
+    oauth.add_body(body,limit).await;
     state
         .endpoint()
         .refresh_flow()
@@ -98,7 +103,7 @@ here</a> to begin the authorization process.
         Err(Ok(response)) => {
             let error: OAuthResponse = Response::build_from(response.into())
                 .header(ContentType::HTML)
-                .sized_body(io::Cursor::new(DENY_TEXT))
+                .sized_body(DENY_TEXT.len(),io::Cursor::new(DENY_TEXT))
                 .finalize()
                 .into();
             Err(Ok(error))
