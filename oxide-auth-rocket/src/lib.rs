@@ -26,9 +26,23 @@ pub use self::failure::OAuthFailure;
 /* 
     A note from a contributer: jtmorrisbytes.
     When rocket transitioned from 0.4 to 0.5, they went to async code.
-    as a result, the entire api surface has to be altered as it is not possible to hold borrowed data
-    across an await point when calling FromRequest. it as also not feasable to make a type bound by the 'static
-    lifetime. the response type was altered to only contain the data it needs to contain, and then that data is used to make a response.
+    The OAuthRequest type is expected to uphold the 'static lifetime bound in FromRequest
+    because its difficult to hold data across an await point. I was unable to make the code work
+    unless ONLY OAuthRequest was bound by the 'static lifetime.
+    
+    I also changed the way OAuthRequest Works.
+    I Implemented FromData, which allows you to use the OAuthRequest type as a data guard, and
+    that the body data will be automatically parsed. see the examples.
+    
+    add_body now takes a DataStream instead of a Data.
+    Rocket now enforces data limits upon data guards.
+
+    The limits are configured using rocket's built in 'form' limit configuration. if no limit is specified, the 
+    library will use the default. a seperate limit can be added if required by feedback from the library users.
+
+    I did not feel like keeping the OAuthRequest Type a simple wrapper around request due to managing lifetimes and decided
+    to make it it's own type that holds only the data it needs. If we need to keep the original type,
+    we may be able to make it work since you can tell the compiler to make the request outlive the response.
 */ 
 /// Header value for WWW_AUTHENTICATE. this is not present in the version of hyper that rocket depends on
 const WWW_AUTHENTICATE: &str = "www_authenticate";
@@ -160,8 +174,7 @@ impl std::default::Default for OAuthResponse {
     fn default() -> Self {
         Self { status: rocket::http::Status::Ok,content_type: ContentType::Text,header_location:None,header_www_authenticate:None,body:String::new(),body_length:0 }
     }
-
-    }
+}
 
 impl <'r,'o: 'r> Responder<'r,'o> for OAuthResponse {
     fn respond_to(self, _request: &'r Request<'_>) -> response::Result<'o> {
