@@ -7,8 +7,6 @@ extern crate rocket;
 #[path = "../../examples/support/rocket.rs"]
 mod support;
 
-use std::convert::TryInto;
-use std::io;
 use std::sync::Mutex;
 
 use oxide_auth::endpoint::{OwnerConsent, Solicitation};
@@ -17,9 +15,7 @@ use oxide_auth::primitives::prelude::*;
 use oxide_auth::primitives::registrar::RegisteredUrl;
 use oxide_auth_rocket::{OAuthResponse, OAuthRequest, OAuthFailure};
 
-use rocket::data::Limits;
-use rocket::{Data, State, Response, http};
-use rocket::http::ContentType;
+use rocket::State;
 use rocket::response::Responder;
 
 struct MyState {

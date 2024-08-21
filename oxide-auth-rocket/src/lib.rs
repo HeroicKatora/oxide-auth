@@ -4,15 +4,12 @@
 mod failure;
 
 use std::convert::TryInto;
-use std::default;
-use std::io::Cursor;
-use rocket::http::{Header, HeaderMap};
+use rocket::http::Header;
 use std::marker::PhantomData;
 
-use rocket::data::{self, ByteUnit, DataStream, FromData, Limits};
+use rocket::data::{self,DataStream, FromData, Limits};
 use rocket::{Data, Request, Response};
 use rocket::http::{ContentType, Status};
-use rocket::http::hyper::header;
 use rocket::request::FromRequest;
 use rocket::response::{self, Responder};
 use rocket::outcome::Outcome;
@@ -33,19 +30,6 @@ pub use self::failure::OAuthFailure;
     across an await point when calling FromRequest. it as also not feasable to make a type bound by the 'static
     lifetime. the response type was altered to only contain the data it needs to contain, and then that data is used to make a response.
 */ 
-
-
-
-
-
-
-
-
-
-
-
-
-
 /// Header value for WWW_AUTHENTICATE. this is not present in the version of hyper that rocket depends on
 const WWW_AUTHENTICATE: &str = "www_authenticate";
 
@@ -64,6 +48,8 @@ const WWW_AUTHENTICATE: &str = "www_authenticate";
 /// fn handler(oauth_request: OAuthRequest) -> {
 // /     the oauth_request variable DOES NOT have the body set here because rocket uses FromRequest here
 /// }
+// Note: the 'impl<'r> FromData<'r> for OAuthRequest<'static> is intentional. only OAuthRequest is required here to make this work
+// if you try to bind 'r: 'static then the code wont compile due to 'borrowed data __req escapes from the function' 
 #[rocket::async_trait]
 impl<'r> FromData<'r> for OAuthRequest<'static> {
     type Error=NoError;
