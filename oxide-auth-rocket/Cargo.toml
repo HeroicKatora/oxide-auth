@@ -14,7 +14,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rocket = "0.4.2"
+rocket = "0.5.1"
 oxide-auth = { version = "0.6.0", path = "../oxide-auth" }
 serde_urlencoded = "0.7"
 
@@ -22,3 +22,4 @@ serde_urlencoded = "0.7"
 reqwest = { version = "0.11.10", features = ["blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
