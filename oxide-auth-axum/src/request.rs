@@ -1,6 +1,5 @@
 use oxide_auth::frontends::dev::{NormalizedParameter, QueryParameter, WebRequest};
 use axum::{
-    async_trait,
     extract::{Query, Form, FromRequest, FromRequestParts, Request},
     http::{header, request::Parts},
 };
@@ -80,7 +79,6 @@ impl WebRequest for OAuthRequest {
     }
 }
 
-#[async_trait]
 impl<S> FromRequest<S> for OAuthRequest
 where
     S: Send + Sync,
@@ -113,7 +111,6 @@ where
     }
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for OAuthResource
 where
     S: Send + Sync,

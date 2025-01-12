@@ -1,6 +1,6 @@
 [package]
 name = "oxide-auth-axum"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Daniel Alvsåker <daniel.alvsaaker@protonmail.com>"]
 repository = "https://github.com/HeroicKatora/oxide-auth.git"
 
@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.7", default-features = false, features = [
+axum = { version = "0.8", default-features = false, features = [
     "form",
     "query",
 ] }
