@@ -136,12 +136,12 @@ here</a> to begin the authorization process.
 /// the flow.
 fn solicitor(request: &mut Request, grant: Solicitation<'_>) -> OwnerConsent<OAuthResponse> {
     if request.method() == "GET" {
-        let text = support::consent_page_html("/authorize".into(), grant);
+        let text = support::consent_page_html("/authorize", grant);
         let response = Response::html(text);
         OwnerConsent::InProgress(response.into())
     } else if request.method() == "POST" {
         // No real user authentication is done here, in production you MUST use session keys or equivalent
-        if let Some(_) = request.get_param("allow") {
+        if request.get_param("allow").is_some() {
             OwnerConsent::Authorized("dummy user".to_string())
         } else {
             OwnerConsent::Denied

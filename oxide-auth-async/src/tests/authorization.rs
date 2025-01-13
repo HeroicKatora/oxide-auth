@@ -162,7 +162,7 @@ fn assert_send() {
 fn auth_success() {
     let success = CraftedRequest {
         query: Some(
-            vec![
+            [
                 ("response_type", "code"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -180,7 +180,7 @@ fn auth_success() {
 #[test]
 fn auth_request_silent_missing_client() {
     let missing_client = CraftedRequest {
-        query: Some(vec![("response_type", "code")].iter().to_single_value_query()),
+        query: Some([("response_type", "code")].iter().to_single_value_query()),
         urlbody: None,
         auth: None,
     };
@@ -193,7 +193,7 @@ fn auth_request_silent_unknown_client() {
     // The client_id is not registered
     let unknown_client = CraftedRequest {
         query: Some(
-            vec![
+            [
                 ("response_type", "code"),
                 ("client_id", "SomeOtherClient"),
                 ("redirect_uri", "https://wrong.client.example/endpoint"),
@@ -213,7 +213,7 @@ fn auth_request_silent_mismatching_redirect() {
     // The redirect_uri does not match
     let mismatching_redirect = CraftedRequest {
         query: Some(
-            vec![
+            [
                 ("response_type", "code"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("redirect_uri", "https://wrong.client.example/endpoint"),
@@ -233,7 +233,7 @@ fn auth_request_silent_invalid_redirect() {
     // The redirect_uri is not an uri ('\' is not allowed to appear in the scheme)
     let invalid_redirect = CraftedRequest {
         query: Some(
-            vec![
+            [
                 ("response_type", "code"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("redirect_uri", "\\://"),
@@ -253,7 +253,7 @@ fn auth_request_error_denied() {
     // Used in conjunction with a denying authorization handler below
     let denied_request = CraftedRequest {
         query: Some(
-            vec![
+            [
                 ("response_type", "code"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -273,7 +273,7 @@ fn auth_request_error_unsupported_method() {
     // Requesting an authorization token for a method other than code
     let unsupported_method = CraftedRequest {
         query: Some(
-            vec![
+            [
                 ("response_type", "other_method"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),
@@ -294,7 +294,7 @@ fn auth_request_error_malformed_scope() {
     // A scope with malformed formatting
     let malformed_scope = CraftedRequest {
         query: Some(
-            vec![
+            [
                 ("response_type", "code"),
                 ("client_id", EXAMPLE_CLIENT_ID),
                 ("redirect_uri", EXAMPLE_REDIRECT_URI),

@@ -170,7 +170,7 @@ impl Authorization {
     }
 
     /// Go to next state
-    pub fn advance<'req>(&mut self, input: Input<'req>) -> Output<'_> {
+    pub fn advance(&mut self, input: Input<'_>) -> Output<'_> {
         self.state = match (self.take(), input) {
             (current, Input::None) => current,
             (
@@ -207,7 +207,7 @@ impl Authorization {
             },
             AuthorizationState::Extending { .. } => Output::Extend,
             AuthorizationState::Negotiating { bound_client } => Output::Negotiate {
-                bound_client: &bound_client,
+                bound_client,
                 scope: self.scope.clone(),
             },
             AuthorizationState::Pending {
@@ -565,11 +565,11 @@ impl Error {
     }
 }
 
-impl Into<Url> for ErrorUrl {
+impl From<ErrorUrl> for Url {
     /// Finalize the error url by saving its parameters in the query part of the redirect_uri
-    fn into(self) -> Url {
-        let mut url = self.base_uri;
-        url.query_pairs_mut().extend_pairs(self.error.into_iter());
+    fn from(value: ErrorUrl) -> Self {
+        let mut url = value.base_uri;
+        url.query_pairs_mut().extend_pairs(value.error);
         url
     }
 }

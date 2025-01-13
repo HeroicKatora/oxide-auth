@@ -96,7 +96,7 @@ async fn index(
     }
 }
 
-async fn start_browser() -> () {
+async fn start_browser() {
     let _ = thread::spawn(support::open_in_browser);
 }
 
@@ -174,9 +174,9 @@ impl State {
         }
     }
 
-    pub fn with_solicitor<'a, S>(
-        &'a mut self, solicitor: S,
-    ) -> impl Endpoint<OAuthRequest, Error = WebError> + 'a
+    pub fn with_solicitor<S>(
+        &mut self, solicitor: S,
+    ) -> impl Endpoint<OAuthRequest, Error = WebError> + '_
     where
         S: OwnerSolicitor<OAuthRequest> + 'static,
     {
@@ -213,7 +213,7 @@ where
                         OAuthResponse::ok()
                             .content_type("text/html")
                             .unwrap()
-                            .body(&crate::support::consent_page_html("/authorize".into(), pre_grant)),
+                            .body(&crate::support::consent_page_html("/authorize", pre_grant)),
                     )
                 });
 
