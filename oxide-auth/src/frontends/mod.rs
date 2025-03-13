@@ -13,6 +13,7 @@
 //! * `simple`: Implemented here, can be reused in other web servers.
 //! * `actix`: `oxide-auth-actix`
 //! * `iron`: `oxide-auth-iron`
+//! * `poem`: `oxide-auth-poem`
 //! * `rouille`: `oxide-auth-rouille`
 //! * `rocket`: `oxide-auth-rocket`
 //!

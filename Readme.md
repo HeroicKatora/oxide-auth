@@ -29,14 +29,15 @@ that is considered more idiomatic for their library. Besides the implementation
 of `oxide-auth` traits for the request type, specific error and response traits
 are also implemented.
 
-| What | Crate | Notes | Docs |
-|-|-|-|-|
-| `actix` | `oxide-auth-actix` | - | [![actix docs](https://docs.rs/oxide-auth-actix/badge.svg)](https://docs.rs/oxide-auth-actix) |
-| `async` wrappers | `oxide-auth-async` | - | [![async docs](https://docs.rs/oxide-auth-async/badge.svg)](https://docs.rs/oxide-auth-async) |
-| `redis` | `oxide-auth-db` | - | [![redis docs](https://docs.rs/oxide-auth-db/badge.svg)](https://docs.rs/oxide-auth-db) |
-| `rocket` | `oxide-auth-rocket` | nightly | [![rocket docs](https://docs.rs/oxide-auth-rocket/badge.svg)](https://docs.rs/oxide-auth-rocket) |
-| `rouille` | `oxide-auth-rouille` | - | [![rouille docs](https://docs.rs/oxide-auth-rouille/badge.svg)](https://docs.rs/oxide-auth-rouille) |
-| `iron` | `oxide-auth-iron` | - | [![iron docs](https://docs.rs/oxide-auth-iron/badge.svg)](https://docs.rs/oxide-auth-iron) |
+| What             | Crate                | Notes   | Docs                                                                                                |
+|------------------|----------------------|---------|-----------------------------------------------------------------------------------------------------|
+| `actix`          | `oxide-auth-actix`   | -       | [![actix docs](https://docs.rs/oxide-auth-actix/badge.svg)](https://docs.rs/oxide-auth-actix)       |
+| `async` wrappers | `oxide-auth-async`   | -       | [![async docs](https://docs.rs/oxide-auth-async/badge.svg)](https://docs.rs/oxide-auth-async)       |
+| `redis`          | `oxide-auth-db`      | -       | [![redis docs](https://docs.rs/oxide-auth-db/badge.svg)](https://docs.rs/oxide-auth-db)             |
+| `rocket`         | `oxide-auth-rocket`  | nightly | [![rocket docs](https://docs.rs/oxide-auth-rocket/badge.svg)](https://docs.rs/oxide-auth-rocket)    |
+| `rouille`        | `oxide-auth-rouille` | -       | [![rouille docs](https://docs.rs/oxide-auth-rouille/badge.svg)](https://docs.rs/oxide-auth-rouille) |
+| `iron`           | `oxide-auth-iron`    | -       | [![iron docs](https://docs.rs/oxide-auth-iron/badge.svg)](https://docs.rs/oxide-auth-iron)          |
+| `poem`           | `oxide-auth-poem`    | -       | [![poem docs](https://docs.rs/oxide-auth-poem/badge.svg)](https://docs.rs/oxide-auth-poem)          |
 
 ## Additional
 
@@ -60,9 +61,10 @@ suggestions but sometimes the associate workload can seem daunting. That means
 that simplifications to the workflow are also *highly* appreciated.
 
 Licensed under either of
- * MIT license ([LICENSE-MIT] or http://opensource.org/licenses/MIT)
- * Apache License, Version 2.0 ([LICENSE-APACHE] or http://www.apache.org/licenses/LICENSE-2.0)
-at your option.
+
+* MIT license ([LICENSE-MIT] or http://opensource.org/licenses/MIT)
+* Apache License, Version 2.0 ([LICENSE-APACHE] or http://www.apache.org/licenses/LICENSE-2.0)
+  at your option.
 
 The license applies to all parts of the source code, its documentation and
 supplementary files unless otherwise indicated. It does NOT apply to the
@@ -71,13 +73,23 @@ of completion. These are distributed as permitted by [IETF Trust License
 4–Section 3.c.i][IETF4].
 
 [actix]: https://crates.io/crates/actix-web
+
 [iron]: https://crates.io/crates/iron
+
 [rocket]: https://crates.io/crates/rocket
+
 [rouille]: https://crates.io/crates/rouille
+
 [interactive example]: oxide-auth-actix/examples/actix-example
+
 [CHANGES]: CHANGELOG.md
+
 [MIGRATION]: Migration.md
+
 [CONTRIBUTING]: docs/CONTRIBUTING.md
+
 [LICENSE-MIT]: docs/LICENSE-MIT
+
 [LICENSE-APACHE]: docs/LICENSE-APACHE
+
 [IETF4]: https://trustee.ietf.org/license-info/IETF-TLP-4.htm
