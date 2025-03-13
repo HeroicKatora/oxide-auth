@@ -14,7 +14,7 @@ use oxide_auth::endpoint::UniqueValue;
 /// Send+Sync client implementation.
 #[derive(Clone)]
 pub struct Client {
-    config: Config,
+    pub config: Config,
     state: Arc<RwLock<State>>,
 }
 
@@ -71,9 +71,9 @@ struct State {
 
 #[derive(Serialize, Deserialize)]
 struct TokenMap {
-    token_type: String,
+    token_type: Option<String>,
 
-    scope: String,
+    scope: Option<String>,
 
     #[serde(skip_serializing_if="Option::is_none")]
     access_token: Option<String>,
