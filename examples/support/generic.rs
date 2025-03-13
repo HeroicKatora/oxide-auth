@@ -19,13 +19,13 @@ use std::fmt;
 
 pub use self::client::{Client, Config as ClientConfig, Error as ClientError};
 
-/// Try to open the server url `http://localhost:8020` in the browser, or print a guiding statement
+/// Try to open the server url `http://localhost:{port}` in the browser, or print a guiding statement
 /// to the console if this is not possible.
-pub fn open_in_browser() {
+pub fn open_in_browser(port: u16) {
     use std::io::{Error, ErrorKind};
     use std::process::Command;
 
-    let target_addres = "http://localhost:8020/";
+    let target_address = format!("http://localhost:{port}/");
 
     // As suggested by <https://stackoverflow.com/questions/3739327/launching-a-website-via-windows-commandline>
     let open_with = if cfg!(target_os = "linux") {
@@ -39,13 +39,16 @@ pub fn open_in_browser() {
         Err(Error::new(ErrorKind::Other, "Open not supported"))
     };
 
-    open_with.and_then(|cmd| Command::new(cmd).arg(target_addres).status())
-        .and_then(|status| if status.success() {
-            Ok(())
-        } else { 
-            Err(Error::new(ErrorKind::Other, "Non zero status")) 
+    open_with
+        .and_then(|cmd| Command::new(cmd).arg(&target_address).status())
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(Error::new(ErrorKind::Other, "Non zero status"))
+            }
         })
-        .unwrap_or_else(|_| println!("Please navigate to {}", target_addres));
+        .unwrap_or_else(|_| println!("Please navigate to {}", target_address));
 }
 
 pub fn consent_page_html(route: &str, solicitation: Solicitation) -> String {

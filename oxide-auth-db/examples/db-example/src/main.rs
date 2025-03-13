@@ -86,7 +86,7 @@ async fn index(
 }
 
 async fn start_browser() -> () {
-    let _ = thread::spawn(support::open_in_browser);
+    let _ = thread::spawn(|| support::open_in_browser(8020));
 }
 
 /// Example of a main function of an actix-web server supporting oauth.

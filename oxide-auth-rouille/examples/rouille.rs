@@ -124,7 +124,7 @@ here</a> to begin the authorization process.
     });
 
     // Try to direct the browser to an url initiating the flow
-    support::open_in_browser();
+    support::open_in_browser(8020);
     join.join().expect("Failed to run");
     client.join().expect("Failed to run client");
 }
