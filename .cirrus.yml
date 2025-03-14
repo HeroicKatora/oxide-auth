@@ -11,6 +11,7 @@ stable_task:
       - CRATE: oxide-auth-actix
       - CRATE: actix-example
       - CRATE: oxide-auth-iron
+      - CRATE: oxide-auth-poem
       - CRATE: oxide-auth-rouille
       - CRATE: oxide-auth-db
         OXIDE_AUTH_SKIP_REDIS: yes
@@ -32,6 +33,7 @@ nightly_task:
       - CRATE: oxide-auth-actix
       - CRATE: actix-example
       - CRATE: oxide-auth-iron
+      - CRATE: oxide-auth-poem
       - CRATE: oxide-auth-rouille
       - CRATE: oxide-auth-rocket
       - CRATE: oxide-auth-db
